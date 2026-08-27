@@ -275,3 +275,18 @@ input, select, textarea {
 
 .link-btn { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.82rem; padding: 0; }
 .link-btn.danger { color: var(--atrasado); }
+
+.toast-aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg);
+  padding: 0.7rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  max-width: 90vw;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 200;
+}
