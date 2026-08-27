@@ -122,6 +122,22 @@ h3 { font-size: 1rem; margin: 0 0 0.75rem; }
 
 .hint { color: var(--text-muted); font-size: 0.82rem; margin: 0.2rem 0 0.75rem; }
 
+.filtro-e-botao { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.filtro-e-botao select { min-width: 160px; }
+
+.grafico-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem 1rem 0.5rem;
+  max-width: 640px;
+  overflow-x: auto;
+}
+.grafico-barra { cursor: default; }
+.grafico-valor { font-size: 0.72rem; fill: var(--text); font-weight: 600; }
+.grafico-mes { font-size: 0.72rem; fill: var(--text-muted); }
+.grafico-eixo { stroke: var(--border); stroke-width: 1; }
+
 .quem-sou-eu { margin-bottom: 1.25rem; max-width: 480px; }
 .quem-sou-eu label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--text-muted); }
 .quem-sou-eu .inline-form { margin-bottom: 0; }
