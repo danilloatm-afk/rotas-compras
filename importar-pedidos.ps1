@@ -231,9 +231,10 @@ foreach ($arquivo in $arquivos) {
             arquivo_url     = $arquivoUrl
             arquivo_nome    = $arquivo.Name
             valor_total     = if ($null -ne $dados.valor_total) { $dados.valor_total } else { $null }
+            itens           = if ($dados.itens) { $dados.itens } else { $null }
             urgente         = $false
             status          = "pendente"
-        } | ConvertTo-Json
+        } | ConvertTo-Json -Depth 6
         Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/rl_pedidos" -Headers $HeadersJson -Method Post -Body $pedido | Out-Null
 
         Write-Log "  OK (FOB): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
