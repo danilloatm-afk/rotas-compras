@@ -594,14 +594,17 @@ async function loadRotaAtual() {
   const { data: rotas } = await comTimeout(
     db.from("rl_rotas").select("*").eq("motorista_nome", motoristaNome).eq("status", "em_andamento").order("criado_em", { ascending: false }).limit(1)
   );
+  const btnExcluir = document.getElementById("btn-excluir-rota");
   if (!rotas || !rotas.length) {
     rotaAtualId = null;
     paradasCache = [];
     progresso.textContent = "";
     lista.innerHTML = `<li class="empty-state">Nenhuma rota em andamento. Selecione pedidos acima e clique em "Montar rota".</li>`;
+    btnExcluir.classList.add("hidden");
     return;
   }
   rotaAtualId = rotas[0].id;
+  btnExcluir.classList.remove("hidden");
   const { data: paradas, error } = await comTimeout(
     db.from("rl_rota_paradas").select("*, rl_pedidos(*)").eq("rota_id", rotaAtualId).order("ordem")
   );
@@ -612,6 +615,47 @@ async function loadRotaAtual() {
   paradasCache = paradas || [];
   renderRota();
 }
+
+// Paradas ainda pendentes voltam pro estoque de "pedidos disponíveis" (o
+// motorista pode ter errado a seleção ou precisa recomeçar). Paradas já
+// concluídas (com nota fiscal já registrada) NÃO são mexidas — a coleta já
+// aconteceu de verdade, apagar isso destruiria a conferência feita e o
+// indicador de "coletados por mês". A rota em si vira "cancelada" (some da
+// tela) em vez de apagada, preservando o histórico.
+document.getElementById("btn-excluir-rota").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  if (!rotaAtualId) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir rota";
+    }, 4000);
+    return;
+  }
+  delete btn.dataset.confirmando;
+  btn.disabled = true;
+  try {
+    const pendentesIds = paradasCache.filter((p) => p.status === "pendente").map((p) => p.pedido_id);
+    if (pendentesIds.length) {
+      const { error: errPedidos } = await db.from("rl_pedidos").update({ status: "pendente" }).in("id", pendentesIds);
+      if (errPedidos) throw errPedidos;
+    }
+    const { error: errRota } = await db.from("rl_rotas").update({ status: "cancelada" }).eq("id", rotaAtualId);
+    if (errRota) throw errRota;
+
+    btn.textContent = "Excluir rota";
+    rotaAtualId = null;
+    paradasCache = [];
+    await Promise.all([loadDisponiveis(), loadRotaAtual()]);
+  } catch (err) {
+    mostrarAviso("Erro ao excluir rota: " + err.message);
+    btn.textContent = "Excluir rota";
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function renderRota() {
   const progresso = document.getElementById("rota-progresso");
