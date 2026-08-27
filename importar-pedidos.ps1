@@ -1,4 +1,4 @@
-# importar-pedidos.ps1
+﻿# importar-pedidos.ps1
 #
 # Varre a pasta "Processados" do robô do Avanço para Contratos (que já
 # processa os pedidos de compra pra rastrear spot x contrato) e, pra cada
@@ -143,7 +143,10 @@ function Upload-Arquivo($caminhoArquivo, $nomeDestino, $contentType) {
 }
 
 # ---------- processa os arquivos novos ----------
-$arquivos = Get-ChildItem -Path $PastaMonitorada -Include *.pdf, *.jpg, *.jpeg, *.png -File |
+# Nota: -Include só funciona corretamente com -Path terminando em "\*"
+# (sem isso, o PowerShell silenciosamente retorna 0 arquivos mesmo
+# havendo arquivos que baterim com o filtro).
+$arquivos = Get-ChildItem -Path (Join-Path $PastaMonitorada "*") -Include *.pdf, *.jpg, *.jpeg, *.png -File |
     Where-Object { $_.LastWriteTime -ge $DataCorte }
 
 if ($arquivos.Count -eq 0) {
