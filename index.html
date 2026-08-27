@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotas de Compras</title>
+<link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#4338c5">
+</head>
+<body>
+
+<div id="app-shell">
+<header class="topbar">
+  <div class="topbar-title-row">
+    <h1>🚚 Rotas de Compras</h1>
+    <div class="topbar-actions">
+      <button id="btn-theme-toggle" type="button" class="btn secondary small theme-toggle" title="Alternar modo claro/escuro">🌙</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="comprador">📥 Comprador</button>
+    <button class="tab-btn" data-tab="motorista">🚚 Motorista</button>
+    <button class="tab-btn" data-tab="config">Configurações</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- COMPRADOR -->
+  <section id="tab-comprador" class="tab-content active">
+    <div class="quem-sou-eu">
+      <label>
+        Meu nome (comprador)
+        <div class="inline-form">
+          <select id="comprador-select"></select>
+          <button id="btn-novo-comprador" type="button" class="btn secondary small">+ Novo</button>
+        </div>
+      </label>
+    </div>
+
+    <h2>Anexar pedido de compra</h2>
+    <form id="form-pedido" class="form-card">
+      <label>
+        Arquivo do pedido (PDF ou foto)
+        <input type="file" id="pedido-arquivo" accept="application/pdf,image/*" required>
+      </label>
+      <button type="button" id="btn-ler-pedido" class="btn secondary">🤖 Ler com IA</button>
+      <p id="pedido-ia-feedback" class="feedback"></p>
+      <p id="pedido-duplicado-aviso" class="feedback error hidden"></p>
+
+      <label>
+        Empresa compradora
+        <select id="pedido-empresa"></select>
+      </label>
+      <p id="pedido-empresa-info" class="hint"></p>
+
+      <label>
+        Nº do pedido (opcional)
+        <input type="text" id="pedido-numero">
+      </label>
+
+      <label>
+        Local de retirada / entrega (opcional)
+        <input type="text" id="pedido-local">
+      </label>
+
+      <label>
+        Valor total esperado (R$)
+        <input type="number" id="pedido-valor" step="0.01" min="0" placeholder="Ex: 4590.00">
+      </label>
+
+      <label class="checkbox-line">
+        <input type="checkbox" id="pedido-urgente">
+        Urgente
+      </label>
+
+      <label>
+        Observações (opcional)
+        <textarea id="pedido-observacao" rows="2" placeholder="Local de retirada, contato, instruções para o motorista..."></textarea>
+      </label>
+
+      <button type="submit" class="btn primary">Enviar pedido</button>
+      <p id="pedido-feedback" class="feedback"></p>
+    </form>
+
+    <h2 class="mt">Meus pedidos</h2>
+    <div id="lista-meus-pedidos" class="cards-grid"></div>
+  </section>
+
+  <!-- MOTORISTA -->
+  <section id="tab-motorista" class="tab-content">
+    <div class="quem-sou-eu">
+      <label>
+        Meu nome (motorista)
+        <div class="inline-form">
+          <select id="motorista-select"></select>
+          <button id="btn-novo-motorista" type="button" class="btn secondary small">+ Novo</button>
+        </div>
+      </label>
+    </div>
+
+    <h2>Pedidos disponíveis</h2>
+    <div class="section-head">
+      <p class="hint">Marque os pedidos que vão entrar na rota e clique em "Montar rota".</p>
+      <button id="btn-montar-rota" class="btn primary">Montar rota com selecionados</button>
+    </div>
+    <div id="lista-disponiveis" class="cards-grid"></div>
+
+    <h2 class="mt">Minha rota de hoje</h2>
+    <p id="rota-progresso" class="hint"></p>
+    <ul id="lista-rota" class="rota-lista"></ul>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="tab-config" class="tab-content">
+    <h2>Empresas do grupo</h2>
+    <p class="hint">Cadastre aqui as empresas compradoras (com CNPJ) usadas na conferência com a nota fiscal.</p>
+    <form id="form-empresa" class="inline-form">
+      <input type="text" id="empresa-nome" placeholder="Nome da empresa" required>
+      <input type="text" id="empresa-cnpj" placeholder="CNPJ">
+      <button type="submit" class="btn primary">Adicionar</button>
+    </form>
+    <ul id="lista-empresas" class="cadastro-lista"></ul>
+
+    <h2 class="mt">Compradores</h2>
+    <ul id="lista-compradores-config" class="cadastro-lista"></ul>
+
+    <h2 class="mt">Motoristas</h2>
+    <ul id="lista-motoristas-config" class="cadastro-lista"></ul>
+  </section>
+
+</main>
+</div>
+
+<!-- MODAL CONCLUIR PARADA -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Concluir parada</h2>
+      <button id="btn-modal-fechar" type="button" class="link-btn">Fechar ✕</button>
+    </div>
+    <form id="form-modal-nota" class="form-card modal-form">
+      <label>
+        Foto da nota fiscal
+        <input type="file" id="nota-arquivo" accept="image/*,application/pdf" capture="environment" required>
+      </label>
+      <button type="button" id="btn-ler-nota" class="btn secondary">🤖 Ler nota com IA</button>
+      <p id="nota-ia-feedback" class="feedback"></p>
+
+      <label>
+        Valor total da nota (R$)
+        <input type="number" id="nota-valor" step="0.01" min="0">
+      </label>
+      <label>
+        CNPJ do destinatário na nota
+        <input type="text" id="nota-cnpj" placeholder="00.000.000/0000-00">
+      </label>
+      <label>
+        Número da nota (opcional)
+        <input type="text" id="nota-numero">
+      </label>
+
+      <div id="conferencia-resultado" class="conferencia-box hidden"></div>
+
+      <button type="submit" class="btn primary">Concluir parada</button>
+      <p id="modal-feedback" class="feedback"></p>
+    </form>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
