@@ -73,6 +73,30 @@ const SCHEMA_PEDIDO = {
         "nenhum do documento (nesse caso, por padrão, entende-se que o frete é por conta do fornecedor — CIF — e o pedido não " +
         "precisa de coleta).",
     },
+    itens: {
+      type: "array",
+      description: "Cada linha de item/produto da tabela do pedido — inclua TODAS as linhas, mesmo que sejam muitas.",
+      items: {
+        type: "object",
+        properties: {
+          produto_nome: { type: "string", description: "Nome/descrição do produto ou item." },
+          quantidade: { type: "number", description: "Quantidade numérica do item." },
+          unidade: { type: "string", description: "Unidade de medida (ex: KG, UN, SC, L), se houver." },
+          valor_unitario: {
+            type: "number",
+            description:
+              "Valor unitário em R$ desta linha (coluna 'Vlr. Unitário' ou equivalente). Apenas números, sem 'R$' e sem " +
+              "separador de milhar. Omita se não houver essa coluna.",
+          },
+          valor_total: {
+            type: "number",
+            description: "Valor total desta linha (quantidade × valor unitário), se houver essa coluna. Omita se não houver.",
+          },
+        },
+        required: ["produto_nome", "quantidade"],
+        additionalProperties: false,
+      },
+    },
   },
   required: ["empresa_compradora_nome", "frete_fob"],
   additionalProperties: false,
@@ -106,6 +130,30 @@ const SCHEMA_NOTA = {
       type: "string",
       description: "Nome/razão social de quem EMITIU a nota fiscal (o fornecedor/vendedor).",
     },
+    itens: {
+      type: "array",
+      description: "Cada linha de item/produto da tabela de itens da nota fiscal — inclua TODAS as linhas.",
+      items: {
+        type: "object",
+        properties: {
+          produto_nome: { type: "string", description: "Nome/descrição do produto ou item." },
+          quantidade: { type: "number", description: "Quantidade numérica do item (coluna QTDE ou similar)." },
+          unidade: { type: "string", description: "Unidade de medida (ex: KG, UN, SC, L), se houver." },
+          valor_unitario: {
+            type: "number",
+            description:
+              "Valor unitário em R$ desta linha (coluna 'VALOR UNIT' ou similar). Apenas números, sem 'R$' e sem separador " +
+              "de milhar. Omita se não houver essa coluna.",
+          },
+          valor_total: {
+            type: "number",
+            description: "Valor total desta linha, se houver essa coluna. Omita se não houver.",
+          },
+        },
+        required: ["produto_nome", "quantidade"],
+        additionalProperties: false,
+      },
+    },
   },
   required: [],
   additionalProperties: false,
@@ -127,14 +175,17 @@ const PROMPT_PEDIDO =
   "5) FOB: procure a palavra 'FOB' em QUALQUER lugar do texto do documento (mais comum no campo 'Observações', mas pode " +
   "estar em outro lugar) — não é um rótulo de campo, é só uma palavra solta que pode ou não aparecer em algum ponto do " +
   "documento. Retorne frete_fob=true só se a palavra aparecer literalmente; caso contrário, frete_fob=false.\n\n" +
-  "6) Leia os números (CNPJ, valores) com cuidado, dígito por dígito, sem inventar ou aproximar.";
+  "6) ITENS: extraia cada linha da tabela de itens (produto, quantidade, valor unitário) — não misture o valor/quantidade " +
+  "de uma linha com o de outra linha vizinha.\n\n" +
+  "7) Leia os números (CNPJ, valores) com cuidado, dígito por dígito, sem inventar ou aproximar.";
 
 const PROMPT_NOTA =
   "Extraia os dados desta nota fiscal (foto ou digitalização de um DANFE). Preste atenção especial: a nota tem duas " +
   "empresas — EMITENTE (quem vendeu/emitiu) e DESTINATÁRIO (quem recebe a mercadoria). O CNPJ e nome do destinatário " +
   "são os mais importantes de extrair corretamente, não confunda com o do emitente. A foto pode ter qualidade ruim, " +
   "reflexo ou estar levemente torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em " +
-  "vez de arriscar um valor errado.";
+  "vez de arriscar um valor errado. Extraia também cada linha da tabela de itens (produto, quantidade, valor unitário), " +
+  "com cuidado pra não misturar o valor/quantidade de uma linha com o de outra.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
