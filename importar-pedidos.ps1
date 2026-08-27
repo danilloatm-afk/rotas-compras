@@ -7,16 +7,17 @@
 # abrir nenhum site. O nome do comprador, a empresa, o valor e o local são
 # lidos do próprio documento.
 #
-# FRETE CIF x FOB: só pedidos que mencionam a palavra "FOB" em algum lugar
-# do documento (normalmente no campo Observações) são registrados — são os
-# únicos que realmente precisam de coleta pelo motorista. Pedidos sem "FOB"
-# são considerados CIF (fornecedor entrega) e são simplesmente ignorados,
-# sem entrar no banco de dados.
+# FRETE CIF x FOB: decidido pelo NOME DO ARQUIVO (mesma lógica que o robô do
+# Avanço para Contratos usa pra decidir spot x contrato). Se o nome do
+# arquivo contiver a palavra "FOB" (sem diferenciar maiúsculas/minúsculas),
+# o pedido é registrado — só esses precisam de coleta pelo motorista.
+# Pedidos sem "FOB" no nome são considerados CIF (fornecedor entrega) e são
+# simplesmente ignorados, sem entrar no banco de dados.
 #
 # Depois de processado, o arquivo é movido para uma subpasta (dentro da
 # própria pasta "Processados" monitorada):
-#   Roteirizados\            -> importado com sucesso (é FOB, precisa de rota)
-#   Roteirizados-CIF\        -> ignorado (não achou "FOB" no documento — assume CIF)
+#   Roteirizados\            -> importado com sucesso (nome tem "FOB", precisa de rota)
+#   Roteirizados-CIF\        -> ignorado (nome sem "FOB" — assume CIF)
 #   Roteirizados-Duplicados\ -> pulado porque o número do pedido já tinha sido importado
 #   Roteirizados-Erros\      -> deu algum problema (confira o log)
 #
@@ -186,8 +187,12 @@ foreach ($arquivo in $arquivos) {
         if ($resposta.error) { throw "Extração falhou: $($resposta.error)" }
         $dados = $resposta.data
 
-        if (-not $dados.frete_fob) {
-            Write-Log "  Sem menção a 'FOB' no documento — assumindo CIF (fornecedor entrega), não roteirizado. Movido para Roteirizados-CIF."
+        # Frete CIF x FOB é decidido pelo NOME DO ARQUIVO (mesmo padrão do robô
+        # do Avanço para Contratos, que decide spot x contrato do mesmo jeito).
+        $ehFob = $arquivo.Name -imatch "FOB"
+
+        if (-not $ehFob) {
+            Write-Log "  Sem 'FOB' no nome do arquivo — assumindo CIF (fornecedor entrega), não roteirizado. Movido para Roteirizados-CIF."
             Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaCIF $arquivo.Name) -Force
             continue
         }
