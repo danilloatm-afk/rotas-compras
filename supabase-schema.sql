@@ -42,6 +42,7 @@ create table rl_pedidos (
   observacao text,
   urgente boolean not null default false,
   valor_total numeric,
+  itens jsonb,
   status text not null default 'pendente' check (status in ('pendente', 'na_rota', 'concluido', 'cancelado')),
   criado_em timestamptz not null default now()
 );
@@ -64,8 +65,10 @@ create table rl_rota_paradas (
   nota_numero text,
   nota_valor_total numeric,
   nota_cnpj text,
+  nota_itens jsonb,
   divergencia_valor boolean not null default false,
   divergencia_cnpj boolean not null default false,
+  divergencia_itens boolean not null default false,
   concluido_em timestamptz,
   criado_em timestamptz not null default now()
 );
