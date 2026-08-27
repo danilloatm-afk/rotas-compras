@@ -145,6 +145,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       loadDisponiveis();
       loadRotaAtual();
     }
+    if (btn.dataset.tab === "indicadores") loadIndicadores();
     if (btn.dataset.tab === "config") renderCadastros();
   });
 });
@@ -470,6 +471,17 @@ document.getElementById("lista-meus-pedidos").addEventListener("click", async (e
 });
 
 // ---------- motorista: pedidos disponíveis ----------
+// A cidade não é um campo separado — vem embutida no texto de local_retirada
+// (ex: "AV X, BAIRRO Y, GOIANIA, GO, CEP 74463-330"). Extrai o nome da
+// cidade procurando o trecho logo antes da sigla de 2 letras do estado.
+function extrairCidade(local) {
+  if (!local) return null;
+  const m = local.match(/,\s*([^,]+?)\s*,\s*[A-Z]{2}\b/);
+  return m ? m[1].trim() : null;
+}
+
+let disponiveisCache = [];
+
 async function loadDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
   const { data, error } = await comTimeout(
@@ -479,8 +491,26 @@ async function loadDisponiveis() {
     el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos.</p>`;
     return;
   }
+  disponiveisCache = data;
+
+  const selCidade = document.getElementById("filtro-cidade");
+  const cidadeAtual = selCidade.value;
+  const cidades = [...new Set(data.map((p) => extrairCidade(p.local_retirada)).filter(Boolean))].sort();
+  selCidade.innerHTML = `<option value="">Todas as cidades</option>` + cidades.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (cidades.includes(cidadeAtual)) selCidade.value = cidadeAtual;
+
+  renderDisponiveis();
+}
+
+function renderDisponiveis() {
+  const el = document.getElementById("lista-disponiveis");
+  const cidadeFiltro = document.getElementById("filtro-cidade").value;
+  const data = cidadeFiltro ? disponiveisCache.filter((p) => extrairCidade(p.local_retirada) === cidadeFiltro) : disponiveisCache;
+
   if (!data.length) {
-    el.innerHTML = `<p class="empty-state">Nenhum pedido pendente no momento.</p>`;
+    el.innerHTML = `<p class="empty-state">${
+      disponiveisCache.length ? "Nenhum pedido pendente nessa cidade." : "Nenhum pedido pendente no momento."
+    }</p>`;
     return;
   }
   el.innerHTML = data
@@ -501,6 +531,8 @@ async function loadDisponiveis() {
     )
     .join("");
 }
+
+document.getElementById("filtro-cidade").addEventListener("change", renderDisponiveis);
 
 document.getElementById("btn-montar-rota").addEventListener("click", async () => {
   const motoristaNome = document.getElementById("motorista-select").value;
@@ -960,6 +992,70 @@ document.getElementById("tab-config").addEventListener("click", async (e) => {
   }
   renderCadastros();
 });
+
+// ---------- indicadores ----------
+const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function chaveAnoMes(data) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+
+async function loadIndicadores() {
+  const container = document.getElementById("grafico-coletados");
+  const { data, error } = await comTimeout(
+    db.from("rl_rota_paradas").select("concluido_em").eq("status", "concluida").not("concluido_em", "is", null)
+  );
+  if (error) {
+    container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    return;
+  }
+
+  // últimos 6 meses, incluindo os que tiverem zero coletas
+  const hoje = new Date();
+  const meses = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    meses.push({ chave: chaveAnoMes(d), label: `${MESES_ABREV[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`, total: 0 });
+  }
+  const porChave = Object.fromEntries(meses.map((m) => [m.chave, m]));
+  (data || []).forEach((p) => {
+    const chave = chaveAnoMes(new Date(p.concluido_em));
+    if (porChave[chave]) porChave[chave].total++;
+  });
+
+  renderGraficoColetados(meses);
+}
+
+function renderGraficoColetados(meses) {
+  const container = document.getElementById("grafico-coletados");
+  const max = Math.max(1, ...meses.map((m) => m.total));
+  const larguraBarra = 56;
+  const espaco = 28;
+  const alturaBarraMax = 160;
+  const larguraTotal = meses.length * (larguraBarra + espaco) + espaco;
+  const alturaTotal = alturaBarraMax + 56;
+
+  const barras = meses
+    .map((m, i) => {
+      const x = espaco + i * (larguraBarra + espaco);
+      const altura = m.total === 0 ? 0 : Math.max(4, Math.round((m.total / max) * alturaBarraMax));
+      const y = alturaBarraMax - altura + 20;
+      return `
+      <g class="grafico-barra">
+        <title>${m.label}: ${m.total} pedido(s) coletado(s)</title>
+        <rect x="${x}" y="${y}" width="${larguraBarra}" height="${altura}" rx="4" fill="var(--primary)"></rect>
+        <text class="grafico-valor" x="${x + larguraBarra / 2}" y="${y - 6}" text-anchor="middle">${m.total}</text>
+        <text class="grafico-mes" x="${x + larguraBarra / 2}" y="${alturaBarraMax + 40}" text-anchor="middle">${m.label}</text>
+      </g>`;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${larguraTotal} ${alturaTotal}" width="100%" style="max-width:${larguraTotal}px">
+      <line class="grafico-eixo" x1="0" y1="${alturaBarraMax + 20}" x2="${larguraTotal}" y2="${alturaBarraMax + 20}"></line>
+      ${barras}
+    </svg>`;
+}
 
 // ---------- inicialização ----------
 (async function init() {
