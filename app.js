@@ -293,6 +293,8 @@ async function selecionarOuCriarComprador(nomeLido) {
 }
 
 // ---------- comprador: ler pedido com IA ----------
+let pedidoItensExtraidos = null;
+
 document.getElementById("btn-ler-pedido").addEventListener("click", async () => {
   const input = document.getElementById("pedido-arquivo");
   const feedback = document.getElementById("pedido-ia-feedback");
@@ -306,6 +308,7 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
   feedback.className = "feedback";
   try {
     const extraido = await lerComIA(file, "pedido");
+    pedidoItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
     if (extraido.valor_total != null) document.getElementById("pedido-valor").value = extraido.valor_total;
     if (extraido.numero_pedido) document.getElementById("pedido-numero").value = extraido.numero_pedido;
     if (extraido.local_retirada) document.getElementById("pedido-local").value = extraido.local_retirada;
@@ -383,6 +386,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       observacao: document.getElementById("pedido-observacao").value.trim() || null,
       urgente: document.getElementById("pedido-urgente").checked,
       valor_total: valor ? Number(valor) : null,
+      itens: pedidoItensExtraidos,
     });
     if (error) throw error;
 
@@ -392,6 +396,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
     document.getElementById("pedido-empresa-info").textContent = "";
     document.getElementById("pedido-ia-feedback").textContent = "";
     document.getElementById("pedido-duplicado-aviso").classList.add("hidden");
+    pedidoItensExtraidos = null;
     loadMeusPedidos();
   } catch (err) {
     feedback.textContent = "Erro: " + err.message;
@@ -590,7 +595,7 @@ function renderRota() {
   lista.innerHTML = paradasCache
     .map((p, i) => {
       const pedido = p.rl_pedidos || {};
-      const divergencia = p.divergencia_valor || p.divergencia_cnpj;
+      const divergencia = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens;
       return `
       <li class="rota-item ${p.status === "concluida" ? "concluida" : ""}" draggable="true" data-index="${i}">
         <span class="drag-handle">⠿</span>
@@ -645,6 +650,7 @@ document.getElementById("lista-rota").addEventListener("click", (e) => {
   if (!btn) return;
   paradaEmEdicao = paradasCache.find((p) => String(p.id) === btn.dataset.concluir);
   if (!paradaEmEdicao) return;
+  notaItensExtraidos = null;
   document.getElementById("form-modal-nota").reset();
   document.getElementById("nota-ia-feedback").textContent = "";
   document.getElementById("modal-feedback").textContent = "";
@@ -656,6 +662,8 @@ document.getElementById("btn-modal-fechar").addEventListener("click", () => {
   document.getElementById("modal-overlay").classList.add("hidden");
   paradaEmEdicao = null;
 });
+
+let notaItensExtraidos = null;
 
 document.getElementById("btn-ler-nota").addEventListener("click", async () => {
   const input = document.getElementById("nota-arquivo");
@@ -673,6 +681,7 @@ document.getElementById("btn-ler-nota").addEventListener("click", async () => {
     if (extraido.valor_total != null) document.getElementById("nota-valor").value = extraido.valor_total;
     if (extraido.destinatario_cnpj) document.getElementById("nota-cnpj").value = extraido.destinatario_cnpj;
     if (extraido.numero_nota) document.getElementById("nota-numero").value = extraido.numero_nota;
+    notaItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
     feedback.textContent = "Nota lida. Confira os valores abaixo.";
     feedback.className = "feedback success";
     atualizarConferencia();
@@ -681,6 +690,85 @@ document.getElementById("btn-ler-nota").addEventListener("click", async () => {
     feedback.className = "feedback error";
   }
 });
+
+// Casa os itens do pedido com os da nota pelo nome do produto (a ordem pode
+// mudar de um documento pro outro). Tenta igualdade exata primeiro, depois
+// um item "conter" o outro (nomes costumam variar um pouco entre pedido e
+// nota do mesmo produto).
+function normalizarProduto(nome) {
+  return String(nome || "").toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function compararItens(pedidoItens, notaItens) {
+  pedidoItens = Array.isArray(pedidoItens) ? pedidoItens : [];
+  notaItens = Array.isArray(notaItens) ? notaItens : [];
+  if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
+
+  const restantes = notaItens.map((it) => ({ ...it, usado: false }));
+  const mesmaQuantidadeDeLinhas = pedidoItens.length === notaItens.length;
+
+  // 1ª tentativa: nome igual ou um contendo o outro. Nomes costumam variar
+  // entre o pedido (ERP do comprador) e a nota (do fornecedor) — quando as
+  // duas listas têm o mesmo número de linhas, usa a posição como reforço
+  // pra quem não deu match por nome (bem mais provável de estar certo do
+  // que deixar "não encontrado" por causa só do texto ser diferente).
+  const pedidoComMatch = pedidoItens.map((pItem, idx) => {
+    const nomeP = normalizarProduto(pItem.produto_nome);
+    let match =
+      restantes.find((n) => !n.usado && normalizarProduto(n.produto_nome) === nomeP) ||
+      restantes.find(
+        (n) => !n.usado && nomeP && (normalizarProduto(n.produto_nome).includes(nomeP) || nomeP.includes(normalizarProduto(n.produto_nome)))
+      );
+    if (!match && mesmaQuantidadeDeLinhas && !restantes[idx].usado) match = restantes[idx];
+    if (match) match.usado = true;
+    return { pItem, match };
+  });
+
+  let divergente = false;
+  const linhas = pedidoComMatch.map(({ pItem, match }) => {
+    const qtdOk = match && pItem.quantidade != null && match.quantidade != null ? Math.abs(pItem.quantidade - match.quantidade) < 0.01 : null;
+    const vuOk =
+      match && pItem.valor_unitario != null && match.valor_unitario != null
+        ? Math.abs(pItem.valor_unitario - match.valor_unitario) <= TOLERANCIA_VALOR
+        : null;
+
+    const linhaDivergente = !match || qtdOk === false || vuOk === false;
+    if (linhaDivergente) divergente = true;
+
+    return {
+      produto: pItem.produto_nome,
+      qtdP: pItem.quantidade,
+      qtdN: match ? match.quantidade : null,
+      vuP: pItem.valor_unitario,
+      vuN: match ? match.valor_unitario : null,
+      match: !!match,
+      divergente: linhaDivergente,
+    };
+  });
+  return { temDados: true, divergente, linhas };
+}
+
+function renderTabelaItens(resultado) {
+  if (!resultado.temDados) return "";
+  const linhas = resultado.linhas
+    .map(
+      (l) => `
+    <tr class="${l.divergente ? "linha-divergente" : ""}">
+      <td>${escapeHtml(l.produto)}</td>
+      <td>${l.qtdP ?? "—"}</td>
+      <td>${l.match ? l.qtdN ?? "—" : "não encontrado"}</td>
+      <td>${formatarMoeda(l.vuP)}</td>
+      <td>${l.match ? formatarMoeda(l.vuN) : "—"}</td>
+      <td>${l.divergente ? "⚠️" : "✅"}</td>
+    </tr>`
+    )
+    .join("");
+  return `
+    <table class="tabela-itens">
+      <thead><tr><th>Produto</th><th>Qtd. pedido</th><th>Qtd. nota</th><th>Vl. Unit. pedido</th><th>Vl. Unit. nota</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>`;
+}
 
 document.getElementById("nota-valor").addEventListener("input", atualizarConferencia);
 document.getElementById("nota-cnpj").addEventListener("input", atualizarConferencia);
@@ -730,10 +818,20 @@ function calcularDivergencias() {
 function atualizarConferencia() {
   if (!paradaEmEdicao) return;
   const { msgValor, divergValor, msgCnpj, divergCnpj } = calcularDivergencias();
+  const pedido = paradaEmEdicao.rl_pedidos || {};
+  const resultadoItens = compararItens(pedido.itens, notaItensExtraidos);
+
   const box = document.getElementById("conferencia-resultado");
   box.classList.remove("hidden", "ok", "warn");
-  box.classList.add(divergValor || divergCnpj ? "warn" : "ok");
-  box.innerHTML = `<div>${msgValor}</div><div>${msgCnpj}</div>`;
+  box.classList.add(divergValor || divergCnpj || resultadoItens.divergente ? "warn" : "ok");
+  let html = `<div>${msgValor}</div><div>${msgCnpj}</div>`;
+  if (resultadoItens.temDados) {
+    html += `<div>${resultadoItens.divergente ? "⚠️ Divergência nos itens (veja a tabela abaixo)." : "✅ Itens conferem."}</div>`;
+    html += renderTabelaItens(resultadoItens);
+  } else if (!pedido.itens) {
+    html += `<div class="muted">Pedido não tem lista de itens registrada — não é possível conferir item a item.</div>`;
+  }
+  box.innerHTML = html;
 }
 
 document.getElementById("form-modal-nota").addEventListener("submit", async (e) => {
@@ -751,6 +849,7 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   try {
     const { url } = await uploadArquivo(file, "rl_notas");
     const { divergValor, divergCnpj } = calcularDivergencias();
+    const resultadoItens = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos);
     const notaValor = document.getElementById("nota-valor").value;
     const notaCnpj = document.getElementById("nota-cnpj").value.trim();
     const notaNumero = document.getElementById("nota-numero").value.trim();
@@ -763,8 +862,10 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
         nota_numero: notaNumero || null,
         nota_valor_total: notaValor ? Number(notaValor) : null,
         nota_cnpj: notaCnpj || null,
+        nota_itens: notaItensExtraidos,
         divergencia_valor: divergValor,
         divergencia_cnpj: divergCnpj,
+        divergencia_itens: resultadoItens.divergente,
         concluido_em: new Date().toISOString(),
       })
       .eq("id", paradaEmEdicao.id);
