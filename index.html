@@ -138,8 +138,8 @@
 
   <!-- HISTÓRICO -->
   <section id="tab-historico" class="tab-content">
-    <h2>Rotas concluídas</h2>
-    <p class="hint">Rotas já finalizadas, com o detalhe de qualquer divergência encontrada em cada parada (valor, CNPJ ou itens).</p>
+    <h2>Paradas concluídas</h2>
+    <p class="hint">Cada parada aparece aqui assim que é concluída, com o detalhe de qualquer divergência (valor, CNPJ ou itens) ou aviso de entrega parcial.</p>
     <div id="lista-historico"></div>
   </section>
 
@@ -190,6 +190,11 @@
       <label>
         Número da nota (opcional)
         <input type="text" id="nota-numero">
+      </label>
+
+      <label class="checkbox-line">
+        <input type="checkbox" id="nota-parcial">
+        📦 Entrega parcial (ainda falta buscar mais deste pedido)
       </label>
 
       <div id="conferencia-resultado" class="conferencia-box hidden"></div>
