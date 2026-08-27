@@ -303,6 +303,10 @@ input, select, textarea {
 .tabela-itens th { color: var(--text-muted); font-weight: 600; }
 .tabela-itens tr.linha-divergente { background: var(--atrasado-bg); }
 
+.historico-rota { max-width: 680px; margin-bottom: 1rem; }
+.historico-parada { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.historico-parada:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
 .toast-aviso {
   position: fixed;
   left: 50%;
