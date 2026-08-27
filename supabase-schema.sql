@@ -51,7 +51,7 @@ create table rl_rotas (
   id uuid primary key default gen_random_uuid(),
   motorista_nome text not null,
   data date not null default current_date,
-  status text not null default 'em_andamento' check (status in ('em_andamento', 'concluida')),
+  status text not null default 'em_andamento' check (status in ('em_andamento', 'concluida', 'cancelada')),
   criado_em timestamptz not null default now()
 );
 
