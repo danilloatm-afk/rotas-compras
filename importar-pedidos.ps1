@@ -65,6 +65,20 @@ $HeadersJson = @{
     "content-type"  = "application/json"
 }
 
+function Detalhe-Erro($erro) {
+    $msg = $erro.Exception.Message
+    if ($erro.Exception.Response) {
+        try {
+            $stream = $erro.Exception.Response.GetResponseStream()
+            $stream.Position = 0
+            $reader = New-Object System.IO.StreamReader($stream)
+            $corpo = $reader.ReadToEnd()
+            if ($corpo) { $msg = "$msg | corpo: $corpo" }
+        } catch {}
+    }
+    return $msg
+}
+
 function ApenasDigitos($texto) {
     if ([string]::IsNullOrWhiteSpace($texto)) { return "" }
     return ($texto -replace '\D', '')
@@ -177,10 +191,8 @@ foreach ($arquivo in $arquivos) {
                 break
             } catch {
                 $ultimoErro = $_
-                if ($tentativa -lt 3) {
-                    Write-Log "  Tentativa $tentativa falhou ($($_.Exception.Message)), tentando de novo em 10s..."
-                    Start-Sleep -Seconds 10
-                }
+                Write-Log "  Tentativa $tentativa falhou ($(Detalhe-Erro $_))$(if ($tentativa -lt 3) { ', tentando de novo em 10s...' })"
+                if ($tentativa -lt 3) { Start-Sleep -Seconds 10 }
             }
         }
         if ($ultimoErro) { throw $ultimoErro }
@@ -228,7 +240,7 @@ foreach ($arquivo in $arquivos) {
         Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaRoteirizados $arquivo.Name) -Force
     }
     catch {
-        Write-Log "  ERRO: $($_.Exception.Message)"
+        Write-Log "  ERRO: $(Detalhe-Erro $_)"
         if (Test-Path $arquivo.FullName) {
             Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaErros $arquivo.Name) -Force -ErrorAction SilentlyContinue
         }
