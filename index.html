@@ -21,6 +21,7 @@
     <button class="tab-btn active" data-tab="comprador">📥 Comprador</button>
     <button class="tab-btn" data-tab="motorista">🚚 Motorista</button>
     <button class="tab-btn" data-tab="indicadores">📊 Indicadores</button>
+    <button class="tab-btn" data-tab="historico">🗂️ Histórico</button>
     <button class="tab-btn" data-tab="config">Configurações</button>
   </nav>
 </header>
@@ -133,6 +134,13 @@
     <h2>Pedidos coletados por mês</h2>
     <p class="hint">Conta as paradas concluídas (pedido efetivamente coletado pelo motorista), agrupadas pelo mês da coleta.</p>
     <div id="grafico-coletados" class="grafico-wrap"></div>
+  </section>
+
+  <!-- HISTÓRICO -->
+  <section id="tab-historico" class="tab-content">
+    <h2>Rotas concluídas</h2>
+    <p class="hint">Rotas já finalizadas, com o detalhe de qualquer divergência encontrada em cada parada (valor, CNPJ ou itens).</p>
+    <div id="lista-historico"></div>
   </section>
 
   <!-- CONFIG -->
