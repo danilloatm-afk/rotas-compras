@@ -58,9 +58,11 @@ const SCHEMA_PEDIDO = {
     local_retirada: {
       type: "string",
       description:
-        "Local/endereço/cidade onde a mercadoria deve ser retirada ou entregue. Costuma aparecer com o rótulo 'Local de Entrega:' " +
-        "na seção de informações adicionais — use esse endereço quando existir. Na falta dele, use a cidade do fornecedor. Omita " +
-        "se não houver essa informação.",
+        "Endereço onde o MOTORISTA deve ir buscar a mercadoria — ou seja, o endereço do FORNECEDOR (a empresa que está vendendo, " +
+        "na seção 'Dados do Fornecedor': Endereço, Bairro, Município, Estado, CEP), não o do comprador. NUNCA use o campo 'Local " +
+        "de Entrega:' pra este dado — em documentos deste tipo esse campo mostra o endereço da própria empresa COMPRADORA (pra " +
+        "onde a mercadoria vai depois, não de onde ela sai), o que serviria pra entrega, não pra coleta. Monte o endereço juntando " +
+        "Endereço + Bairro + Município + Estado + CEP do fornecedor num texto só. Omita se não houver esses dados do fornecedor.",
     },
     frete_fob: {
       type: "boolean",
@@ -119,7 +121,9 @@ const PROMPT_PEDIDO =
   "fiscal emitida pra este pedido, não o total parcial das mercadorias.\n\n" +
   "3) SOLICITANTE: procure o nome de pessoa no campo 'Comprador:'/'Solicitante:'/'Requisitante:' da seção de informações do " +
   "pedido — não confunda com os nomes que aparecem numa eventual lista de aprovadores/aprovações, que não são o solicitante.\n\n" +
-  "4) LOCAL: procure o endereço em 'Local de Entrega:', se houver.\n\n" +
+  "4) LOCAL DE RETIRADA: use o endereço do FORNECEDOR (seção 'Dados do Fornecedor': Endereço, Bairro, Município, Estado, CEP) — " +
+  "é lá que o motorista vai buscar a mercadoria. NUNCA use o campo 'Local de Entrega:', que é o endereço da empresa " +
+  "COMPRADORA (pra onde a mercadoria vai depois), não de onde ela sai.\n\n" +
   "5) FOB: procure a palavra 'FOB' em QUALQUER lugar do texto do documento (mais comum no campo 'Observações', mas pode " +
   "estar em outro lugar) — não é um rótulo de campo, é só uma palavra solta que pode ou não aparecer em algum ponto do " +
   "documento. Retorne frete_fob=true só se a palavra aparecer literalmente; caso contrário, frete_fob=false.\n\n" +
