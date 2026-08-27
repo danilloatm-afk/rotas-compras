@@ -101,3 +101,14 @@ insert into rl_empresas (nome, cnpj) values
 --   rl_notas    (fotos das notas fiscais)
 -- O insert direto em storage.buckets via SQL Editor costuma não funcionar
 -- de forma confiável (mesma observação já feita nos outros apps).
+--
+-- IMPORTANTE: marcar o bucket como "Public" só libera LEITURA pública dos
+-- arquivos — não libera upload. Sem as policies abaixo, qualquer tentativa
+-- de anexar um pedido ou nota fiscal falha com "new row violates row-level
+-- security policy" (erro 403). Rode isto DEPOIS de criar os dois buckets:
+
+create policy "rl_pedidos read" on storage.objects for select using (bucket_id = 'rl_pedidos');
+create policy "rl_pedidos insert" on storage.objects for insert with check (bucket_id = 'rl_pedidos');
+
+create policy "rl_notas read" on storage.objects for select using (bucket_id = 'rl_notas');
+create policy "rl_notas insert" on storage.objects for insert with check (bucket_id = 'rl_notas');
