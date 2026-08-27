@@ -40,6 +40,16 @@ document.getElementById("btn-theme-toggle").addEventListener("click", () => {
 });
 
 // ---------- helpers ----------
+// alert()/prompt() nativos não são confiáveis em vários navegadores/webviews
+// (já vimos prompt() falhar em produção) — este toast substitui os avisos.
+function mostrarAviso(mensagem) {
+  const toast = document.createElement("div");
+  toast.className = "toast-aviso";
+  toast.textContent = mensagem;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -191,33 +201,76 @@ document.getElementById("motorista-select").addEventListener("change", (e) => {
   loadRotaAtual();
 });
 
-document.getElementById("btn-novo-comprador").addEventListener("click", async () => {
-  const nome = (prompt("Nome do comprador:") || "").trim();
+// window.prompt() não é confiável em vários navegadores/webviews (em
+// especial no celular, onde o motorista vai usar) — por isso usamos um
+// campo de texto normal na tela em vez de uma caixa de diálogo nativa.
+document.getElementById("btn-novo-comprador").addEventListener("click", () => {
+  document.getElementById("form-novo-comprador").classList.remove("hidden");
+  const input = document.getElementById("novo-comprador-nome");
+  input.value = "";
+  input.focus();
+});
+
+document.getElementById("btn-cancelar-novo-comprador").addEventListener("click", () => {
+  document.getElementById("form-novo-comprador").classList.add("hidden");
+});
+
+async function confirmarNovoComprador() {
+  const nome = document.getElementById("novo-comprador-nome").value.trim();
   if (!nome) return;
   const existente = compradoresCache.find((c) => c.nome.toLowerCase() === nome.toLowerCase());
   if (!existente) {
     const { error } = await db.from("rl_compradores").insert({ nome });
-    if (error) return alert("Erro ao cadastrar: " + error.message);
+    if (error) {
+      mostrarAviso("Erro ao cadastrar: " + error.message);
+      return;
+    }
   }
   await loadCompradores();
   document.getElementById("comprador-select").value = nome;
   localStorage.setItem("rl_comprador_atual", nome);
+  document.getElementById("form-novo-comprador").classList.add("hidden");
   loadMeusPedidos();
+}
+
+document.getElementById("btn-confirmar-novo-comprador").addEventListener("click", confirmarNovoComprador);
+document.getElementById("novo-comprador-nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarNovoComprador();
 });
 
-document.getElementById("btn-novo-motorista").addEventListener("click", async () => {
-  const nome = (prompt("Nome do motorista:") || "").trim();
+document.getElementById("btn-novo-motorista").addEventListener("click", () => {
+  document.getElementById("form-novo-motorista").classList.remove("hidden");
+  const input = document.getElementById("novo-motorista-nome");
+  input.value = "";
+  input.focus();
+});
+
+document.getElementById("btn-cancelar-novo-motorista").addEventListener("click", () => {
+  document.getElementById("form-novo-motorista").classList.add("hidden");
+});
+
+async function confirmarNovoMotorista() {
+  const nome = document.getElementById("novo-motorista-nome").value.trim();
   if (!nome) return;
   const existente = motoristasCache.find((m) => m.nome.toLowerCase() === nome.toLowerCase());
   if (!existente) {
     const { error } = await db.from("rl_motoristas").insert({ nome });
-    if (error) return alert("Erro ao cadastrar: " + error.message);
+    if (error) {
+      mostrarAviso("Erro ao cadastrar: " + error.message);
+      return;
+    }
   }
   await loadMotoristas();
   document.getElementById("motorista-select").value = nome;
   localStorage.setItem("rl_motorista_atual", nome);
+  document.getElementById("form-novo-motorista").classList.add("hidden");
   rotaAtualId = null;
   loadRotaAtual();
+}
+
+document.getElementById("btn-confirmar-novo-motorista").addEventListener("click", confirmarNovoMotorista);
+document.getElementById("novo-motorista-nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarNovoMotorista();
 });
 
 // O nome de quem pediu já vem escrito no próprio documento (campo
@@ -393,10 +446,20 @@ async function loadMeusPedidos() {
     .join("");
 }
 
+// confirm() nativo tem o mesmo problema do prompt() em alguns navegadores —
+// exige clicar duas vezes no próprio botão em vez de abrir um diálogo.
 document.getElementById("lista-meus-pedidos").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-cancelar]");
   if (!btn) return;
-  if (!confirm("Cancelar este pedido?")) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Cancelar pedido";
+    }, 4000);
+    return;
+  }
   await db.from("rl_pedidos").update({ status: "cancelado" }).eq("id", btn.dataset.cancelar);
   loadMeusPedidos();
 });
@@ -436,9 +499,9 @@ async function loadDisponiveis() {
 
 document.getElementById("btn-montar-rota").addEventListener("click", async () => {
   const motoristaNome = document.getElementById("motorista-select").value;
-  if (!motoristaNome) return alert("Selecione seu nome (motorista) primeiro.");
+  if (!motoristaNome) return mostrarAviso("Selecione seu nome (motorista) primeiro.");
   const ids = Array.from(document.querySelectorAll(".pedido-check:checked")).map((c) => c.dataset.id);
-  if (!ids.length) return alert("Selecione ao menos um pedido.");
+  if (!ids.length) return mostrarAviso("Selecione ao menos um pedido.");
 
   const btn = document.getElementById("btn-montar-rota");
   btn.disabled = true;
@@ -455,7 +518,7 @@ document.getElementById("btn-montar-rota").addEventListener("click", async () =>
     await loadDisponiveis();
     await loadRotaAtual();
   } catch (err) {
-    alert("Erro ao montar rota: " + err.message);
+    mostrarAviso("Erro ao montar rota: " + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -731,7 +794,7 @@ document.getElementById("form-empresa").addEventListener("submit", async (e) => 
   const cnpj = document.getElementById("empresa-cnpj").value.trim();
   if (!nome) return;
   const { error } = await db.from("rl_empresas").insert({ nome, cnpj: cnpj || null });
-  if (error) return alert("Erro ao cadastrar: " + error.message);
+  if (error) return mostrarAviso("Erro ao cadastrar: " + error.message);
   document.getElementById("form-empresa").reset();
   await loadEmpresas();
   renderCadastros();
