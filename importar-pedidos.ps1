@@ -147,6 +147,7 @@ function Upload-Arquivo($caminhoArquivo, $nomeDestino, $contentType) {
 # (sem isso, o PowerShell silenciosamente retorna 0 arquivos mesmo
 # havendo arquivos que baterim com o filtro).
 $arquivos = Get-ChildItem -Path (Join-Path $PastaMonitorada "*") -Include *.pdf, *.jpg, *.jpeg, *.png -File |
+    Sort-Object FullName -Unique |
     Where-Object { $_.LastWriteTime -ge $DataCorte }
 
 if ($arquivos.Count -eq 0) {
@@ -223,7 +224,9 @@ foreach ($arquivo in $arquivos) {
     }
     catch {
         Write-Log "  ERRO: $($_.Exception.Message)"
-        Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaErros $arquivo.Name) -Force
+        if (Test-Path $arquivo.FullName) {
+            Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaErros $arquivo.Name) -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
