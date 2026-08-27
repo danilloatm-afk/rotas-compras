@@ -583,6 +583,12 @@ async function getOrCreateRotaAtiva(motoristaNome) {
   return rotaAtualId;
 }
 
+// paradasCache guarda só as paradas AINDA PENDENTES da rota atual — assim
+// que uma parada é concluída, ela sai daqui e some da tela "Minha rota de
+// hoje" (vai aparecer no Histórico). O contador de progresso usa uma
+// contagem à parte, já que as concluídas não ficam mais no array.
+let rotaProgresso = { concluidas: 0, total: 0 };
+
 async function loadRotaAtual() {
   const motoristaNome = document.getElementById("motorista-select").value;
   const progresso = document.getElementById("rota-progresso");
@@ -606,8 +612,15 @@ async function loadRotaAtual() {
   }
   rotaAtualId = rotas[0].id;
   btnExcluir.classList.remove("hidden");
+
+  const { data: todasParadas } = await comTimeout(db.from("rl_rota_paradas").select("id, status").eq("rota_id", rotaAtualId));
+  rotaProgresso = {
+    total: (todasParadas || []).length,
+    concluidas: (todasParadas || []).filter((p) => p.status === "concluida").length,
+  };
+
   const { data: paradas, error } = await comTimeout(
-    db.from("rl_rota_paradas").select("*, rl_pedidos(*)").eq("rota_id", rotaAtualId).order("ordem")
+    db.from("rl_rota_paradas").select("*, rl_pedidos(*)").eq("rota_id", rotaAtualId).eq("status", "pendente").order("ordem")
   );
   if (error) {
     lista.innerHTML = `<li class="empty-state">Erro ao carregar rota.</li>`;
@@ -638,7 +651,7 @@ document.getElementById("btn-excluir-rota").addEventListener("click", async (e) 
   delete btn.dataset.confirmando;
   btn.disabled = true;
   try {
-    const pendentesIds = paradasCache.filter((p) => p.status === "pendente").map((p) => p.pedido_id);
+    const pendentesIds = paradasCache.map((p) => p.pedido_id);
     if (pendentesIds.length) {
       const { error: errPedidos } = await db.from("rl_pedidos").update({ status: "pendente" }).in("id", pendentesIds);
       if (errPedidos) throw errPedidos;
@@ -661,20 +674,25 @@ document.getElementById("btn-excluir-rota").addEventListener("click", async (e) 
 function renderRota() {
   const progresso = document.getElementById("rota-progresso");
   const lista = document.getElementById("lista-rota");
-  if (!paradasCache.length) {
+  if (!rotaProgresso.total) {
     progresso.textContent = "";
     lista.innerHTML = `<li class="empty-state">Nenhuma parada na rota ainda.</li>`;
     return;
   }
-  const concluidas = paradasCache.filter((p) => p.status === "concluida").length;
-  progresso.textContent = `${concluidas} de ${paradasCache.length} paradas concluídas.`;
+  progresso.textContent = `${rotaProgresso.concluidas} de ${rotaProgresso.total} paradas concluídas.${
+    rotaProgresso.concluidas ? " As já concluídas aparecem na aba Histórico." : ""
+  }`;
+
+  if (!paradasCache.length) {
+    lista.innerHTML = `<li class="empty-state">Todas as paradas desta rota já foram concluídas. Veja o detalhe na aba Histórico.</li>`;
+    return;
+  }
 
   lista.innerHTML = paradasCache
     .map((p, i) => {
       const pedido = p.rl_pedidos || {};
-      const divergencia = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens;
       return `
-      <li class="rota-item ${p.status === "concluida" ? "concluida" : ""}" draggable="true" data-index="${i}">
+      <li class="rota-item" draggable="true" data-index="${i}">
         <span class="drag-handle">⠿</span>
         <span class="ordem-num">${i + 1}</span>
         <div class="rota-item-info">
@@ -682,13 +700,8 @@ function renderRota() {
           <span>Comprador: ${escapeHtml(pedido.comprador_nome || "—")} · Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
           ${pedido.local_retirada ? `<span>📍 ${escapeHtml(pedido.local_retirada)}</span>` : ""}
           ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
-          ${divergencia ? `<span class="divergencia-tag">⚠️ Divergência na conferência da nota</span>` : ""}
         </div>
-        ${
-          p.status === "concluida"
-            ? `<span class="badge status-concluido">Concluída</span>`
-            : `<button class="btn secondary small" type="button" data-concluir="${p.id}">Concluir</button>`
-        }
+        <button class="btn secondary small" type="button" data-concluir="${p.id}">Concluir</button>
       </li>`;
     })
     .join("");
@@ -849,6 +862,7 @@ function renderTabelaItens(resultado) {
 
 document.getElementById("nota-valor").addEventListener("input", atualizarConferencia);
 document.getElementById("nota-cnpj").addEventListener("input", atualizarConferencia);
+document.getElementById("nota-parcial").addEventListener("change", atualizarConferencia);
 
 function calcularDivergencias() {
   const pedido = (paradaEmEdicao && paradaEmEdicao.rl_pedidos) || {};
@@ -894,11 +908,22 @@ function calcularDivergencias() {
 
 function atualizarConferencia() {
   if (!paradaEmEdicao) return;
+  const box = document.getElementById("conferencia-resultado");
+
+  // Entrega parcial nunca vai bater com o total do pedido — não faz sentido
+  // (nem é justo com o motorista) rodar a conferência nesse caso. A
+  // conferência de verdade só acontece quando a entrega for marcada completa.
+  if (document.getElementById("nota-parcial").checked) {
+    box.classList.remove("hidden", "warn");
+    box.classList.add("ok");
+    box.innerHTML = `<div>📦 Entrega parcial — a conferência de valor/itens só é feita quando o pedido for concluído por completo.</div>`;
+    return;
+  }
+
   const { msgValor, divergValor, msgCnpj, divergCnpj } = calcularDivergencias();
   const pedido = paradaEmEdicao.rl_pedidos || {};
   const resultadoItens = compararItens(pedido.itens, notaItensExtraidos);
 
-  const box = document.getElementById("conferencia-resultado");
   box.classList.remove("hidden", "ok", "warn");
   box.classList.add(divergValor || divergCnpj || resultadoItens.divergente ? "warn" : "ok");
   let html = `<div>${msgValor}</div><div>${msgCnpj}</div>`;
@@ -925,11 +950,21 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   feedback.className = "feedback";
   try {
     const { url } = await uploadArquivo(file, "rl_notas");
-    const { divergValor, divergCnpj } = calcularDivergencias();
-    const resultadoItens = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos);
+    const entregaParcial = document.getElementById("nota-parcial").checked;
     const notaValor = document.getElementById("nota-valor").value;
     const notaCnpj = document.getElementById("nota-cnpj").value.trim();
     const notaNumero = document.getElementById("nota-numero").value.trim();
+
+    // Entrega parcial não passa pela conferência (o valor/itens dessa nota
+    // não deve mesmo bater com o total do pedido) e o pedido volta pra fila
+    // de disponíveis pra uma próxima rota buscar o restante.
+    let divergValor = false;
+    let divergCnpj = false;
+    let itensDivergentes = false;
+    if (!entregaParcial) {
+      ({ divergValor, divergCnpj } = calcularDivergencias());
+      itensDivergentes = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos).divergente;
+    }
 
     const { error: errParada } = await db
       .from("rl_rota_paradas")
@@ -940,15 +975,19 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
         nota_valor_total: notaValor ? Number(notaValor) : null,
         nota_cnpj: notaCnpj || null,
         nota_itens: notaItensExtraidos,
+        entrega_parcial: entregaParcial,
         divergencia_valor: divergValor,
         divergencia_cnpj: divergCnpj,
-        divergencia_itens: resultadoItens.divergente,
+        divergencia_itens: itensDivergentes,
         concluido_em: new Date().toISOString(),
       })
       .eq("id", paradaEmEdicao.id);
     if (errParada) throw errParada;
 
-    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", paradaEmEdicao.pedido_id);
+    const { error: errPedido } = await db
+      .from("rl_pedidos")
+      .update({ status: entregaParcial ? "pendente" : "concluido" })
+      .eq("id", paradaEmEdicao.pedido_id);
     if (errPedido) throw errPedido;
 
     const { data: pendentes } = await db.from("rl_rota_paradas").select("id").eq("rota_id", rotaAtualId).eq("status", "pendente");
@@ -958,7 +997,7 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
 
     document.getElementById("modal-overlay").classList.add("hidden");
     paradaEmEdicao = null;
-    await loadRotaAtual();
+    await Promise.all([loadRotaAtual(), entregaParcial ? loadDisponiveis() : Promise.resolve()]);
   } catch (err) {
     feedback.textContent = "Erro: " + err.message;
     feedback.className = "feedback error";
@@ -1122,42 +1161,42 @@ function renderDivergenciasParada(parada) {
   return html;
 }
 
-function renderHistorico(rotas) {
+// Lista achatada de PARADAS concluídas (não agrupada por rota) — assim uma
+// parada aparece aqui assim que é concluída, sem esperar a rota inteira
+// terminar (rotas costumam levar o dia todo).
+function renderHistorico(paradas) {
   const el = document.getElementById("lista-historico");
-  if (!rotas.length) {
-    el.innerHTML = `<p class="empty-state">Nenhuma rota concluída ainda.</p>`;
+  if (!paradas.length) {
+    el.innerHTML = `<p class="empty-state">Nenhuma parada concluída ainda.</p>`;
     return;
   }
-  el.innerHTML = rotas
-    .map((rota) => {
-      const paradas = (rota.rl_rota_paradas || []).slice().sort((a, b) => a.ordem - b.ordem);
-      const paradasHtml = paradas
-        .map((p) => {
-          const pedido = p.rl_pedidos || {};
-          const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens;
-          return `
-        <div class="historico-parada">
-          <div class="card-linha">
-            <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
-            <span>${divergente ? "⚠️ Divergência" : "✅ OK"}</span>
-          </div>
-          <div class="card-meta">
-            ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
-            · Concluído em ${formatarDataHora(p.concluido_em)}
-          </div>
-          ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
-          ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
-          ${divergente ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}</div>` : ""}
-        </div>`;
-        })
-        .join("");
+  el.innerHTML = paradas
+    .map((p) => {
+      const pedido = p.rl_pedidos || {};
+      const motorista = (p.rl_rotas || {}).motorista_nome || "—";
+      const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens;
+      const status = p.entrega_parcial ? "📦 Entrega parcial" : divergente ? "⚠️ Divergência" : "✅ OK";
       return `
-      <div class="card-pedido historico-rota">
+      <div class="card-pedido historico-parada-card">
         <div class="card-pedido-head">
-          <strong>🚚 ${escapeHtml(rota.motorista_nome)}</strong>
-          <span class="card-meta">${formatarDataHora(rota.criado_em)}</span>
+          <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+          <span>${status}</span>
         </div>
-        ${paradasHtml}
+        <div class="card-meta">
+          ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
+          · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
+        </div>
+        ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
+        ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
+        ${
+          p.entrega_parcial
+            ? `<div class="conferencia-box ok">📦 Entrega parcial — o pedido voltou pra fila de disponíveis pra buscar o restante. Confira aqui os dados desta parcial: valor ${formatarMoeda(
+                p.nota_valor_total
+              )}${p.nota_numero ? `, Nº nota ${escapeHtml(p.nota_numero)}` : ""}.</div>`
+            : divergente
+              ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}</div>`
+              : ""
+        }
       </div>`;
     })
     .join("");
@@ -1166,7 +1205,12 @@ function renderHistorico(rotas) {
 async function loadHistorico() {
   const el = document.getElementById("lista-historico");
   const { data, error } = await comTimeout(
-    db.from("rl_rotas").select("*, rl_rota_paradas(*, rl_pedidos(*))").eq("status", "concluida").order("criado_em", { ascending: false }).limit(30)
+    db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
+      .eq("status", "concluida")
+      .order("concluido_em", { ascending: false })
+      .limit(50)
   );
   if (error) {
     el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
