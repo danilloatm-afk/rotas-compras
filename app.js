@@ -276,13 +276,16 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
         extraido.empresa_compradora_cnpj ? ` (CNPJ ${extraido.empresa_compradora_cnpj})` : ""
       } — não encontrada no cadastro. Selecione manualmente ou cadastre em Configurações.`;
     }
-    if (extraido.frete_fob) {
-      feedback.textContent = "Documento lido (frete FOB — precisa de coleta). Confira os campos abaixo antes de enviar.";
+    // Frete CIF x FOB é decidido pelo nome do arquivo (mesmo padrão do robô e
+    // do Avanço para Contratos, que decide spot x contrato do mesmo jeito).
+    if (/fob/i.test(file.name)) {
+      feedback.textContent = "Documento lido (nome do arquivo indica frete FOB — precisa de coleta). Confira os campos abaixo antes de enviar.";
       feedback.className = "feedback success";
     } else {
       feedback.textContent =
-        "⚠️ Não encontramos a palavra \"FOB\" neste pedido — parece ser frete CIF (fornecedor entrega), que normalmente não " +
-        "precisa de coleta. Confira antes de enviar; envie mesmo assim só se tiver certeza que precisa de rota.";
+        '⚠️ O nome do arquivo não tem "FOB" — parece ser frete CIF (fornecedor entrega), que normalmente não precisa de ' +
+        "coleta. Confira antes de enviar; envie mesmo assim só se tiver certeza que precisa de rota (ou renomeie o arquivo " +
+        'incluindo "FOB" antes de anexar).';
       feedback.className = "feedback error";
     }
   } catch (err) {
