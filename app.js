@@ -220,6 +220,25 @@ document.getElementById("btn-novo-motorista").addEventListener("click", async ()
   loadRotaAtual();
 });
 
+// O nome de quem pediu já vem escrito no próprio documento (campo
+// "Comprador:") — não faz sentido pedir de novo pra pessoa que só está
+// anexando o arquivo. Acha o cadastro pelo nome (ignorando maiúscula/
+// espaço) ou cria um novo automaticamente, igual o robô faz.
+async function selecionarOuCriarComprador(nomeLido) {
+  const nome = (nomeLido || "").trim();
+  if (!nome) return;
+  const existente = compradoresCache.find((c) => c.nome.trim().toLowerCase() === nome.toLowerCase());
+  if (!existente) {
+    const { error } = await db.from("rl_compradores").insert({ nome });
+    if (error) return;
+    await loadCompradores();
+  }
+  const nomeFinal = existente ? existente.nome : nome;
+  document.getElementById("comprador-select").value = nomeFinal;
+  localStorage.setItem("rl_comprador_atual", nomeFinal);
+  loadMeusPedidos();
+}
+
 // ---------- comprador: ler pedido com IA ----------
 document.getElementById("btn-ler-pedido").addEventListener("click", async () => {
   const input = document.getElementById("pedido-arquivo");
@@ -238,6 +257,7 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
     if (extraido.numero_pedido) document.getElementById("pedido-numero").value = extraido.numero_pedido;
     if (extraido.local_retirada) document.getElementById("pedido-local").value = extraido.local_retirada;
     await checarPedidoDuplicado(extraido.numero_pedido);
+    await selecionarOuCriarComprador(extraido.solicitante_nome);
 
     const cnpjLido = apenasDigitos(extraido.empresa_compradora_cnpj);
     let empresaEncontrada = null;
