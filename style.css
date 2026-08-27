@@ -276,6 +276,16 @@ input, select, textarea {
 .link-btn { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.82rem; padding: 0; }
 .link-btn.danger { color: var(--atrasado); }
 
+.tabela-itens {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-top: 0.4rem;
+}
+.tabela-itens th, .tabela-itens td { text-align: left; padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--border); }
+.tabela-itens th { color: var(--text-muted); font-weight: 600; }
+.tabela-itens tr.linha-divergente { background: var(--atrasado-bg); }
+
 .toast-aviso {
   position: fixed;
   left: 50%;
