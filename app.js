@@ -146,6 +146,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       loadRotaAtual();
     }
     if (btn.dataset.tab === "indicadores") loadIndicadores();
+    if (btn.dataset.tab === "historico") loadHistorico();
     if (btn.dataset.tab === "config") renderCadastros();
   });
 });
@@ -1099,6 +1100,79 @@ function renderGraficoColetados(meses) {
       <line class="grafico-eixo" x1="0" y1="${alturaBarraMax + 20}" x2="${larguraTotal}" y2="${alturaBarraMax + 20}"></line>
       ${barras}
     </svg>`;
+}
+
+// ---------- histórico (rotas concluídas) ----------
+// Reconstrói as mensagens de divergência a partir do que já ficou salvo na
+// parada (nota_valor_total, nota_cnpj, nota_itens) — não depende de nada
+// que só existia na tela no momento em que o motorista concluiu a parada.
+function renderDivergenciasParada(parada) {
+  const pedido = parada.rl_pedidos || {};
+  let html = "";
+  if (parada.divergencia_valor) {
+    html += `<div>⚠️ Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.</div>`;
+  }
+  if (parada.divergencia_cnpj) {
+    html += `<div>⚠️ CNPJ: pedido esperava ${escapeHtml(pedido.empresa_cnpj || "—")}, nota trouxe ${escapeHtml(parada.nota_cnpj || "—")}.</div>`;
+  }
+  if (parada.divergencia_itens) {
+    const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
+    html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
+  }
+  return html;
+}
+
+function renderHistorico(rotas) {
+  const el = document.getElementById("lista-historico");
+  if (!rotas.length) {
+    el.innerHTML = `<p class="empty-state">Nenhuma rota concluída ainda.</p>`;
+    return;
+  }
+  el.innerHTML = rotas
+    .map((rota) => {
+      const paradas = (rota.rl_rota_paradas || []).slice().sort((a, b) => a.ordem - b.ordem);
+      const paradasHtml = paradas
+        .map((p) => {
+          const pedido = p.rl_pedidos || {};
+          const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens;
+          return `
+        <div class="historico-parada">
+          <div class="card-linha">
+            <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+            <span>${divergente ? "⚠️ Divergência" : "✅ OK"}</span>
+          </div>
+          <div class="card-meta">
+            ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
+            · Concluído em ${formatarDataHora(p.concluido_em)}
+          </div>
+          ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
+          ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
+          ${divergente ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}</div>` : ""}
+        </div>`;
+        })
+        .join("");
+      return `
+      <div class="card-pedido historico-rota">
+        <div class="card-pedido-head">
+          <strong>🚚 ${escapeHtml(rota.motorista_nome)}</strong>
+          <span class="card-meta">${formatarDataHora(rota.criado_em)}</span>
+        </div>
+        ${paradasHtml}
+      </div>`;
+    })
+    .join("");
+}
+
+async function loadHistorico() {
+  const el = document.getElementById("lista-historico");
+  const { data, error } = await comTimeout(
+    db.from("rl_rotas").select("*, rl_rota_paradas(*, rl_pedidos(*))").eq("status", "concluida").order("criado_em", { ascending: false }).limit(30)
+  );
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
+    return;
+  }
+  renderHistorico(data || []);
 }
 
 // ---------- inicialização ----------
