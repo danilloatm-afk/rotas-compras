@@ -20,6 +20,7 @@
   <nav class="tabs">
     <button class="tab-btn active" data-tab="comprador">📥 Comprador</button>
     <button class="tab-btn" data-tab="motorista">🚚 Motorista</button>
+    <button class="tab-btn" data-tab="indicadores">📊 Indicadores</button>
     <button class="tab-btn" data-tab="config">Configurações</button>
   </nav>
 </header>
@@ -112,13 +113,23 @@
     <h2>Pedidos disponíveis</h2>
     <div class="section-head">
       <p class="hint">Marque os pedidos que vão entrar na rota e clique em "Montar rota".</p>
-      <button id="btn-montar-rota" class="btn primary">Montar rota com selecionados</button>
+      <div class="filtro-e-botao">
+        <select id="filtro-cidade"><option value="">Todas as cidades</option></select>
+        <button id="btn-montar-rota" class="btn primary">Montar rota com selecionados</button>
+      </div>
     </div>
     <div id="lista-disponiveis" class="cards-grid"></div>
 
     <h2 class="mt">Minha rota de hoje</h2>
     <p id="rota-progresso" class="hint"></p>
     <ul id="lista-rota" class="rota-lista"></ul>
+  </section>
+
+  <!-- INDICADORES -->
+  <section id="tab-indicadores" class="tab-content">
+    <h2>Pedidos coletados por mês</h2>
+    <p class="hint">Conta as paradas concluídas (pedido efetivamente coletado pelo motorista), agrupadas pelo mês da coleta.</p>
+    <div id="grafico-coletados" class="grafico-wrap"></div>
   </section>
 
   <!-- CONFIG -->
