@@ -528,12 +528,30 @@ function renderDisponiveis() {
       ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
       <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
       <label class="selecionar"><input type="checkbox" class="pedido-check" data-id="${p.id}"> Incluir na rota</label>
+      <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
     </div>`
     )
     .join("");
 }
 
 document.getElementById("filtro-cidade").addEventListener("change", renderDisponiveis);
+
+// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"
+document.getElementById("lista-disponiveis").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-cancelar-disponivel]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir pedido";
+    }, 4000);
+    return;
+  }
+  await db.from("rl_pedidos").update({ status: "cancelado" }).eq("id", btn.dataset.cancelarDisponivel);
+  loadDisponiveis();
+});
 
 document.getElementById("btn-montar-rota").addEventListener("click", async () => {
   const motoristaNome = document.getElementById("motorista-select").value;
