@@ -155,6 +155,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 let compradoresCache = [];
 let motoristasCache = [];
 let empresasCache = [];
+let almoxarifesCache = [];
 
 async function loadCompradores() {
   const { data, error } = await comTimeout(db.from("rl_compradores").select("*").order("ativo", { ascending: false }).order("nome"));
@@ -175,6 +176,17 @@ async function loadMotoristas() {
   sel.innerHTML =
     `<option value="">— selecione —</option>` +
     motoristasCache.filter((m) => m.ativo).map((m) => `<option value="${escapeHtml(m.nome)}">${escapeHtml(m.nome)}</option>`).join("");
+  if (atual) sel.value = atual;
+}
+
+async function loadAlmoxarifes() {
+  const { data, error } = await comTimeout(db.from("rl_almoxarifes").select("*").order("ativo", { ascending: false }).order("nome"));
+  almoxarifesCache = error ? almoxarifesCache : data || [];
+  const sel = document.getElementById("almoxarife-select");
+  const atual = localStorage.getItem("rl_almoxarife_atual") || sel.value;
+  sel.innerHTML =
+    `<option value="">— selecione —</option>` +
+    almoxarifesCache.filter((a) => a.ativo).map((a) => `<option value="${escapeHtml(a.nome)}">${escapeHtml(a.nome)}</option>`).join("");
   if (atual) sel.value = atual;
 }
 
@@ -273,6 +285,43 @@ async function confirmarNovoMotorista() {
 document.getElementById("btn-confirmar-novo-motorista").addEventListener("click", confirmarNovoMotorista);
 document.getElementById("novo-motorista-nome").addEventListener("keydown", (e) => {
   if (e.key === "Enter") confirmarNovoMotorista();
+});
+
+document.getElementById("btn-novo-almoxarife").addEventListener("click", () => {
+  document.getElementById("form-novo-almoxarife").classList.remove("hidden");
+  const input = document.getElementById("novo-almoxarife-nome");
+  input.value = "";
+  input.focus();
+});
+
+document.getElementById("btn-cancelar-novo-almoxarife").addEventListener("click", () => {
+  document.getElementById("form-novo-almoxarife").classList.add("hidden");
+});
+
+async function confirmarNovoAlmoxarife() {
+  const nome = document.getElementById("novo-almoxarife-nome").value.trim();
+  if (!nome) return;
+  const existente = almoxarifesCache.find((a) => a.nome.toLowerCase() === nome.toLowerCase());
+  if (!existente) {
+    const { error } = await db.from("rl_almoxarifes").insert({ nome });
+    if (error) {
+      mostrarAviso("Erro ao cadastrar: " + error.message);
+      return;
+    }
+  }
+  await loadAlmoxarifes();
+  document.getElementById("almoxarife-select").value = nome;
+  localStorage.setItem("rl_almoxarife_atual", nome);
+  document.getElementById("form-novo-almoxarife").classList.add("hidden");
+}
+
+document.getElementById("btn-confirmar-novo-almoxarife").addEventListener("click", confirmarNovoAlmoxarife);
+document.getElementById("novo-almoxarife-nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarNovoAlmoxarife();
+});
+
+document.getElementById("almoxarife-select").addEventListener("change", (e) => {
+  localStorage.setItem("rl_almoxarife_atual", e.target.value);
 });
 
 // O nome de quem pediu já vem escrito no próprio documento (campo
@@ -1120,12 +1169,26 @@ function renderCadastros() {
         )
         .join("")
     : `<li class="empty-state">Nenhum motorista cadastrado.</li>`;
+
+  const listaAlmoxarifes = document.getElementById("lista-almoxarifes-config");
+  listaAlmoxarifes.innerHTML = almoxarifesCache.length
+    ? almoxarifesCache
+        .map(
+          (a) => `
+      <li class="${a.ativo ? "" : "inativo"}">
+        <span>${escapeHtml(a.nome)}</span>
+        <button class="link-btn" data-toggle-almoxarife="${a.id}" data-ativo="${a.ativo}" type="button">${a.ativo ? "Desativar" : "Ativar"}</button>
+      </li>`
+        )
+        .join("")
+    : `<li class="empty-state">Nenhum almoxarife cadastrado.</li>`;
 }
 
 document.getElementById("tab-config").addEventListener("click", async (e) => {
   const btnEmp = e.target.closest("button[data-toggle-empresa]");
   const btnComp = e.target.closest("button[data-toggle-comprador]");
   const btnMot = e.target.closest("button[data-toggle-motorista]");
+  const btnAlm = e.target.closest("button[data-toggle-almoxarife]");
   if (btnEmp) {
     await db.from("rl_empresas").update({ ativo: btnEmp.dataset.ativo !== "true" }).eq("id", btnEmp.dataset.toggleEmpresa);
     await loadEmpresas();
@@ -1137,6 +1200,10 @@ document.getElementById("tab-config").addEventListener("click", async (e) => {
   if (btnMot) {
     await db.from("rl_motoristas").update({ ativo: btnMot.dataset.ativo !== "true" }).eq("id", btnMot.dataset.toggleMotorista);
     await loadMotoristas();
+  }
+  if (btnAlm) {
+    await db.from("rl_almoxarifes").update({ ativo: btnAlm.dataset.ativo !== "true" }).eq("id", btnAlm.dataset.toggleAlmoxarife);
+    await loadAlmoxarifes();
   }
   renderCadastros();
 });
@@ -1228,10 +1295,19 @@ function renderDivergenciasParada(parada) {
 // Lista achatada de PARADAS concluídas (não agrupada por rota) — assim uma
 // parada aparece aqui assim que é concluída, sem esperar a rota inteira
 // terminar (rotas costumam levar o dia todo).
-function renderHistorico(paradas) {
+let historicoCache = [];
+
+function renderHistorico() {
   const el = document.getElementById("lista-historico");
+  const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
+  const paradas = empresaFiltro
+    ? historicoCache.filter((p) => (p.rl_pedidos || {}).empresa_nome === empresaFiltro)
+    : historicoCache;
+
   if (!paradas.length) {
-    el.innerHTML = `<p class="empty-state">Nenhuma parada concluída ainda.</p>`;
+    el.innerHTML = `<p class="empty-state">${
+      historicoCache.length ? "Nenhuma parada concluída dessa empresa." : "Nenhuma parada concluída ainda."
+    }</p>`;
     return;
   }
   el.innerHTML = paradas
@@ -1261,6 +1337,13 @@ function renderHistorico(paradas) {
               ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}</div>`
               : ""
         }
+        <div class="card-meta">
+          ${
+            p.recebido_em
+              ? `✅ Recebido por ${escapeHtml(p.recebido_por || "—")} em ${formatarDataHora(p.recebido_em)}`
+              : `<button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>`
+          }
+        </div>
       </div>`;
     })
     .join("");
@@ -1280,8 +1363,40 @@ async function loadHistorico() {
     el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
     return;
   }
-  renderHistorico(data || []);
+  historicoCache = data || [];
+
+  const selEmpresa = document.getElementById("filtro-empresa-historico");
+  const empresaAtual = selEmpresa.value;
+  const empresas = [...new Set(historicoCache.map((p) => (p.rl_pedidos || {}).empresa_nome).filter(Boolean))].sort();
+  selEmpresa.innerHTML =
+    `<option value="">Todas as empresas</option>` + empresas.map((emp) => `<option value="${escapeHtml(emp)}">${escapeHtml(emp)}</option>`).join("");
+  if (empresas.includes(empresaAtual)) selEmpresa.value = empresaAtual;
+
+  renderHistorico();
 }
+
+document.getElementById("filtro-empresa-historico").addEventListener("change", renderHistorico);
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-confirmar-recebimento]");
+  if (!btn) return;
+  const almoxarife = document.getElementById("almoxarife-select").value;
+  if (!almoxarife) {
+    mostrarAviso("Selecione seu nome (almoxarifado) primeiro.");
+    return;
+  }
+  btn.disabled = true;
+  const { error } = await db
+    .from("rl_rota_paradas")
+    .update({ recebido_por: almoxarife, recebido_em: new Date().toISOString() })
+    .eq("id", btn.dataset.confirmarRecebimento);
+  if (error) {
+    mostrarAviso("Erro ao confirmar recebimento: " + error.message);
+    btn.disabled = false;
+    return;
+  }
+  loadHistorico();
+});
 
 // ---------- botões de atualizar (dados podem mudar por outro comprador/motorista usando o site ao mesmo tempo) ----------
 document.getElementById("btn-atualizar-comprador").addEventListener("click", loadMeusPedidos);
@@ -1298,6 +1413,6 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
 
 // ---------- inicialização ----------
 (async function init() {
-  await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas()]);
+  await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes()]);
   loadMeusPedidos();
 })();
