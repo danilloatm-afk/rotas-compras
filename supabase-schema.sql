@@ -70,7 +70,18 @@ create table rl_rota_paradas (
   divergencia_valor boolean not null default false,
   divergencia_cnpj boolean not null default false,
   divergencia_itens boolean not null default false,
+  recebido_por text,
+  recebido_em timestamptz,
   concluido_em timestamptz,
+  criado_em timestamptz not null default now()
+);
+
+-- Almoxarifado: confere e confirma o recebimento de cada parada concluída
+-- (nome + data/hora), visível na aba Histórico.
+create table rl_almoxarifes (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null unique,
+  ativo boolean not null default true,
   criado_em timestamptz not null default now()
 );
 
@@ -85,6 +96,7 @@ alter table rl_motoristas enable row level security;
 alter table rl_pedidos enable row level security;
 alter table rl_rotas enable row level security;
 alter table rl_rota_paradas enable row level security;
+alter table rl_almoxarifes enable row level security;
 
 create policy "allow all" on rl_empresas for all using (true) with check (true);
 create policy "allow all" on rl_compradores for all using (true) with check (true);
@@ -92,6 +104,7 @@ create policy "allow all" on rl_motoristas for all using (true) with check (true
 create policy "allow all" on rl_pedidos for all using (true) with check (true);
 create policy "allow all" on rl_rotas for all using (true) with check (true);
 create policy "allow all" on rl_rota_paradas for all using (true) with check (true);
+create policy "allow all" on rl_almoxarifes for all using (true) with check (true);
 
 -- Pré-cadastro das empresas do grupo (CNPJs confirmados em pedidos reais),
 -- usadas na conferência com a nota fiscal.
