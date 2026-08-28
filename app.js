@@ -602,12 +602,14 @@ async function loadRotaAtual() {
     db.from("rl_rotas").select("*").eq("motorista_nome", motoristaNome).eq("status", "em_andamento").order("criado_em", { ascending: false }).limit(1)
   );
   const btnExcluir = document.getElementById("btn-excluir-rota");
+  const btnExcluirSelecionadas = document.getElementById("btn-excluir-selecionadas");
   if (!rotas || !rotas.length) {
     rotaAtualId = null;
     paradasCache = [];
     progresso.textContent = "";
     lista.innerHTML = `<li class="empty-state">Nenhuma rota em andamento. Selecione pedidos acima e clique em "Montar rota".</li>`;
     btnExcluir.classList.add("hidden");
+    btnExcluirSelecionadas.classList.add("hidden");
     return;
   }
   rotaAtualId = rotas[0].id;
@@ -671,9 +673,52 @@ document.getElementById("btn-excluir-rota").addEventListener("click", async (e) 
   }
 });
 
+// Remove só as paradas marcadas (o pedido delas volta pra fila de
+// disponíveis) — diferente de "Excluir rota", que mexe em todas de uma vez.
+document.getElementById("btn-excluir-selecionadas").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const marcadas = Array.from(document.querySelectorAll(".parada-check:checked")).map((c) => c.dataset.paradaId);
+  if (!marcadas.length) {
+    mostrarAviso("Marque ao menos uma parada pra excluir.");
+    return;
+  }
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = `Clique de novo pra confirmar (${marcadas.length})`;
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir selecionadas";
+    }, 4000);
+    return;
+  }
+  delete btn.dataset.confirmando;
+  btn.disabled = true;
+  try {
+    const paradasSelecionadas = paradasCache.filter((p) => marcadas.includes(String(p.id)));
+    const pedidoIds = paradasSelecionadas.map((p) => p.pedido_id);
+    if (pedidoIds.length) {
+      const { error: errPedidos } = await db.from("rl_pedidos").update({ status: "pendente" }).in("id", pedidoIds);
+      if (errPedidos) throw errPedidos;
+    }
+    const { error: errParadas } = await db.from("rl_rota_paradas").delete().in("id", marcadas);
+    if (errParadas) throw errParadas;
+
+    btn.textContent = "Excluir selecionadas";
+    await Promise.all([loadDisponiveis(), loadRotaAtual()]);
+  } catch (err) {
+    mostrarAviso("Erro ao excluir selecionadas: " + err.message);
+    btn.textContent = "Excluir selecionadas";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function renderRota() {
   const progresso = document.getElementById("rota-progresso");
   const lista = document.getElementById("lista-rota");
+  const btnExcluirSelecionadas = document.getElementById("btn-excluir-selecionadas");
+  btnExcluirSelecionadas.classList.toggle("hidden", !paradasCache.length);
+
   if (!rotaProgresso.total) {
     progresso.textContent = "";
     lista.innerHTML = `<li class="empty-state">Nenhuma parada na rota ainda.</li>`;
@@ -693,6 +738,7 @@ function renderRota() {
       const pedido = p.rl_pedidos || {};
       return `
       <li class="rota-item" draggable="true" data-index="${i}">
+        <input type="checkbox" class="parada-check" data-parada-id="${p.id}">
         <span class="drag-handle">⠿</span>
         <span class="ordem-num">${i + 1}</span>
         <div class="rota-item-info">
@@ -1218,6 +1264,19 @@ async function loadHistorico() {
   }
   renderHistorico(data || []);
 }
+
+// ---------- botões de atualizar (dados podem mudar por outro comprador/motorista usando o site ao mesmo tempo) ----------
+document.getElementById("btn-atualizar-comprador").addEventListener("click", loadMeusPedidos);
+document.getElementById("btn-atualizar-motorista").addEventListener("click", () => {
+  loadDisponiveis();
+  loadRotaAtual();
+});
+document.getElementById("btn-atualizar-indicadores").addEventListener("click", loadIndicadores);
+document.getElementById("btn-atualizar-historico").addEventListener("click", loadHistorico);
+document.getElementById("btn-atualizar-config").addEventListener("click", async () => {
+  await Promise.all([loadEmpresas(), loadCompradores(), loadMotoristas()]);
+  renderCadastros();
+});
 
 // ---------- inicialização ----------
 (async function init() {
