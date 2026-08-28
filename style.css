@@ -124,6 +124,7 @@ h3 { font-size: 1rem; margin: 0 0 0.75rem; }
 .hint { color: var(--text-muted); font-size: 0.82rem; margin: 0.2rem 0 0.75rem; }
 
 .filtro-e-botao { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.filtro-e-botao.mb { margin-bottom: 1rem; }
 .filtro-e-botao select { min-width: 160px; }
 
 .grafico-wrap {
