@@ -154,7 +154,27 @@
       <h2>Paradas concluídas</h2>
       <button id="btn-atualizar-historico" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
-    <p class="hint">Cada parada aparece aqui assim que é concluída, com o detalhe de qualquer divergência (valor, CNPJ ou itens) ou aviso de entrega parcial.</p>
+    <p class="hint">Cada parada aparece aqui assim que é concluída, com o detalhe de qualquer divergência (valor, CNPJ ou itens) ou aviso de entrega parcial. O almoxarifado confere e confirma o recebimento de cada uma.</p>
+
+    <div class="quem-sou-eu">
+      <label>
+        Meu nome (almoxarifado, pra confirmar recebimento)
+        <div class="inline-form">
+          <select id="almoxarife-select"></select>
+          <button id="btn-novo-almoxarife" type="button" class="btn secondary small">+ Novo</button>
+        </div>
+      </label>
+      <div id="form-novo-almoxarife" class="inline-form hidden">
+        <input type="text" id="novo-almoxarife-nome" placeholder="Nome do novo almoxarife">
+        <button id="btn-confirmar-novo-almoxarife" type="button" class="btn primary small">Adicionar</button>
+        <button id="btn-cancelar-novo-almoxarife" type="button" class="btn secondary small">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="filtro-e-botao mb">
+      <select id="filtro-empresa-historico"><option value="">Todas as empresas</option></select>
+    </div>
+
     <div id="lista-historico"></div>
   </section>
 
@@ -177,6 +197,9 @@
 
     <h2 class="mt">Motoristas</h2>
     <ul id="lista-motoristas-config" class="cadastro-lista"></ul>
+
+    <h2 class="mt">Almoxarifado</h2>
+    <ul id="lista-almoxarifes-config" class="cadastro-lista"></ul>
   </section>
 
 </main>
