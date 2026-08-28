@@ -90,7 +90,10 @@
       <p id="pedido-feedback" class="feedback"></p>
     </form>
 
-    <h2 class="mt">Meus pedidos</h2>
+    <div class="section-head mt">
+      <h2>Meus pedidos</h2>
+      <button id="btn-atualizar-comprador" type="button" class="btn secondary small">🔄 Atualizar</button>
+    </div>
     <div id="lista-meus-pedidos" class="cards-grid"></div>
   </section>
 
@@ -111,7 +114,10 @@
       </div>
     </div>
 
-    <h2>Pedidos disponíveis</h2>
+    <div class="section-head">
+      <h2>Pedidos disponíveis</h2>
+      <button id="btn-atualizar-motorista" type="button" class="btn secondary small">🔄 Atualizar</button>
+    </div>
     <div class="section-head">
       <p class="hint">Marque os pedidos que vão entrar na rota e clique em "Montar rota".</p>
       <div class="filtro-e-botao">
@@ -123,7 +129,10 @@
 
     <div class="section-head mt">
       <h2>Minha rota de hoje</h2>
-      <button id="btn-excluir-rota" type="button" class="btn secondary danger small hidden">Excluir rota</button>
+      <div class="filtro-e-botao">
+        <button id="btn-excluir-selecionadas" type="button" class="btn secondary danger small hidden">Excluir selecionadas</button>
+        <button id="btn-excluir-rota" type="button" class="btn secondary danger small hidden">Excluir rota</button>
+      </div>
     </div>
     <p id="rota-progresso" class="hint"></p>
     <ul id="lista-rota" class="rota-lista"></ul>
@@ -131,21 +140,30 @@
 
   <!-- INDICADORES -->
   <section id="tab-indicadores" class="tab-content">
-    <h2>Pedidos coletados por mês</h2>
+    <div class="section-head">
+      <h2>Pedidos coletados por mês</h2>
+      <button id="btn-atualizar-indicadores" type="button" class="btn secondary small">🔄 Atualizar</button>
+    </div>
     <p class="hint">Conta as paradas concluídas (pedido efetivamente coletado pelo motorista), agrupadas pelo mês da coleta.</p>
     <div id="grafico-coletados" class="grafico-wrap"></div>
   </section>
 
   <!-- HISTÓRICO -->
   <section id="tab-historico" class="tab-content">
-    <h2>Paradas concluídas</h2>
+    <div class="section-head">
+      <h2>Paradas concluídas</h2>
+      <button id="btn-atualizar-historico" type="button" class="btn secondary small">🔄 Atualizar</button>
+    </div>
     <p class="hint">Cada parada aparece aqui assim que é concluída, com o detalhe de qualquer divergência (valor, CNPJ ou itens) ou aviso de entrega parcial.</p>
     <div id="lista-historico"></div>
   </section>
 
   <!-- CONFIG -->
   <section id="tab-config" class="tab-content">
-    <h2>Empresas do grupo</h2>
+    <div class="section-head">
+      <h2>Empresas do grupo</h2>
+      <button id="btn-atualizar-config" type="button" class="btn secondary small">🔄 Atualizar</button>
+    </div>
     <p class="hint">Cadastre aqui as empresas compradoras (com CNPJ) usadas na conferência com a nota fiscal.</p>
     <form id="form-empresa" class="inline-form">
       <input type="text" id="empresa-nome" placeholder="Nome da empresa" required>
