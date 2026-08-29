@@ -1203,6 +1203,7 @@ function renderCadastros() {
           (c) => `
       <li class="${c.ativo ? "" : "inativo"}">
         <span>${escapeHtml(c.nome)}</span>
+        <input type="text" class="input-telefone" data-telefone-comprador="${c.id}" placeholder="WhatsApp (opcional)" value="${escapeHtml(c.telefone || "")}">
         <button class="link-btn" data-toggle-comprador="${c.id}" data-ativo="${c.ativo}" type="button">${c.ativo ? "Desativar" : "Ativar"}</button>
       </li>`
         )
@@ -1259,6 +1260,22 @@ document.getElementById("tab-config").addEventListener("click", async (e) => {
   }
   renderCadastros();
 });
+
+// salva o telefone ao sair do campo (sem botão de salvar separado)
+document.getElementById("tab-config").addEventListener(
+  "blur",
+  async (e) => {
+    const input = e.target.closest("input[data-telefone-comprador]");
+    if (!input) return;
+    const { error } = await db
+      .from("rl_compradores")
+      .update({ telefone: input.value.trim() || null })
+      .eq("id", input.dataset.telefoneComprador);
+    if (error) mostrarAviso("Erro ao salvar telefone: " + error.message);
+    else await loadCompradores();
+  },
+  true
+);
 
 // ---------- indicadores ----------
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -1325,6 +1342,41 @@ function renderGraficoColetados(meses) {
 }
 
 // ---------- histórico (rotas concluídas) ----------
+// Sem número salvo, "" abre o seletor de contato do próprio WhatsApp (mesmo
+// padrão usado no Painel de Operações).
+function linkWhatsapp(numero, mensagem) {
+  const digitos = String(numero || "").replace(/\D/g, "");
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(mensagem)}`;
+}
+
+// Mesma lógica de renderDivergenciasParada, mas em texto puro (sem HTML)
+// pra poder entrar direto na mensagem do WhatsApp.
+function resumoDivergenciasTexto(parada) {
+  const pedido = parada.rl_pedidos || {};
+  const linhas = [];
+  if (parada.divergencia_valor) {
+    linhas.push(`Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.`);
+  }
+  if (parada.divergencia_cnpj) {
+    linhas.push(`CNPJ: pedido esperava ${pedido.empresa_cnpj || "—"}, nota trouxe ${parada.nota_cnpj || "—"}.`);
+  }
+  if (parada.divergencia_itens) {
+    linhas.push("Itens com quantidade ou valor unitário diferente do esperado (confira no sistema).");
+  }
+  return linhas.join("\n");
+}
+
+function linkAvisoComprador(parada) {
+  const pedido = parada.rl_pedidos || {};
+  const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
+  const mensagem =
+    `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! Encontramos uma divergência na conferência do pedido ` +
+    `${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n` +
+    resumoDivergenciasTexto(parada) +
+    "\n\nPode conferir com o fornecedor?";
+  return linkWhatsapp(comprador.telefone, mensagem);
+}
+
 // Reconstrói as mensagens de divergência a partir do que já ficou salvo na
 // parada (nota_valor_total, nota_cnpj, nota_itens) — não depende de nada
 // que só existia na tela no momento em que o motorista concluiu a parada.
@@ -1386,7 +1438,9 @@ function renderHistorico() {
                 p.nota_valor_total
               )}${p.nota_numero ? `, Nº nota ${escapeHtml(p.nota_numero)}` : ""}.</div>`
             : divergente
-              ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}</div>`
+              ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}<a class="btn secondary small" href="${linkAvisoComprador(
+                  p
+                )}" target="_blank" rel="noopener">📱 Avisar comprador</a></div>`
               : ""
         }
         <div class="card-meta">
