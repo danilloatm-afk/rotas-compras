@@ -226,6 +226,7 @@ input, select, textarea {
 .card-pedido-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
 .card-pedido-head strong { font-size: 0.95rem; }
 .card-pedido .card-meta { font-size: 0.8rem; color: var(--text-muted); }
+.card-fornecedor { display: block; text-transform: uppercase; font-weight: 600; font-size: 0.82rem; color: var(--text); }
 .card-pedido .card-linha { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
 .card-pedido a.arquivo-link { color: var(--primary); font-size: 0.82rem; text-decoration: none; }
 .card-pedido a.arquivo-link:hover { text-decoration: underline; }
