@@ -201,6 +201,13 @@ input, select, textarea {
 .cadastro-lista li span:first-child { flex-shrink: 0; }
 .input-telefone { flex: 1; min-width: 0; font-size: 0.82rem; padding: 0.3rem 0.5rem; }
 .cadastro-lista li.inativo { opacity: 0.5; }
+
+/* no celular, nome + campo + botão espremidos numa linha só ficam difíceis
+   de tocar — empilha em 2 linhas (nome+botão em cima, telefone embaixo) */
+@media (max-width: 480px) {
+  .cadastro-lista li { flex-wrap: wrap; }
+  .cadastro-lista li .input-telefone { flex-basis: 100%; order: 3; }
+}
 .cadastro-lista .cadastro-meta { color: var(--text-muted); font-size: 0.78rem; }
 
 .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; }
