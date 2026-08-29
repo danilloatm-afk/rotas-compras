@@ -36,6 +36,7 @@ create table rl_pedidos (
   empresa_id uuid references rl_empresas(id),
   empresa_nome text,
   empresa_cnpj text,
+  fornecedor_nome text,
   numero_pedido text,
   local_retirada text,
   arquivo_url text not null,
