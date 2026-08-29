@@ -192,6 +192,7 @@ input, select, textarea {
 .badge.status-concluido { color: var(--ok); background: var(--ok-bg); }
 .badge.status-cancelado { color: var(--atrasado); background: var(--atrasado-bg); }
 .badge.urgente { color: var(--atrasado); background: var(--atrasado-bg); }
+.badge.parcial { color: var(--atencao); background: var(--atencao-bg); }
 
 .inline-form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .inline-form input { flex: 1; min-width: 120px; }
