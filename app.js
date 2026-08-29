@@ -1203,7 +1203,7 @@ function renderCadastros() {
           (c) => `
       <li class="${c.ativo ? "" : "inativo"}">
         <span>${escapeHtml(c.nome)}</span>
-        <input type="text" class="input-telefone" data-telefone-comprador="${c.id}" placeholder="WhatsApp (opcional)" value="${escapeHtml(c.telefone || "")}">
+        <input type="tel" inputmode="tel" class="input-telefone" data-telefone-comprador="${c.id}" placeholder="WhatsApp (opcional)" value="${escapeHtml(c.telefone || "")}">
         <button class="link-btn" data-toggle-comprador="${c.id}" data-ativo="${c.ativo}" type="button">${c.ativo ? "Desativar" : "Ativar"}</button>
       </li>`
         )
@@ -1271,8 +1271,12 @@ document.getElementById("tab-config").addEventListener(
       .from("rl_compradores")
       .update({ telefone: input.value.trim() || null })
       .eq("id", input.dataset.telefoneComprador);
-    if (error) mostrarAviso("Erro ao salvar telefone: " + error.message);
-    else await loadCompradores();
+    if (error) {
+      mostrarAviso("Erro ao salvar telefone: " + error.message);
+      return;
+    }
+    await loadCompradores();
+    renderCadastros();
   },
   true
 );
