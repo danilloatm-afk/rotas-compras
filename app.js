@@ -784,13 +784,31 @@ document.getElementById("btn-excluir-selecionadas").addEventListener("click", as
 // Deep link do Google Maps — abre direto no app de navegação do celular,
 // sem precisar de nenhuma chave de API. Sem "origin" definido, o próprio
 // Maps usa a localização atual do motorista como ponto de partida.
+//
+// O endereço completo (rua/quadra/lote + bairro + cidade + UF + CEP num
+// texto só) às vezes tem termos que o Maps não reconhece — testamos e
+// confirmamos que usar só o CEP é bem mais confiável (encontra certo até
+// em endereços de quadra/lote de Brasília que o texto completo não achava),
+// então preferimos o CEP quando ele existir no texto.
+function extrairCEP(local) {
+  if (!local) return null;
+  const m = local.match(/\d{5}-?\d{3}/);
+  return m ? m[0] : null;
+}
+
+function enderecoParaMaps(endereco) {
+  const cep = extrairCEP(endereco);
+  return cep ? `${cep}, Brasil` : endereco;
+}
+
 function linkMapsDestino(endereco) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(endereco)}&travelmode=driving`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(enderecoParaMaps(endereco))}&travelmode=driving`;
 }
 
 function linkMapsRota(enderecos) {
-  const destino = enderecos[enderecos.length - 1];
-  const waypoints = enderecos.slice(0, -1);
+  const convertidos = enderecos.map(enderecoParaMaps);
+  const destino = convertidos[convertidos.length - 1];
+  const waypoints = convertidos.slice(0, -1);
   let url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}&travelmode=driving`;
   if (waypoints.length) url += `&waypoints=${waypoints.map(encodeURIComponent).join("|")}`;
   return url;
