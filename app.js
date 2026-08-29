@@ -345,6 +345,7 @@ async function selecionarOuCriarComprador(nomeLido) {
 
 // ---------- comprador: ler pedido com IA ----------
 let pedidoItensExtraidos = null;
+let pedidoFornecedorExtraido = null;
 
 document.getElementById("btn-ler-pedido").addEventListener("click", async () => {
   const input = document.getElementById("pedido-arquivo");
@@ -360,6 +361,7 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
   try {
     const extraido = await lerComIA(file, "pedido");
     pedidoItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
+    pedidoFornecedorExtraido = extraido.fornecedor_nome || null;
     if (extraido.valor_total != null) document.getElementById("pedido-valor").value = extraido.valor_total;
     if (extraido.numero_pedido) document.getElementById("pedido-numero").value = extraido.numero_pedido;
     if (extraido.local_retirada) document.getElementById("pedido-local").value = extraido.local_retirada;
@@ -437,6 +439,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       observacao: document.getElementById("pedido-observacao").value.trim() || null,
       valor_total: valor ? Number(valor) : null,
       itens: pedidoItensExtraidos,
+      fornecedor_nome: pedidoFornecedorExtraido,
     });
     if (error) throw error;
 
@@ -447,6 +450,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
     document.getElementById("pedido-ia-feedback").textContent = "";
     document.getElementById("pedido-duplicado-aviso").classList.add("hidden");
     pedidoItensExtraidos = null;
+    pedidoFornecedorExtraido = null;
     loadMeusPedidos();
   } catch (err) {
     feedback.textContent = "Erro: " + err.message;
@@ -485,6 +489,7 @@ async function loadMeusPedidos() {
         <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
         ${badgeStatus(p.status)}
       </div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
       ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
       ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
       <div class="card-meta">${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
@@ -572,6 +577,7 @@ function renderDisponiveis() {
         ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
         ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
       </div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
       <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
       ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
       <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
@@ -878,6 +884,7 @@ function renderRota() {
           <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
           ${pedido.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
           ${pedido.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+          ${pedido.fornecedor_nome ? `<span class="card-fornecedor">🏢 ${escapeHtml(pedido.fornecedor_nome)}</span>` : ""}
           <span>Comprador: ${escapeHtml(pedido.comprador_nome || "—")} · Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
           ${
             pedido.local_retirada
@@ -1458,6 +1465,7 @@ function renderHistorico() {
           <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
           <span>${status}</span>
         </div>
+        ${pedido.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(pedido.fornecedor_nome)}</div>` : ""}
         <div class="card-meta">
           ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
           · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
