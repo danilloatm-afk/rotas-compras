@@ -1242,6 +1242,11 @@ document.getElementById("tab-config").addEventListener("click", async (e) => {
   const btnComp = e.target.closest("button[data-toggle-comprador]");
   const btnMot = e.target.closest("button[data-toggle-motorista]");
   const btnAlm = e.target.closest("button[data-toggle-almoxarife]");
+  // Sem isso, QUALQUER clique dentro de Configurações (até só focar o campo
+  // de telefone) redesenhava a lista inteira e destruía o campo, fazendo
+  // parecer que só dava pra digitar segurando o botão do mouse pressionado.
+  if (!btnEmp && !btnComp && !btnMot && !btnAlm) return;
+
   if (btnEmp) {
     await db.from("rl_empresas").update({ ativo: btnEmp.dataset.ativo !== "true" }).eq("id", btnEmp.dataset.toggleEmpresa);
     await loadEmpresas();
