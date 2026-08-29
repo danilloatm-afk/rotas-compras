@@ -64,6 +64,12 @@ const SCHEMA_PEDIDO = {
         "onde a mercadoria vai depois, não de onde ela sai), o que serviria pra entrega, não pra coleta. Monte o endereço juntando " +
         "Endereço + Bairro + Município + Estado + CEP do fornecedor num texto só. Omita se não houver esses dados do fornecedor.",
     },
+    fornecedor_nome: {
+      type: "string",
+      description:
+        "Nome/razão social da empresa VENDEDORA — o FORNECEDOR que está vendendo a mercadoria (seção 'Dados do Fornecedor'), " +
+        "nunca a empresa compradora do cabeçalho/timbre. Omita se não conseguir identificar com confiança.",
+    },
     frete_fob: {
       type: "boolean",
       description:
@@ -172,6 +178,8 @@ const PROMPT_PEDIDO =
   "4) LOCAL DE RETIRADA: use o endereço do FORNECEDOR (seção 'Dados do Fornecedor': Endereço, Bairro, Município, Estado, CEP) — " +
   "é lá que o motorista vai buscar a mercadoria. NUNCA use o campo 'Local de Entrega:', que é o endereço da empresa " +
   "COMPRADORA (pra onde a mercadoria vai depois), não de onde ela sai.\n\n" +
+  "4b) EMPRESA VENDEDORA: extraia também o nome/razão social do FORNECEDOR (seção 'Dados do Fornecedor'), separado do nome " +
+  "da empresa compradora.\n\n" +
   "5) FOB: procure a palavra 'FOB' em QUALQUER lugar do texto do documento (mais comum no campo 'Observações', mas pode " +
   "estar em outro lugar) — não é um rótulo de campo, é só uma palavra solta que pode ou não aparecer em algum ponto do " +
   "documento. Retorne frete_fob=true só se a palavra aparecer literalmente; caso contrário, frete_fob=false.\n\n" +
