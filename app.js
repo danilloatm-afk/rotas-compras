@@ -677,6 +677,7 @@ async function loadRotaAtual() {
     lista.innerHTML = `<li class="empty-state">Nenhuma rota em andamento. Selecione pedidos acima e clique em "Montar rota".</li>`;
     btnExcluir.classList.add("hidden");
     btnExcluirSelecionadas.classList.add("hidden");
+    document.getElementById("btn-abrir-maps").classList.add("hidden");
     return;
   }
   rotaAtualId = rotas[0].id;
@@ -780,11 +781,40 @@ document.getElementById("btn-excluir-selecionadas").addEventListener("click", as
   }
 });
 
+// Deep link do Google Maps — abre direto no app de navegação do celular,
+// sem precisar de nenhuma chave de API. Sem "origin" definido, o próprio
+// Maps usa a localização atual do motorista como ponto de partida.
+function linkMapsDestino(endereco) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(endereco)}&travelmode=driving`;
+}
+
+function linkMapsRota(enderecos) {
+  const destino = enderecos[enderecos.length - 1];
+  const waypoints = enderecos.slice(0, -1);
+  let url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}&travelmode=driving`;
+  if (waypoints.length) url += `&waypoints=${waypoints.map(encodeURIComponent).join("|")}`;
+  return url;
+}
+
+document.getElementById("btn-abrir-maps").addEventListener("click", () => {
+  const enderecos = paradasCache.map((p) => (p.rl_pedidos || {}).local_retirada).filter(Boolean);
+  if (!enderecos.length) {
+    mostrarAviso("Nenhuma parada pendente com endereço cadastrado.");
+    return;
+  }
+  if (enderecos.length > 9) {
+    mostrarAviso("O Google Maps só aceita até 9 paradas de uma vez por esse link — abrindo com as 9 primeiras.");
+  }
+  window.open(linkMapsRota(enderecos.slice(0, 9)), "_blank", "noopener");
+});
+
 function renderRota() {
   const progresso = document.getElementById("rota-progresso");
   const lista = document.getElementById("lista-rota");
   const btnExcluirSelecionadas = document.getElementById("btn-excluir-selecionadas");
+  const btnAbrirMaps = document.getElementById("btn-abrir-maps");
   btnExcluirSelecionadas.classList.toggle("hidden", !paradasCache.length);
+  btnAbrirMaps.classList.toggle("hidden", !paradasCache.length);
 
   if (!rotaProgresso.total) {
     progresso.textContent = "";
@@ -811,7 +841,11 @@ function renderRota() {
         <div class="rota-item-info">
           <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
           <span>Comprador: ${escapeHtml(pedido.comprador_nome || "—")} · Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
-          ${pedido.local_retirada ? `<span>📍 ${escapeHtml(pedido.local_retirada)}</span>` : ""}
+          ${
+            pedido.local_retirada
+              ? `<span>📍 ${escapeHtml(pedido.local_retirada)} · <a class="arquivo-link" href="${linkMapsDestino(pedido.local_retirada)}" target="_blank" rel="noopener">Navegar</a></span>`
+              : ""
+          }
           ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
         </div>
         <button class="btn secondary small" type="button" data-concluir="${p.id}">Concluir</button>
