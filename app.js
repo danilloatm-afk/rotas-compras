@@ -435,7 +435,6 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       arquivo_url: url,
       arquivo_nome: file.name,
       observacao: document.getElementById("pedido-observacao").value.trim() || null,
-      urgente: document.getElementById("pedido-urgente").checked,
       valor_total: valor ? Number(valor) : null,
       itens: pedidoItensExtraidos,
     });
@@ -487,6 +486,7 @@ async function loadMeusPedidos() {
         ${badgeStatus(p.status)}
       </div>
       ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+      ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
       <div class="card-meta">${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
       ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
       <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
@@ -570,6 +570,7 @@ function renderDisponiveis() {
       <div class="card-pedido-head">
         <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
         ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+        ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
       </div>
       <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
       ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
@@ -577,6 +578,8 @@ function renderDisponiveis() {
       ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
       <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
       <label class="selecionar"><input type="checkbox" class="pedido-check" data-id="${p.id}"> Incluir na rota</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-urgente" data-id="${p.id}" ${p.urgente ? "checked" : ""}> Urgente</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> 📦 Pode vir parcial</label>
       <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
     </div>`
     )
@@ -600,6 +603,21 @@ document.getElementById("lista-disponiveis").addEventListener("click", async (e)
   }
   await db.from("rl_pedidos").update({ status: "cancelado" }).eq("id", btn.dataset.cancelarDisponivel);
   loadDisponiveis();
+});
+
+// Urgente/parcial marcados aqui (não no formulário de anexar) porque a
+// maioria dos pedidos chega pelo robô, sem ninguém preenchendo formulário.
+document.getElementById("lista-disponiveis").addEventListener("change", async (e) => {
+  const chkUrgente = e.target.closest("input.toggle-urgente");
+  const chkParcial = e.target.closest("input.toggle-parcial");
+  if (chkUrgente) {
+    await db.from("rl_pedidos").update({ urgente: chkUrgente.checked }).eq("id", chkUrgente.dataset.id);
+    await loadDisponiveis();
+  }
+  if (chkParcial) {
+    await db.from("rl_pedidos").update({ parcial_esperado: chkParcial.checked }).eq("id", chkParcial.dataset.id);
+    await loadDisponiveis();
+  }
 });
 
 document.getElementById("btn-montar-rota").addEventListener("click", async () => {
@@ -858,6 +876,8 @@ function renderRota() {
         <span class="ordem-num">${i + 1}</span>
         <div class="rota-item-info">
           <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+          ${pedido.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+          ${pedido.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
           <span>Comprador: ${escapeHtml(pedido.comprador_nome || "—")} · Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
           ${
             pedido.local_retirada
@@ -907,6 +927,9 @@ document.getElementById("lista-rota").addEventListener("click", (e) => {
   if (!paradaEmEdicao) return;
   notaItensExtraidos = null;
   document.getElementById("form-modal-nota").reset();
+  // já vem pré-marcado se o comprador/motorista sinalizou antes, em
+  // "Pedidos disponíveis", que esse pedido costuma vir em partes.
+  document.getElementById("nota-parcial").checked = !!(paradaEmEdicao.rl_pedidos || {}).parcial_esperado;
   document.getElementById("nota-ia-feedback").textContent = "";
   document.getElementById("modal-feedback").textContent = "";
   document.getElementById("conferencia-resultado").classList.add("hidden");
