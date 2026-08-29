@@ -42,6 +42,7 @@ create table rl_pedidos (
   arquivo_nome text,
   observacao text,
   urgente boolean not null default false,
+  parcial_esperado boolean not null default false,
   valor_total numeric,
   itens jsonb,
   status text not null default 'pendente' check (status in ('pendente', 'na_rota', 'concluido', 'cancelado')),
