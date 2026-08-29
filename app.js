@@ -554,13 +554,21 @@ async function loadDisponiveis() {
   selCidade.innerHTML = `<option value="">Todas as cidades</option>` + cidades.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
   if (cidades.includes(cidadeAtual)) selCidade.value = cidadeAtual;
 
+  const selComprador = document.getElementById("filtro-comprador");
+  const compradorAtual = selComprador.value;
+  const compradores = [...new Set(data.map((p) => p.comprador_nome).filter(Boolean))].sort();
+  selComprador.innerHTML = `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
+
   renderDisponiveis();
 }
 
 function renderDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
   const cidadeFiltro = document.getElementById("filtro-cidade").value;
-  const data = cidadeFiltro ? disponiveisCache.filter((p) => extrairCidade(p.local_retirada) === cidadeFiltro) : disponiveisCache;
+  const compradorFiltro = document.getElementById("filtro-comprador").value;
+  let data = cidadeFiltro ? disponiveisCache.filter((p) => extrairCidade(p.local_retirada) === cidadeFiltro) : disponiveisCache;
+  if (compradorFiltro) data = data.filter((p) => p.comprador_nome === compradorFiltro);
 
   if (!data.length) {
     el.innerHTML = `<p class="empty-state">${
@@ -593,6 +601,7 @@ function renderDisponiveis() {
 }
 
 document.getElementById("filtro-cidade").addEventListener("change", renderDisponiveis);
+document.getElementById("filtro-comprador").addEventListener("change", renderDisponiveis);
 
 // mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"
 document.getElementById("lista-disponiveis").addEventListener("click", async (e) => {
