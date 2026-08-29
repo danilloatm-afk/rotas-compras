@@ -18,6 +18,7 @@ create table rl_empresas (
 create table rl_compradores (
   id uuid primary key default gen_random_uuid(),
   nome text not null unique,
+  telefone text,
   ativo boolean not null default true,
   criado_em timestamptz not null default now()
 );
