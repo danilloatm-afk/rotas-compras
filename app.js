@@ -1499,6 +1499,7 @@ function renderHistorico() {
               : `<button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>`
           }
         </div>
+        <button class="link-btn danger" data-excluir-historico="${p.id}" type="button">Excluir</button>
       </div>`;
     })
     .join("");
@@ -1548,6 +1549,27 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
   if (error) {
     mostrarAviso("Erro ao confirmar recebimento: " + error.message);
     btn.disabled = false;
+    return;
+  }
+  await loadHistorico();
+});
+
+// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"/"Pedidos disponíveis"
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-excluir-historico]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir";
+    }, 4000);
+    return;
+  }
+  const { error } = await db.from("rl_rota_paradas").delete().eq("id", btn.dataset.excluirHistorico);
+  if (error) {
+    mostrarAviso("Erro ao excluir: " + error.message);
     return;
   }
   loadHistorico();
