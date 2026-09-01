@@ -213,6 +213,12 @@ foreach ($arquivo in $arquivos) {
         # do Avanço para Contratos, que decide spot x contrato do mesmo jeito).
         $ehFob = $arquivo.Name -imatch "FOB"
 
+        # Pedidos que o fornecedor despacha pra uma transportadora (o motorista
+        # retira lá, não no próprio fornecedor) também são identificados pelo
+        # nome do arquivo — vão pra uma tela separada, já que o motorista passa
+        # na transportadora todo dia sem saber de antemão o que já chegou.
+        $retirarTransportadora = $arquivo.Name -imatch "transportadora"
+
         if (-not $ehFob) {
             Write-Log "  Sem 'FOB' no nome do arquivo — assumindo CIF (fornecedor entrega), não roteirizado. Movido para Roteirizados-CIF."
             Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaCIF $arquivo.Name) -Force
@@ -244,11 +250,12 @@ foreach ($arquivo in $arquivos) {
             valor_total     = if ($null -ne $dados.valor_total) { $dados.valor_total } else { $null }
             itens           = if ($dados.itens) { $dados.itens } else { $null }
             urgente         = $false
+            retirar_transportadora = $retirarTransportadora
             status          = "pendente"
         } | ConvertTo-Json -Depth 6
         Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_pedidos" $HeadersJson $pedido | Out-Null
 
-        Write-Log "  OK (FOB): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
+        Write-Log "  OK (FOB$(if ($retirarTransportadora) { ', transportadora' })): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
         Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaRoteirizados $arquivo.Name) -Force
     }
     catch {
