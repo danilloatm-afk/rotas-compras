@@ -37,15 +37,24 @@ const SCHEMA_PEDIDO = {
         "Número/código identificador deste pedido de compra. Costuma aparecer perto de rótulos como 'Nº Pedido', 'Pedido de " +
         "Compras Nº', 'Nº do Pedido' ou 'Pedido Nº', geralmente no topo do documento. Omita se não encontrar.",
     },
-    valor_total: {
+    total_mercadorias: {
       type: "number",
       description:
-        "Valor do pedido em R$ = 'Total das Mercadorias' + 'Frete' + 'Despesas' − 'Descontos' (esses quatro campos da seção " +
-        "'Totais', quando existirem — some/subtraia só os que estiverem preenchidos). NUNCA inclua 'ICMS', 'IPI', 'Seguro', " +
-        "'Total com Impostos' ou 'Total Geral' nessa conta — o cálculo de imposto feito pelo ERP que gera este documento está " +
-        "incorreto, então qualquer valor que inclua imposto vem inflado e não deve ser usado. Se não houver um 'Total das " +
-        "Mercadorias' explícito, some o valor_total de cada item em vez dele. Apenas números, sem 'R$' e sem separador de " +
-        "milhar (ex: 45390.00). Omita se não conseguir determinar com confiança.",
+        "Valor do campo 'Total das Mercadorias' da seção 'Totais' (valor SEM imposto) — cópia literal do número impresso, " +
+        "sem fazer nenhuma conta. Se não existir esse campo explícito, some o valor_total de cada item em vez dele. Apenas " +
+        "números, sem 'R$' e sem separador de milhar. Omita se não conseguir determinar com confiança.",
+    },
+    frete: {
+      type: "number",
+      description: "Valor do campo 'Frete' da seção 'Totais', cópia literal do número impresso. Omita se não houver esse campo.",
+    },
+    despesas: {
+      type: "number",
+      description: "Valor do campo 'Despesas' da seção 'Totais', cópia literal do número impresso. Omita se não houver esse campo.",
+    },
+    descontos: {
+      type: "number",
+      description: "Valor do campo 'Descontos' da seção 'Totais', cópia literal do número impresso. Omita se não houver esse campo.",
     },
     solicitante_nome: {
       type: "string",
@@ -187,10 +196,10 @@ const PROMPT_PEDIDO =
   "1) EMPRESA COMPRADORA: normalmente não tem rótulo explícito — é a empresa do cabeçalho/timbre no topo do documento (às " +
   "vezes com logotipo), diferente da empresa listada em 'Dados do Fornecedor'. Nunca confunda com o campo 'Comprador:', que " +
   "é uma PESSOA, não a empresa.\n\n" +
-  "2) VALOR TOTAL: calcule como 'Total das Mercadorias' + 'Frete' + 'Despesas' − 'Descontos' (os campos que existirem, na " +
-  "seção 'Totais'). NUNCA use 'ICMS', 'IPI', 'Seguro', 'Total com Impostos' ou 'Total Geral' nessa conta — o cálculo de " +
-  "imposto deste ERP está incorreto, então qualquer valor que inclua imposto sai inflado. Se não houver 'Total das " +
-  "Mercadorias' explícito, some o valor total de cada item.\n\n" +
+  "2) VALORES DA SEÇÃO 'TOTAIS': extraia total_mercadorias, frete, despesas e descontos como CÓPIA LITERAL dos números " +
+  "impressos — não some nem subtraia nada, isso é calculado depois. NUNCA copie 'ICMS', 'IPI', 'Seguro', 'Total com " +
+  "Impostos' ou 'Total Geral' pra esses campos — o cálculo de imposto deste ERP está incorreto, então esses valores não " +
+  "servem.\n\n" +
   "3) SOLICITANTE: procure o nome de pessoa no campo 'Comprador:'/'Solicitante:'/'Requisitante:' da seção de informações do " +
   "pedido — não confunda com os nomes que aparecem numa eventual lista de aprovadores/aprovações, que não são o solicitante.\n\n" +
   "4) LOCAL DE RETIRADA: use o endereço do FORNECEDOR (seção 'Dados do Fornecedor': Endereço, Bairro, Município, Estado, CEP) — " +
@@ -283,6 +292,24 @@ Deno.serve(async (req: Request) => {
     }
 
     const extraido = JSON.parse(textBlock.text);
+
+    // O total é calculado aqui, não pelo modelo — pedir pra IA somar/subtrair
+    // campos espalhados no documento (mercadorias + frete + despesas -
+    // descontos) já se mostrou pouco confiável (ela às vezes ignora o
+    // desconto). O modelo só extrai os números crus; a conta é determinística.
+    if (tipo === "pedido") {
+      const somaItens = Array.isArray(extraido.itens)
+        ? extraido.itens.reduce((soma: number, item: { valor_total?: number; quantidade?: number; valor_unitario?: number }) => {
+            const linha = item.valor_total ?? (item.quantidade != null && item.valor_unitario != null ? item.quantidade * item.valor_unitario : 0);
+            return soma + (linha || 0);
+          }, 0)
+        : null;
+      const mercadorias = extraido.total_mercadorias ?? somaItens;
+      if (mercadorias != null) {
+        extraido.valor_total = mercadorias + (extraido.frete || 0) + (extraido.despesas || 0) - (extraido.descontos || 0);
+      }
+    }
+
     return jsonResponse({ data: extraido }, 200);
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : "Erro desconhecido." }, 500);
