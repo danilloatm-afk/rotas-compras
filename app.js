@@ -655,6 +655,14 @@ function renderDisponiveis() {
 
 document.getElementById("filtro-comprador").addEventListener("change", renderDisponiveis);
 document.getElementById("filtro-fornecedor").addEventListener("change", renderDisponiveis);
+document.getElementById("btn-limpar-filtros").addEventListener("click", () => {
+  cidadesSelecionadas.clear();
+  document.getElementById("filtro-comprador").value = "";
+  document.getElementById("filtro-fornecedor").value = "";
+  document.querySelectorAll(".filtro-cidade-check").forEach((c) => (c.checked = false));
+  atualizarBotaoFiltroCidade();
+  renderDisponiveis();
+});
 
 // ---------- motorista: retirada em transportadora (sem rota fixa — o
 // motorista passa lá todo dia sem saber de antemão o que já chegou, então
@@ -787,6 +795,40 @@ let rotaAtualId = null;
 let paradasCache = [];
 let dragIndex = null;
 let paradaEmEdicao = null;
+let cidadesSelecionadasRota = new Set();
+
+function atualizarBotaoFiltroCidadeRota() {
+  const btn = document.getElementById("btn-filtro-cidade-rota");
+  if (cidadesSelecionadasRota.size === 0) btn.textContent = "Todas as cidades";
+  else if (cidadesSelecionadasRota.size === 1) btn.textContent = [...cidadesSelecionadasRota][0];
+  else btn.textContent = `${cidadesSelecionadasRota.size} cidades ▾`;
+}
+
+document.getElementById("btn-filtro-cidade-rota").addEventListener("click", (e) => {
+  e.stopPropagation();
+  document.getElementById("opcoes-filtro-cidade-rota").classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".filtro-multiplo")) document.getElementById("opcoes-filtro-cidade-rota").classList.add("hidden");
+});
+document.getElementById("opcoes-filtro-cidade-rota").addEventListener("change", (e) => {
+  const chk = e.target.closest(".filtro-cidade-check-rota");
+  if (!chk) return;
+  if (chk.checked) cidadesSelecionadasRota.add(chk.value);
+  else cidadesSelecionadasRota.delete(chk.value);
+  atualizarBotaoFiltroCidadeRota();
+  renderRota();
+});
+document.getElementById("filtro-comprador-rota").addEventListener("change", renderRota);
+document.getElementById("filtro-fornecedor-rota").addEventListener("change", renderRota);
+document.getElementById("btn-limpar-filtros-rota").addEventListener("click", () => {
+  cidadesSelecionadasRota.clear();
+  document.getElementById("filtro-comprador-rota").value = "";
+  document.getElementById("filtro-fornecedor-rota").value = "";
+  document.querySelectorAll(".filtro-cidade-check-rota").forEach((c) => (c.checked = false));
+  atualizarBotaoFiltroCidadeRota();
+  renderRota();
+});
 
 async function getOrCreateRotaAtiva(motoristaNome) {
   if (rotaAtualId) return rotaAtualId;
@@ -850,6 +892,36 @@ async function loadRotaAtual() {
     return;
   }
   paradasCache = paradas || [];
+
+  const cidadesRota = [
+    ...new Set(paradasCache.map((p) => extrairCidade((p.rl_pedidos || {}).local_retirada)).filter(Boolean)),
+  ].sort();
+  cidadesSelecionadasRota = new Set([...cidadesSelecionadasRota].filter((c) => cidadesRota.includes(c)));
+  document.getElementById("opcoes-filtro-cidade-rota").innerHTML = cidadesRota
+    .map(
+      (c) => `
+    <label class="filtro-multiplo-item">
+      <input type="checkbox" class="filtro-cidade-check-rota" value="${escapeHtml(c)}" ${cidadesSelecionadasRota.has(c) ? "checked" : ""}>
+      ${escapeHtml(c)}
+    </label>`
+    )
+    .join("");
+  atualizarBotaoFiltroCidadeRota();
+
+  const selCompradorRota = document.getElementById("filtro-comprador-rota");
+  const compradorRotaAtual = selCompradorRota.value;
+  const compradoresRota = [...new Set(paradasCache.map((p) => (p.rl_pedidos || {}).comprador_nome).filter(Boolean))].sort();
+  selCompradorRota.innerHTML =
+    `<option value="">Todos os compradores</option>` + compradoresRota.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradoresRota.includes(compradorRotaAtual)) selCompradorRota.value = compradorRotaAtual;
+
+  const selFornecedorRota = document.getElementById("filtro-fornecedor-rota");
+  const fornecedorRotaAtual = selFornecedorRota.value;
+  const fornecedoresRota = [...new Set(paradasCache.map((p) => (p.rl_pedidos || {}).fornecedor_nome).filter(Boolean))].sort();
+  selFornecedorRota.innerHTML =
+    `<option value="">Todos os fornecedores</option>` + fornecedoresRota.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+  if (fornecedoresRota.includes(fornecedorRotaAtual)) selFornecedorRota.value = fornecedorRotaAtual;
+
   renderRota();
 }
 
@@ -1001,14 +1073,36 @@ function renderRota() {
     return;
   }
 
-  lista.innerHTML = paradasCache
-    .map((p, i) => {
+  const compradorFiltroRota = document.getElementById("filtro-comprador-rota").value;
+  const fornecedorFiltroRota = document.getElementById("filtro-fornecedor-rota").value;
+  // Mantém o índice ORIGINAL em paradasCache (não a posição no filtro) no
+  // data-index, pra arrastar/soltar continuar reordenando a rota de verdade
+  // mesmo com o filtro aplicado — só o número mostrado (①②③) é sequencial.
+  const visiveis = paradasCache
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => {
+      const pedido = p.rl_pedidos || {};
+      if (cidadesSelecionadasRota.size > 0 && !cidadesSelecionadasRota.has(extrairCidade(pedido.local_retirada))) return false;
+      if (compradorFiltroRota && pedido.comprador_nome !== compradorFiltroRota) return false;
+      if (fornecedorFiltroRota && pedido.fornecedor_nome !== fornecedorFiltroRota) return false;
+      return true;
+    });
+
+  document.getElementById("total-rota").textContent = `${visiveis.length} parada${visiveis.length === 1 ? "" : "s"} nesta rota`;
+
+  if (!visiveis.length) {
+    lista.innerHTML = `<li class="empty-state">Nenhuma parada pendente com esse filtro.</li>`;
+    return;
+  }
+
+  lista.innerHTML = visiveis
+    .map(({ p, i }, posicao) => {
       const pedido = p.rl_pedidos || {};
       return `
       <li class="rota-item" draggable="true" data-index="${i}">
         <input type="checkbox" class="parada-check" data-parada-id="${p.id}">
         <span class="drag-handle">⠿</span>
-        <span class="ordem-num">${i + 1}</span>
+        <span class="ordem-num">${posicao + 1}</span>
         <div class="rota-item-info">
           <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
           ${pedido.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
