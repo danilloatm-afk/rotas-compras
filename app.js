@@ -942,6 +942,8 @@ document.getElementById("lista-rota").addEventListener("click", (e) => {
   paradaEmEdicao = paradasCache.find((p) => String(p.id) === btn.dataset.concluir);
   if (!paradaEmEdicao) return;
   notaItensExtraidos = null;
+  notaTipoDocumento = null;
+  notaEmitenteExtraido = null;
   document.getElementById("form-modal-nota").reset();
   // já vem pré-marcado se o comprador/motorista sinalizou antes, em
   // "Pedidos disponíveis", que esse pedido costuma vir em partes.
@@ -958,6 +960,8 @@ document.getElementById("btn-modal-fechar").addEventListener("click", () => {
 });
 
 let notaItensExtraidos = null;
+let notaTipoDocumento = null;
+let notaEmitenteExtraido = null;
 
 document.getElementById("btn-ler-nota").addEventListener("click", async () => {
   const input = document.getElementById("nota-arquivo");
@@ -976,7 +980,12 @@ document.getElementById("btn-ler-nota").addEventListener("click", async () => {
     if (extraido.destinatario_cnpj) document.getElementById("nota-cnpj").value = extraido.destinatario_cnpj;
     if (extraido.numero_nota) document.getElementById("nota-numero").value = extraido.numero_nota;
     notaItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
-    feedback.textContent = "Nota lida. Confira os valores abaixo.";
+    notaTipoDocumento = extraido.tipo_documento || null;
+    notaEmitenteExtraido = extraido.emitente_nome || null;
+    feedback.textContent =
+      notaTipoDocumento === "servico"
+        ? "Nota de serviço lida. Confira o tomador, a prestadora e o valor abaixo."
+        : "Nota lida. Confira os valores abaixo.";
     feedback.className = "feedback success";
     atualizarConferencia();
   } catch (err) {
@@ -1110,6 +1119,24 @@ function calcularDivergencias() {
   return { msgValor, divergValor, msgCnpj, divergCnpj };
 }
 
+// Nota de serviço (NFS-e) não tem tabela de itens de verdade pra comparar —
+// em vez disso, confere se a empresa prestadora bate com o fornecedor
+// registrado no pedido (comparação de nome, não tem CNPJ do fornecedor
+// guardado no pedido pra comparar dígito a dígito).
+function compararPrestador(pedido, emitenteNome) {
+  const esperado = normalizarProduto(pedido.fornecedor_nome);
+  if (!esperado) return { msgPrestador: "Fornecedor não informado no pedido — não é possível conferir.", divergPrestador: false };
+  if (!emitenteNome) return { msgPrestador: "Não foi possível ler a prestadora na nota.", divergPrestador: false };
+  const lido = normalizarProduto(emitenteNome);
+  const bate = lido === esperado || lido.includes(esperado) || esperado.includes(lido);
+  return bate
+    ? { msgPrestador: `✅ Prestadora confere (${escapeHtml(emitenteNome)}).`, divergPrestador: false }
+    : {
+        msgPrestador: `⚠️ Prestadora diferente: pedido esperava ${escapeHtml(pedido.fornecedor_nome)}, nota informa ${escapeHtml(emitenteNome)}.`,
+        divergPrestador: true,
+      };
+}
+
 function atualizarConferencia() {
   if (!paradaEmEdicao) return;
   const box = document.getElementById("conferencia-resultado");
@@ -1126,6 +1153,17 @@ function atualizarConferencia() {
 
   const { msgValor, divergValor, msgCnpj, divergCnpj } = calcularDivergencias();
   const pedido = paradaEmEdicao.rl_pedidos || {};
+
+  // Nota de serviço (NFS-e) não tem itens de verdade pra comparar — confere
+  // só tomador (CNPJ, já incluso acima), prestadora e valor total.
+  if (notaTipoDocumento === "servico") {
+    const { msgPrestador, divergPrestador } = compararPrestador(pedido, notaEmitenteExtraido);
+    box.classList.remove("hidden", "ok", "warn");
+    box.classList.add(divergValor || divergCnpj || divergPrestador ? "warn" : "ok");
+    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>`;
+    return;
+  }
+
   const resultadoItens = compararItens(pedido.itens, notaItensExtraidos);
 
   box.classList.remove("hidden", "ok", "warn");
@@ -1167,7 +1205,13 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     let itensDivergentes = false;
     if (!entregaParcial) {
       ({ divergValor, divergCnpj } = calcularDivergencias());
-      itensDivergentes = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos).divergente;
+      // Nota de serviço não tem itens de verdade pra comparar — a divergência
+      // de "itens" nesse caso vira divergência de prestadora (fornecedor).
+      if (notaTipoDocumento === "servico") {
+        itensDivergentes = compararPrestador(paradaEmEdicao.rl_pedidos || {}, notaEmitenteExtraido).divergPrestador;
+      } else {
+        itensDivergentes = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos).divergente;
+      }
     }
 
     const { error: errParada } = await db
@@ -1179,6 +1223,8 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
         nota_valor_total: notaValor ? Number(notaValor) : null,
         nota_cnpj: notaCnpj || null,
         nota_itens: notaItensExtraidos,
+        nota_tipo_documento: notaTipoDocumento,
+        nota_emitente_nome: notaEmitenteExtraido,
         entrega_parcial: entregaParcial,
         divergencia_valor: divergValor,
         divergencia_cnpj: divergCnpj,
@@ -1409,7 +1455,13 @@ function resumoDivergenciasTexto(parada) {
     linhas.push(`CNPJ: pedido esperava ${pedido.empresa_cnpj || "—"}, nota trouxe ${parada.nota_cnpj || "—"}.`);
   }
   if (parada.divergencia_itens) {
-    linhas.push("Itens com quantidade ou valor unitário diferente do esperado (confira no sistema).");
+    if (parada.nota_tipo_documento === "servico") {
+      linhas.push(
+        `Prestadora do serviço: pedido esperava ${pedido.fornecedor_nome || "—"}, nota trouxe ${parada.nota_emitente_nome || "—"}.`
+      );
+    } else {
+      linhas.push("Itens com quantidade ou valor unitário diferente do esperado (confira no sistema).");
+    }
   }
   return linhas.join("\n");
 }
@@ -1438,8 +1490,14 @@ function renderDivergenciasParada(parada) {
     html += `<div>⚠️ CNPJ: pedido esperava ${escapeHtml(pedido.empresa_cnpj || "—")}, nota trouxe ${escapeHtml(parada.nota_cnpj || "—")}.</div>`;
   }
   if (parada.divergencia_itens) {
-    const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
-    html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
+    if (parada.nota_tipo_documento === "servico") {
+      html += `<div>⚠️ Prestadora do serviço: pedido esperava ${escapeHtml(pedido.fornecedor_nome || "—")}, nota trouxe ${escapeHtml(
+        parada.nota_emitente_nome || "—"
+      )}.</div>`;
+    } else {
+      const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
+      html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
+    }
   }
   return html;
 }
