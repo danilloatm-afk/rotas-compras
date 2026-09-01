@@ -116,7 +116,10 @@
     <div class="section-head">
       <p class="hint">Marque os pedidos que vão entrar na rota e clique em "Montar rota".</p>
       <div class="filtro-e-botao">
-        <select id="filtro-cidade"><option value="">Todas as cidades</option></select>
+        <div class="filtro-multiplo">
+          <button type="button" id="btn-filtro-cidade" class="btn secondary small">Todas as cidades</button>
+          <div id="opcoes-filtro-cidade" class="filtro-multiplo-opcoes hidden"></div>
+        </div>
         <select id="filtro-comprador"><option value="">Todos os compradores</option></select>
         <button id="btn-montar-rota" class="btn primary">Montar rota com selecionados</button>
       </div>
