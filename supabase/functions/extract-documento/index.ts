@@ -118,27 +118,36 @@ const SCHEMA_NOTA = {
     valor_total: {
       type: "number",
       description:
-        "Valor total da nota fiscal (campo 'VALOR TOTAL DA NOTA' ou 'VALOR TOTAL DA NF-e'). Apenas números, sem 'R$' e sem separador " +
+        "Valor total da nota — campo 'VALOR TOTAL DA NOTA'/'VALOR TOTAL DA NF-e' numa nota de produto (DANFE), ou 'VALOR TOTAL " +
+        "DA NFS-e'/'Valor da Operação/Serviço' numa nota de SERVIÇO (NFS-e/DANFSe). Apenas números, sem 'R$' e sem separador " +
         "de milhar (ex: 45390.00). Omita se não conseguir ler com confiança.",
     },
     destinatario_nome: {
       type: "string",
-      description: "Nome/razão social do DESTINATÁRIO da nota fiscal (quem está recebendo a mercadoria, não quem emitiu).",
+      description:
+        "Nome/razão social de quem está RECEBENDO a mercadoria/serviço — o campo 'Destinatário' numa nota de produto (DANFE), " +
+        "ou o campo 'Tomador'/'Adquirente' numa nota de SERVIÇO (NFS-e/DANFSe). Nunca quem emitiu.",
     },
     destinatario_cnpj: {
       type: "string",
       description:
-        "CNPJ do DESTINATÁRIO da nota fiscal (quem recebe a mercadoria) — NUNCA o CNPJ de quem emitiu a nota (o fornecedor/emitente). " +
-        "A nota tem dois CNPJs; confirme pelo rótulo 'Destinatário'/'Remetente' ou 'Emitente'/'Destinatário' ao redor de cada um antes " +
-        "de escolher. Se a foto estiver ruim e não der pra ter certeza, omita em vez de arriscar o CNPJ errado.",
+        "CNPJ de quem RECEBE a mercadoria/serviço — o 'Destinatário' numa nota de produto (DANFE), ou o 'Tomador'/'Adquirente' " +
+        "numa nota de SERVIÇO (NFS-e/DANFSe). NUNCA o CNPJ de quem emitiu a nota (o fornecedor/emitente/prestador). A nota tem " +
+        "dois CNPJs; confirme pelo rótulo ao redor de cada um antes de escolher. Se a foto estiver ruim e não der pra ter " +
+        "certeza, omita em vez de arriscar o CNPJ errado.",
     },
     emitente_nome: {
       type: "string",
-      description: "Nome/razão social de quem EMITIU a nota fiscal (o fornecedor/vendedor).",
+      description:
+        "Nome/razão social de quem EMITIU a nota — o 'Emitente' numa nota de produto (DANFE), ou o 'Prestador'/'Fornecedor' " +
+        "numa nota de SERVIÇO (NFS-e/DANFSe).",
     },
     itens: {
       type: "array",
-      description: "Cada linha de item/produto da tabela de itens da nota fiscal — inclua TODAS as linhas.",
+      description:
+        "Cada linha de item/produto da tabela de itens da nota (nota de produto/DANFE) — inclua TODAS as linhas. Se for uma " +
+        "nota de SERVIÇO (NFS-e/DANFSe, sem tabela de itens), crie UM único item usando a 'Descrição do Serviço' como " +
+        "produto_nome, quantidade 1 e valor_total igual ao valor total da nota.",
       items: {
         type: "object",
         properties: {
@@ -188,12 +197,18 @@ const PROMPT_PEDIDO =
   "7) Leia os números (CNPJ, valores) com cuidado, dígito por dígito, sem inventar ou aproximar.";
 
 const PROMPT_NOTA =
-  "Extraia os dados desta nota fiscal (foto ou digitalização de um DANFE). Preste atenção especial: a nota tem duas " +
-  "empresas — EMITENTE (quem vendeu/emitiu) e DESTINATÁRIO (quem recebe a mercadoria). O CNPJ e nome do destinatário " +
-  "são os mais importantes de extrair corretamente, não confunda com o do emitente. A foto pode ter qualidade ruim, " +
-  "reflexo ou estar levemente torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em " +
-  "vez de arriscar um valor errado. Extraia também cada linha da tabela de itens (produto, quantidade, valor unitário), " +
-  "com cuidado pra não misturar o valor/quantidade de uma linha com o de outra.";
+  "Extraia os dados desta nota fiscal. Pode ser uma nota de PRODUTO (DANFE) ou uma nota de SERVIÇO (NFS-e/DANFSe, " +
+  "'Documento Auxiliar da NFS-e') — identifique qual é pelo cabeçalho do documento antes de extrair, porque os rótulos " +
+  "dos campos mudam entre as duas:\n\n" +
+  "- Nota de PRODUTO (DANFE): EMITENTE (quem vendeu) e DESTINATÁRIO (quem recebe a mercadoria); tabela de itens com " +
+  "produto/quantidade/valor unitário.\n" +
+  "- Nota de SERVIÇO (NFS-e/DANFSe): PRESTADOR/FORNECEDOR (quem prestou o serviço, equivale ao emitente) e " +
+  "TOMADOR/ADQUIRENTE (quem contratou o serviço, equivale ao destinatário); não tem tabela de itens — em vez disso tem " +
+  "um campo 'Descrição do Serviço' (texto corrido) e um 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço'. Nesse caso, " +
+  "monte um único item em itens[] usando essa descrição como produto_nome, quantidade 1 e valor_total = valor total da nota.\n\n" +
+  "Em qualquer um dos dois casos: o CNPJ e nome de quem RECEBE (destinatário/tomador) são os mais importantes de extrair " +
+  "corretamente, não confunda com o de quem emitiu/prestou. A foto pode ter qualidade ruim, reflexo ou estar levemente " +
+  "torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em vez de arriscar um valor errado.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
