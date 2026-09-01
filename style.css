@@ -126,6 +126,22 @@ h3 { font-size: 1rem; margin: 0 0 0.75rem; }
 .filtro-e-botao { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .filtro-e-botao.mb { margin-bottom: 1rem; }
 .filtro-e-botao select { min-width: 160px; }
+.filtro-multiplo { position: relative; }
+.filtro-multiplo-opcoes {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 0.5rem;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.filtro-multiplo-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.2rem; font-size: 0.9rem; white-space: nowrap; }
 
 .grafico-wrap {
   background: var(--surface);
