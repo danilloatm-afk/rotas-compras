@@ -40,11 +40,12 @@ const SCHEMA_PEDIDO = {
     valor_total: {
       type: "number",
       description:
-        "Valor do pedido em R$, SEM IMPOSTO — use sempre o campo 'Total das Mercadorias' (ou equivalente: soma só dos itens, " +
-        "sem impostos/frete adicionados). NÃO use 'Total Geral' nem 'Total com Impostos' — o cálculo de ICMS feito pelo ERP " +
-        "que gera este documento está incorreto, então qualquer total que inclua imposto vem inflado e não deve ser usado. " +
-        "Se não houver um 'Total das Mercadorias' explícito, some o valor_total de cada item. Apenas números, sem 'R$' e sem " +
-        "separador de milhar (ex: 45390.00). Omita se não conseguir determinar com confiança.",
+        "Valor do pedido em R$ = 'Total das Mercadorias' + 'Frete' + 'Despesas' − 'Descontos' (esses quatro campos da seção " +
+        "'Totais', quando existirem — some/subtraia só os que estiverem preenchidos). NUNCA inclua 'ICMS', 'IPI', 'Seguro', " +
+        "'Total com Impostos' ou 'Total Geral' nessa conta — o cálculo de imposto feito pelo ERP que gera este documento está " +
+        "incorreto, então qualquer valor que inclua imposto vem inflado e não deve ser usado. Se não houver um 'Total das " +
+        "Mercadorias' explícito, some o valor_total de cada item em vez dele. Apenas números, sem 'R$' e sem separador de " +
+        "milhar (ex: 45390.00). Omita se não conseguir determinar com confiança.",
     },
     solicitante_nome: {
       type: "string",
@@ -186,9 +187,10 @@ const PROMPT_PEDIDO =
   "1) EMPRESA COMPRADORA: normalmente não tem rótulo explícito — é a empresa do cabeçalho/timbre no topo do documento (às " +
   "vezes com logotipo), diferente da empresa listada em 'Dados do Fornecedor'. Nunca confunda com o campo 'Comprador:', que " +
   "é uma PESSOA, não a empresa.\n\n" +
-  "2) VALOR TOTAL: use sempre o 'Total das Mercadorias' (valor SEM imposto) — NUNCA o 'Total Geral' nem o 'Total com " +
-  "Impostos'. O cálculo de ICMS deste ERP está incorreto, então qualquer total que inclua imposto sai inflado e não deve " +
-  "ser usado como valor do pedido. Se não houver um 'Total das Mercadorias' explícito, some o valor total de cada item.\n\n" +
+  "2) VALOR TOTAL: calcule como 'Total das Mercadorias' + 'Frete' + 'Despesas' − 'Descontos' (os campos que existirem, na " +
+  "seção 'Totais'). NUNCA use 'ICMS', 'IPI', 'Seguro', 'Total com Impostos' ou 'Total Geral' nessa conta — o cálculo de " +
+  "imposto deste ERP está incorreto, então qualquer valor que inclua imposto sai inflado. Se não houver 'Total das " +
+  "Mercadorias' explícito, some o valor total de cada item.\n\n" +
   "3) SOLICITANTE: procure o nome de pessoa no campo 'Comprador:'/'Solicitante:'/'Requisitante:' da seção de informações do " +
   "pedido — não confunda com os nomes que aparecem numa eventual lista de aprovadores/aprovações, que não são o solicitante.\n\n" +
   "4) LOCAL DE RETIRADA: use o endereço do FORNECEDOR (seção 'Dados do Fornecedor': Endereço, Bairro, Município, Estado, CEP) — " +
