@@ -1119,15 +1119,26 @@ function calcularDivergencias() {
   return { msgValor, divergValor, msgCnpj, divergCnpj };
 }
 
+// Nome de empresa varia de documento pra documento no sufixo jurídico (ex:
+// "GRAFICA FORMOSA LTDA" no pedido vs "GRAFICA FORMOSA EIRELI ME" na nota,
+// mesma empresa) — remove esses sufixos antes de comparar pra não acusar
+// divergência falsa por causa só disso.
+function normalizarEmpresa(nome) {
+  return normalizarProduto(nome)
+    .replace(/\b(ltda|me|epp|eireli|s\/?a|mei)\b\.?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Nota de serviço (NFS-e) não tem tabela de itens de verdade pra comparar —
 // em vez disso, confere se a empresa prestadora bate com o fornecedor
 // registrado no pedido (comparação de nome, não tem CNPJ do fornecedor
 // guardado no pedido pra comparar dígito a dígito).
 function compararPrestador(pedido, emitenteNome) {
-  const esperado = normalizarProduto(pedido.fornecedor_nome);
+  const esperado = normalizarEmpresa(pedido.fornecedor_nome);
   if (!esperado) return { msgPrestador: "Fornecedor não informado no pedido — não é possível conferir.", divergPrestador: false };
   if (!emitenteNome) return { msgPrestador: "Não foi possível ler a prestadora na nota.", divergPrestador: false };
-  const lido = normalizarProduto(emitenteNome);
+  const lido = normalizarEmpresa(emitenteNome);
   const bate = lido === esperado || lido.includes(esperado) || esperado.includes(lido);
   return bate
     ? { msgPrestador: `✅ Prestadora confere (${escapeHtml(emitenteNome)}).`, divergPrestador: false }
