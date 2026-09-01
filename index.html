@@ -122,6 +122,7 @@
         </div>
         <select id="filtro-comprador"><option value="">Todos os compradores</option></select>
         <select id="filtro-fornecedor"><option value="">Todos os fornecedores</option></select>
+        <button id="btn-limpar-filtros" type="button" class="link-btn">Limpar filtros</button>
         <button id="btn-montar-rota" class="btn primary">Montar rota com selecionados</button>
       </div>
       <p id="total-disponiveis" class="hint"></p>
@@ -143,7 +144,17 @@
         <button id="btn-excluir-rota" type="button" class="btn secondary danger small hidden">Excluir rota</button>
       </div>
     </div>
+    <div class="filtro-e-botao">
+      <div class="filtro-multiplo">
+        <button type="button" id="btn-filtro-cidade-rota" class="btn secondary small">Todas as cidades</button>
+        <div id="opcoes-filtro-cidade-rota" class="filtro-multiplo-opcoes hidden"></div>
+      </div>
+      <select id="filtro-comprador-rota"><option value="">Todos os compradores</option></select>
+      <select id="filtro-fornecedor-rota"><option value="">Todos os fornecedores</option></select>
+      <button id="btn-limpar-filtros-rota" type="button" class="link-btn">Limpar filtros</button>
+    </div>
     <p id="rota-progresso" class="hint"></p>
+    <p id="total-rota" class="hint"></p>
     <ul id="lista-rota" class="rota-lista"></ul>
   </section>
 
