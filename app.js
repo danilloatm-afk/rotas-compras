@@ -536,6 +536,7 @@ function extrairCidade(local) {
 }
 
 let disponiveisCache = [];
+let cidadesSelecionadas = new Set();
 
 async function loadDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
@@ -548,11 +549,20 @@ async function loadDisponiveis() {
   }
   disponiveisCache = data;
 
-  const selCidade = document.getElementById("filtro-cidade");
-  const cidadeAtual = selCidade.value;
   const cidades = [...new Set(data.map((p) => extrairCidade(p.local_retirada)).filter(Boolean))].sort();
-  selCidade.innerHTML = `<option value="">Todas as cidades</option>` + cidades.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
-  if (cidades.includes(cidadeAtual)) selCidade.value = cidadeAtual;
+  // Descarta da seleção qualquer cidade que não existe mais na lista atual.
+  cidadesSelecionadas = new Set([...cidadesSelecionadas].filter((c) => cidades.includes(c)));
+  const opcoesCidade = document.getElementById("opcoes-filtro-cidade");
+  opcoesCidade.innerHTML = cidades
+    .map(
+      (c) => `
+    <label class="filtro-multiplo-item">
+      <input type="checkbox" class="filtro-cidade-check" value="${escapeHtml(c)}" ${cidadesSelecionadas.has(c) ? "checked" : ""}>
+      ${escapeHtml(c)}
+    </label>`
+    )
+    .join("");
+  atualizarBotaoFiltroCidade();
 
   const selComprador = document.getElementById("filtro-comprador");
   const compradorAtual = selComprador.value;
@@ -563,11 +573,36 @@ async function loadDisponiveis() {
   renderDisponiveis();
 }
 
+function atualizarBotaoFiltroCidade() {
+  const btn = document.getElementById("btn-filtro-cidade");
+  if (cidadesSelecionadas.size === 0) btn.textContent = "Todas as cidades";
+  else if (cidadesSelecionadas.size === 1) btn.textContent = [...cidadesSelecionadas][0];
+  else btn.textContent = `${cidadesSelecionadas.size} cidades ▾`;
+}
+
+document.getElementById("btn-filtro-cidade").addEventListener("click", (e) => {
+  e.stopPropagation();
+  document.getElementById("opcoes-filtro-cidade").classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".filtro-multiplo")) document.getElementById("opcoes-filtro-cidade").classList.add("hidden");
+});
+document.getElementById("opcoes-filtro-cidade").addEventListener("change", (e) => {
+  const chk = e.target.closest(".filtro-cidade-check");
+  if (!chk) return;
+  if (chk.checked) cidadesSelecionadas.add(chk.value);
+  else cidadesSelecionadas.delete(chk.value);
+  atualizarBotaoFiltroCidade();
+  renderDisponiveis();
+});
+
 function renderDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
-  const cidadeFiltro = document.getElementById("filtro-cidade").value;
   const compradorFiltro = document.getElementById("filtro-comprador").value;
-  let data = cidadeFiltro ? disponiveisCache.filter((p) => extrairCidade(p.local_retirada) === cidadeFiltro) : disponiveisCache;
+  let data =
+    cidadesSelecionadas.size > 0
+      ? disponiveisCache.filter((p) => cidadesSelecionadas.has(extrairCidade(p.local_retirada)))
+      : disponiveisCache;
   if (compradorFiltro) data = data.filter((p) => p.comprador_nome === compradorFiltro);
 
   if (!data.length) {
@@ -600,7 +635,6 @@ function renderDisponiveis() {
     .join("");
 }
 
-document.getElementById("filtro-cidade").addEventListener("change", renderDisponiveis);
 document.getElementById("filtro-comprador").addEventListener("change", renderDisponiveis);
 
 // mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"
