@@ -65,6 +65,16 @@ $HeadersJson = @{
     "content-type"  = "application/json"
 }
 
+# Invoke-RestMethod, quando -Body é uma string, não codifica em UTF-8 por
+# padrão no Windows PowerShell 5.1 — nomes com acento (fornecedor, endereço)
+# corrompiam o JSON enviado e a Supabase respondia "Empty or invalid json"
+# (PGRST102). Convertendo a string pra bytes UTF-8 explicitamente antes de
+# enviar, o problema não ocorre.
+function Invoke-JsonPost($uri, $headers, $jsonBody) {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
+    return Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $bytes
+}
+
 function Detalhe-Erro($erro) {
     $msg = $erro.Exception.Message
     if ($erro.Exception.Response) {
@@ -120,7 +130,7 @@ function Get-OrCreate-Empresa($nome, $cnpj) {
     $body = @{ nome = $nome; cnpj = if ($cnpj) { $cnpj } else { $null } } | ConvertTo-Json
     $headers = $HeadersJson.Clone()
     $headers["Prefer"] = "return=representation"
-    $novo = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/rl_empresas" -Headers $headers -Method Post -Body $body
+    $novo = Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_empresas" $headers $body
     $script:empresas += $novo[0]
     return $novo[0]
 }
@@ -134,7 +144,7 @@ function Get-OrCreate-Comprador($nome) {
     $body = @{ nome = $nome.Trim() } | ConvertTo-Json
     $headers = $HeadersJson.Clone()
     $headers["Prefer"] = "return=representation"
-    $novo = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/rl_compradores" -Headers $headers -Method Post -Body $body
+    $novo = Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_compradores" $headers $body
     $script:compradores += $novo[0]
     return $novo[0].nome
 }
@@ -236,7 +246,7 @@ foreach ($arquivo in $arquivos) {
             urgente         = $false
             status          = "pendente"
         } | ConvertTo-Json -Depth 6
-        Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/rl_pedidos" -Headers $HeadersJson -Method Post -Body $pedido | Out-Null
+        Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_pedidos" $HeadersJson $pedido | Out-Null
 
         Write-Log "  OK (FOB): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
         Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaRoteirizados $arquivo.Name) -Force
