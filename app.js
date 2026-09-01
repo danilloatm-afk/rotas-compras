@@ -569,11 +569,20 @@ async function loadDisponiveis() {
     .join("");
   atualizarBotaoFiltroCidade();
 
+  const naoTransportadora = data.filter((p) => !p.retirar_transportadora);
+
   const selComprador = document.getElementById("filtro-comprador");
   const compradorAtual = selComprador.value;
-  const compradores = [...new Set(data.map((p) => p.comprador_nome).filter(Boolean))].sort();
+  const compradores = [...new Set(naoTransportadora.map((p) => p.comprador_nome).filter(Boolean))].sort();
   selComprador.innerHTML = `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
   if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
+
+  const selFornecedor = document.getElementById("filtro-fornecedor");
+  const fornecedorAtual = selFornecedor.value;
+  const fornecedores = [...new Set(naoTransportadora.map((p) => p.fornecedor_nome).filter(Boolean))].sort();
+  selFornecedor.innerHTML =
+    `<option value="">Todos os fornecedores</option>` + fornecedores.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+  if (fornecedores.includes(fornecedorAtual)) selFornecedor.value = fornecedorAtual;
 
   renderDisponiveis();
   renderTransportadora();
@@ -605,13 +614,18 @@ document.getElementById("opcoes-filtro-cidade").addEventListener("change", (e) =
 function renderDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
   const compradorFiltro = document.getElementById("filtro-comprador").value;
+  const fornecedorFiltro = document.getElementById("filtro-fornecedor").value;
   let data = disponiveisCache.filter((p) => !p.retirar_transportadora);
   if (cidadesSelecionadas.size > 0) data = data.filter((p) => cidadesSelecionadas.has(extrairCidade(p.local_retirada)));
   if (compradorFiltro) data = data.filter((p) => p.comprador_nome === compradorFiltro);
+  if (fornecedorFiltro) data = data.filter((p) => p.fornecedor_nome === fornecedorFiltro);
+
+  const totalEl = document.getElementById("total-disponiveis");
+  totalEl.textContent = `${data.length} pedido${data.length === 1 ? "" : "s"}`;
 
   if (!data.length) {
     el.innerHTML = `<p class="empty-state">${
-      disponiveisCache.length ? "Nenhum pedido pendente nessa cidade." : "Nenhum pedido pendente no momento."
+      disponiveisCache.length ? "Nenhum pedido pendente com esse filtro." : "Nenhum pedido pendente no momento."
     }</p>`;
     return;
   }
@@ -640,6 +654,7 @@ function renderDisponiveis() {
 }
 
 document.getElementById("filtro-comprador").addEventListener("change", renderDisponiveis);
+document.getElementById("filtro-fornecedor").addEventListener("change", renderDisponiveis);
 
 // ---------- motorista: retirada em transportadora (sem rota fixa — o
 // motorista passa lá todo dia sem saber de antemão o que já chegou, então
