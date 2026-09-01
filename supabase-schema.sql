@@ -69,6 +69,8 @@ create table rl_rota_paradas (
   nota_valor_total numeric,
   nota_cnpj text,
   nota_itens jsonb,
+  nota_tipo_documento text,
+  nota_emitente_nome text,
   entrega_parcial boolean not null default false,
   divergencia_valor boolean not null default false,
   divergencia_cnpj boolean not null default false,
