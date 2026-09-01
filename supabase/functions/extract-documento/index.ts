@@ -111,6 +111,14 @@ const SCHEMA_PEDIDO = {
 const SCHEMA_NOTA = {
   type: "object",
   properties: {
+    tipo_documento: {
+      type: "string",
+      enum: ["produto", "servico"],
+      description:
+        "'produto' se for uma nota fiscal de PRODUTO/mercadoria (DANFE, com tabela de itens). 'servico' se for uma nota " +
+        "fiscal de SERVIÇO (NFS-e/DANFSe, 'Documento Auxiliar da NFS-e', com um campo 'Descrição do Serviço' em vez de " +
+        "tabela de itens).",
+    },
     numero_nota: {
       type: "string",
       description: "Número da nota fiscal. Omita se não conseguir ler com clareza.",
@@ -170,7 +178,7 @@ const SCHEMA_NOTA = {
       },
     },
   },
-  required: [],
+  required: ["tipo_documento"],
   additionalProperties: false,
 };
 
