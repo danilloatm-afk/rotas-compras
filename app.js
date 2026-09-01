@@ -437,6 +437,9 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       arquivo_url: url,
       arquivo_nome: file.name,
       observacao: document.getElementById("pedido-observacao").value.trim() || null,
+      // Mesmo padrão do FOB: decide pelo nome do arquivo, sem exigir campo
+      // manual — a maioria dos pedidos chega pelo robô, não por este formulário.
+      retirar_transportadora: /transportadora/i.test(file.name),
       valor_total: valor ? Number(valor) : null,
       itens: pedidoItensExtraidos,
       fornecedor_nome: pedidoFornecedorExtraido,
@@ -549,7 +552,9 @@ async function loadDisponiveis() {
   }
   disponiveisCache = data;
 
-  const cidades = [...new Set(data.map((p) => extrairCidade(p.local_retirada)).filter(Boolean))].sort();
+  const cidades = [
+    ...new Set(data.filter((p) => !p.retirar_transportadora).map((p) => extrairCidade(p.local_retirada)).filter(Boolean)),
+  ].sort();
   // Descarta da seleção qualquer cidade que não existe mais na lista atual.
   cidadesSelecionadas = new Set([...cidadesSelecionadas].filter((c) => cidades.includes(c)));
   const opcoesCidade = document.getElementById("opcoes-filtro-cidade");
@@ -571,6 +576,7 @@ async function loadDisponiveis() {
   if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
 
   renderDisponiveis();
+  renderTransportadora();
 }
 
 function atualizarBotaoFiltroCidade() {
@@ -599,10 +605,8 @@ document.getElementById("opcoes-filtro-cidade").addEventListener("change", (e) =
 function renderDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
   const compradorFiltro = document.getElementById("filtro-comprador").value;
-  let data =
-    cidadesSelecionadas.size > 0
-      ? disponiveisCache.filter((p) => cidadesSelecionadas.has(extrairCidade(p.local_retirada)))
-      : disponiveisCache;
+  let data = disponiveisCache.filter((p) => !p.retirar_transportadora);
+  if (cidadesSelecionadas.size > 0) data = data.filter((p) => cidadesSelecionadas.has(extrairCidade(p.local_retirada)));
   if (compradorFiltro) data = data.filter((p) => p.comprador_nome === compradorFiltro);
 
   if (!data.length) {
@@ -637,8 +641,69 @@ function renderDisponiveis() {
 
 document.getElementById("filtro-comprador").addEventListener("change", renderDisponiveis);
 
-// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"
-document.getElementById("lista-disponiveis").addEventListener("click", async (e) => {
+// ---------- motorista: retirada em transportadora (sem rota fixa — o
+// motorista passa lá todo dia sem saber de antemão o que já chegou, então
+// aqui ele conclui direto, sem passar pelo fluxo de "montar rota") ----------
+function renderTransportadora() {
+  const el = document.getElementById("lista-transportadora");
+  const data = disponiveisCache.filter((p) => p.retirar_transportadora);
+
+  if (!data.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum pedido aguardando retirada em transportadora.</p>`;
+    return;
+  }
+  el.innerHTML = data
+    .map(
+      (p) => `
+    <div class="card-pedido">
+      <div class="card-pedido-head">
+        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+        ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+      </div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
+      ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      <label class="selecionar"><input type="checkbox" class="toggle-urgente" data-id="${p.id}" ${p.urgente ? "checked" : ""}> Urgente</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> 📦 Pode vir parcial</label>
+      <button class="btn primary small" type="button" data-concluir-transportadora="${p.id}">📦 Encontrei — concluir</button>
+      <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
+    </div>`
+    )
+    .join("");
+}
+
+document.getElementById("lista-transportadora").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-concluir-transportadora]");
+  if (!btn) return;
+  const motoristaNome = document.getElementById("motorista-select").value;
+  if (!motoristaNome) return mostrarAviso("Selecione seu nome (motorista) primeiro.");
+  const pedidoId = btn.dataset.concluirTransportadora;
+  btn.disabled = true;
+  try {
+    const rotaId = await getOrCreateRotaAtiva(motoristaNome);
+    const baseOrdem = paradasCache.length;
+    const { error: errParada } = await db.from("rl_rota_paradas").insert({ rota_id: rotaId, pedido_id: pedidoId, ordem: baseOrdem });
+    if (errParada) throw errParada;
+    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "na_rota" }).eq("id", pedidoId);
+    if (errPedido) throw errPedido;
+
+    await Promise.all([loadDisponiveis(), loadRotaAtual()]);
+    const parada = paradasCache.find((p) => p.pedido_id === pedidoId);
+    if (parada) abrirModalConcluir(parada);
+  } catch (err) {
+    mostrarAviso("Erro: " + err.message);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-atualizar-transportadora").addEventListener("click", loadDisponiveis);
+
+// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos" —
+// compartilhado entre "Pedidos disponíveis" e "Retirada em transportadora".
+async function excluirPedidoDisponivelClick(e) {
   const btn = e.target.closest("button[data-cancelar-disponivel]");
   if (!btn) return;
   if (!btn.dataset.confirmando) {
@@ -652,11 +717,13 @@ document.getElementById("lista-disponiveis").addEventListener("click", async (e)
   }
   await db.from("rl_pedidos").update({ status: "cancelado" }).eq("id", btn.dataset.cancelarDisponivel);
   loadDisponiveis();
-});
+}
+document.getElementById("lista-disponiveis").addEventListener("click", excluirPedidoDisponivelClick);
+document.getElementById("lista-transportadora").addEventListener("click", excluirPedidoDisponivelClick);
 
 // Urgente/parcial marcados aqui (não no formulário de anexar) porque a
 // maioria dos pedidos chega pelo robô, sem ninguém preenchendo formulário.
-document.getElementById("lista-disponiveis").addEventListener("change", async (e) => {
+async function toggleUrgentePartialChange(e) {
   const chkUrgente = e.target.closest("input.toggle-urgente");
   const chkParcial = e.target.closest("input.toggle-parcial");
   if (chkUrgente) {
@@ -667,6 +734,10 @@ document.getElementById("lista-disponiveis").addEventListener("change", async (e
     await db.from("rl_pedidos").update({ parcial_esperado: chkParcial.checked }).eq("id", chkParcial.dataset.id);
     await loadDisponiveis();
   }
+}
+document.getElementById("lista-disponiveis").addEventListener("change", toggleUrgentePartialChange);
+document.getElementById("lista-transportadora").addEventListener("change", (e) => {
+  toggleUrgentePartialChange(e);
 });
 
 document.getElementById("btn-montar-rota").addEventListener("click", async () => {
@@ -970,11 +1041,8 @@ document.getElementById("lista-rota").addEventListener("drop", async (e) => {
 });
 
 // ---------- concluir parada (modal com conferência) ----------
-document.getElementById("lista-rota").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-concluir]");
-  if (!btn) return;
-  paradaEmEdicao = paradasCache.find((p) => String(p.id) === btn.dataset.concluir);
-  if (!paradaEmEdicao) return;
+function abrirModalConcluir(parada) {
+  paradaEmEdicao = parada;
   notaItensExtraidos = null;
   notaTipoDocumento = null;
   notaEmitenteExtraido = null;
@@ -986,6 +1054,14 @@ document.getElementById("lista-rota").addEventListener("click", (e) => {
   document.getElementById("modal-feedback").textContent = "";
   document.getElementById("conferencia-resultado").classList.add("hidden");
   document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+document.getElementById("lista-rota").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-concluir]");
+  if (!btn) return;
+  const parada = paradasCache.find((p) => String(p.id) === btn.dataset.concluir);
+  if (!parada) return;
+  abrirModalConcluir(parada);
 });
 
 document.getElementById("btn-modal-fechar").addEventListener("click", () => {
