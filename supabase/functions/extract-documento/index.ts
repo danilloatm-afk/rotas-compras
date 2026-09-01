@@ -43,9 +43,10 @@ const SCHEMA_PEDIDO = {
         "Valor TOTAL GERAL do pedido em R$ — o valor final que efetivamente será cobrado/faturado (o que deve bater com o valor " +
         "total da nota fiscal correspondente). Se o documento mostrar mais de um total (ex: 'Total das Mercadorias', 'Total com " +
         "Impostos', 'Total Geral'), use sempre o 'Total Geral' (ou equivalente: o maior/último total, que soma mercadorias + " +
-        "impostos + frete - descontos) — NUNCA o total só das mercadorias quando houver um total geral maior disponível. Se não " +
-        "houver nenhum total explícito, some os itens. Apenas números, sem 'R$' e sem separador de milhar (ex: 45390.00). Omita " +
-        "se não conseguir determinar com confiança.",
+        "impostos + frete - descontos). NUNCA use o total só das mercadorias, e NUNCA use 'Total com Impostos' — esse campo " +
+        "normalmente mostra só o VALOR DO IMPOSTO isolado (repete o mesmo número do campo 'ICMS' ao lado), não uma soma; usá-lo " +
+        "como total resultaria num valor muito menor que o correto. Se não houver nenhum total explícito, some os itens. Apenas " +
+        "números, sem 'R$' e sem separador de milhar (ex: 45390.00). Omita se não conseguir determinar com confiança.",
     },
     solicitante_nome: {
       type: "string",
@@ -187,9 +188,11 @@ const PROMPT_PEDIDO =
   "1) EMPRESA COMPRADORA: normalmente não tem rótulo explícito — é a empresa do cabeçalho/timbre no topo do documento (às " +
   "vezes com logotipo), diferente da empresa listada em 'Dados do Fornecedor'. Nunca confunda com o campo 'Comprador:', que " +
   "é uma PESSOA, não a empresa.\n\n" +
-  "2) VALOR TOTAL: se houver mais de um total no documento (ex: total só das mercadorias, total de impostos, total geral), " +
+  "2) VALOR TOTAL: se houver mais de um total no documento (ex: total só das mercadorias, total com impostos, total geral), " +
   "extraia sempre o TOTAL GERAL/FINAL (o maior, que soma tudo) — é esse valor que deve bater com o valor total de uma nota " +
-  "fiscal emitida pra este pedido, não o total parcial das mercadorias.\n\n" +
+  "fiscal emitida pra este pedido. NUNCA use 'Total com Impostos' — esse campo costuma mostrar só o valor do imposto isolado " +
+  "(o mesmo número do campo 'ICMS' ao lado), não uma soma; é um valor bem menor que o total real e NÃO deve ser confundido " +
+  "com o total do pedido.\n\n" +
   "3) SOLICITANTE: procure o nome de pessoa no campo 'Comprador:'/'Solicitante:'/'Requisitante:' da seção de informações do " +
   "pedido — não confunda com os nomes que aparecem numa eventual lista de aprovadores/aprovações, que não são o solicitante.\n\n" +
   "4) LOCAL DE RETIRADA: use o endereço do FORNECEDOR (seção 'Dados do Fornecedor': Endereço, Bairro, Município, Estado, CEP) — " +
