@@ -878,10 +878,21 @@ async function loadRotaAtual() {
   rotaAtualId = rotas[0].id;
   btnExcluir.classList.remove("hidden");
 
-  const { data: todasParadas } = await comTimeout(db.from("rl_rota_paradas").select("id, status").eq("rota_id", rotaAtualId));
+  const { data: todasParadas } = await comTimeout(
+    db.from("rl_rota_paradas").select("id, status, rl_pedidos(fornecedor_nome)").eq("rota_id", rotaAtualId)
+  );
+  // "Parada" de verdade é por fornecedor (mesmo endereço) — vários pedidos
+  // do mesmo fornecedor contam como uma parada só. Uma parada só conta como
+  // concluída quando TODOS os pedidos daquele fornecedor já foram concluídos.
+  const gruposPorFornecedor = new Map();
+  (todasParadas || []).forEach((p) => {
+    const chave = (p.rl_pedidos || {}).fornecedor_nome || `pedido-${p.id}`;
+    if (!gruposPorFornecedor.has(chave)) gruposPorFornecedor.set(chave, []);
+    gruposPorFornecedor.get(chave).push(p.status);
+  });
   rotaProgresso = {
-    total: (todasParadas || []).length,
-    concluidas: (todasParadas || []).filter((p) => p.status === "concluida").length,
+    total: gruposPorFornecedor.size,
+    concluidas: [...gruposPorFornecedor.values()].filter((statuses) => statuses.every((s) => s === "concluida")).length,
   };
 
   const { data: paradas, error } = await comTimeout(
@@ -1064,7 +1075,7 @@ function renderRota() {
     lista.innerHTML = `<li class="empty-state">Nenhuma parada na rota ainda.</li>`;
     return;
   }
-  progresso.textContent = `${rotaProgresso.concluidas} de ${rotaProgresso.total} paradas concluídas.${
+  progresso.textContent = `${rotaProgresso.concluidas} de ${rotaProgresso.total} paradas distintas concluídas.${
     rotaProgresso.concluidas ? " As já concluídas aparecem na aba Histórico." : ""
   }`;
 
