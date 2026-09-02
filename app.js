@@ -1783,8 +1783,18 @@ function renderHistorico() {
         <div class="card-meta">
           ${
             p.recebido_em
-              ? `✅ Recebido por ${escapeHtml(p.recebido_por || "—")} em ${formatarDataHora(p.recebido_em)}`
-              : `<button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>`
+              ? `✅ Recebido por ${escapeHtml(p.recebido_por || "—")} em ${formatarDataHora(p.recebido_em)}` +
+                (p.recebido_observacao ? `<div class="card-meta">💬 ${escapeHtml(p.recebido_observacao)}</div>` : "") +
+                (Array.isArray(p.recebido_fotos) && p.recebido_fotos.length
+                  ? `<div class="card-meta">${p.recebido_fotos
+                      .map((url, i) => `<a class="arquivo-link" href="${url}" target="_blank" rel="noopener">📷 foto ${i + 1}</a>`)
+                      .join(" ")}</div>`
+                  : "")
+              : `<div class="recebimento-form">
+                  <textarea class="input-obs-recebimento" data-parada-id="${p.id}" rows="2" placeholder="Observação (opcional)"></textarea>
+                  <input type="file" class="input-fotos-recebimento" data-parada-id="${p.id}" accept="image/*" capture="environment" multiple>
+                  <button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>
+                </div>`
           }
         </div>
         <button class="link-btn danger" data-excluir-historico="${p.id}" type="button">Excluir</button>
@@ -1829,17 +1839,36 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
     mostrarAviso("Selecione seu nome (almoxarifado) primeiro.");
     return;
   }
+  const paradaId = btn.dataset.confirmarRecebimento;
+  const card = btn.closest(".historico-parada-card");
+  const observacao = card.querySelector(".input-obs-recebimento")?.value.trim() || null;
+  const inputFotos = card.querySelector(".input-fotos-recebimento");
+  const arquivos = inputFotos ? Array.from(inputFotos.files) : [];
+
   btn.disabled = true;
-  const { error } = await db
-    .from("rl_rota_paradas")
-    .update({ recebido_por: almoxarife, recebido_em: new Date().toISOString() })
-    .eq("id", btn.dataset.confirmarRecebimento);
-  if (error) {
-    mostrarAviso("Erro ao confirmar recebimento: " + error.message);
+  btn.textContent = arquivos.length ? "Enviando fotos..." : "Salvando...";
+  try {
+    const fotosUrls = [];
+    for (const arquivo of arquivos) {
+      const { url } = await uploadArquivo(arquivo, "rl_recebimentos");
+      fotosUrls.push(url);
+    }
+    const { error } = await db
+      .from("rl_rota_paradas")
+      .update({
+        recebido_por: almoxarife,
+        recebido_em: new Date().toISOString(),
+        recebido_observacao: observacao,
+        recebido_fotos: fotosUrls.length ? fotosUrls : null,
+      })
+      .eq("id", paradaId);
+    if (error) throw error;
+    await loadHistorico();
+  } catch (err) {
+    mostrarAviso("Erro ao confirmar recebimento: " + err.message);
     btn.disabled = false;
-    return;
+    btn.textContent = "✅ Confirmar recebimento";
   }
-  await loadHistorico();
 });
 
 // mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"/"Pedidos disponíveis"
