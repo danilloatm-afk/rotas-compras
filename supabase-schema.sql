@@ -78,6 +78,8 @@ create table rl_rota_paradas (
   divergencia_itens boolean not null default false,
   recebido_por text,
   recebido_em timestamptz,
+  recebido_observacao text,
+  recebido_fotos jsonb,
   concluido_em timestamptz,
   criado_em timestamptz not null default now()
 );
@@ -120,18 +122,22 @@ insert into rl_empresas (nome, cnpj) values
 
 -- Depois de rodar este script, crie manualmente (Storage → New bucket,
 -- marcar "Public bucket") os buckets:
---   rl_pedidos  (anexos dos pedidos de compra)
---   rl_notas    (fotos das notas fiscais)
+--   rl_pedidos      (anexos dos pedidos de compra)
+--   rl_notas        (fotos das notas fiscais)
+--   rl_recebimentos (fotos tiradas pelo almoxarifado na conferência)
 -- O insert direto em storage.buckets via SQL Editor costuma não funcionar
 -- de forma confiável (mesma observação já feita nos outros apps).
 --
 -- IMPORTANTE: marcar o bucket como "Public" só libera LEITURA pública dos
 -- arquivos — não libera upload. Sem as policies abaixo, qualquer tentativa
 -- de anexar um pedido ou nota fiscal falha com "new row violates row-level
--- security policy" (erro 403). Rode isto DEPOIS de criar os dois buckets:
+-- security policy" (erro 403). Rode isto DEPOIS de criar os três buckets:
 
 create policy "rl_pedidos read" on storage.objects for select using (bucket_id = 'rl_pedidos');
 create policy "rl_pedidos insert" on storage.objects for insert with check (bucket_id = 'rl_pedidos');
 
 create policy "rl_notas read" on storage.objects for select using (bucket_id = 'rl_notas');
 create policy "rl_notas insert" on storage.objects for insert with check (bucket_id = 'rl_notas');
+
+create policy "rl_recebimentos read" on storage.objects for select using (bucket_id = 'rl_recebimentos');
+create policy "rl_recebimentos insert" on storage.objects for insert with check (bucket_id = 'rl_recebimentos');
