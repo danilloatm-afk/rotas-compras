@@ -1088,7 +1088,12 @@ function renderRota() {
       return true;
     });
 
-  document.getElementById("total-rota").textContent = `${visiveis.length} parada${visiveis.length === 1 ? "" : "s"} nesta rota`;
+  // "Parada" de verdade é por fornecedor (mesmo endereço) — vários pedidos
+  // do mesmo fornecedor viram um só card ainda, então o número de pedidos e
+  // o de paradas reais (fornecedores distintos) podem ser diferentes.
+  const fornecedoresDistintos = new Set(visiveis.map(({ p }) => (p.rl_pedidos || {}).fornecedor_nome || `pedido-${p.id}`)).size;
+  document.getElementById("total-rota").textContent =
+    `${visiveis.length} pedido${visiveis.length === 1 ? "" : "s"} · ${fornecedoresDistintos} parada${fornecedoresDistintos === 1 ? "" : "s"} (fornecedores distintos)`;
 
   if (!visiveis.length) {
     lista.innerHTML = `<li class="empty-state">Nenhuma parada pendente com esse filtro.</li>`;
