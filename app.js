@@ -1821,14 +1821,18 @@ function renderHistorico() {
 
 async function loadHistorico() {
   const el = document.getElementById("lista-historico");
-  const { data, error } = await comTimeout(
-    db
-      .from("rl_rota_paradas")
-      .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
-      .eq("status", "concluida")
-      .order("concluido_em", { ascending: false })
-      .limit(50)
-  );
+  const dataInicio = document.getElementById("filtro-data-inicio").value;
+  const dataFim = document.getElementById("filtro-data-fim").value;
+  let query = db
+    .from("rl_rota_paradas")
+    .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
+    .eq("status", "concluida")
+    .order("concluido_em", { ascending: false })
+    .limit(50);
+  // "Até" inclui o dia inteiro (23:59:59), não só a meia-noite.
+  if (dataInicio) query = query.gte("concluido_em", `${dataInicio}T00:00:00`);
+  if (dataFim) query = query.lte("concluido_em", `${dataFim}T23:59:59`);
+  const { data, error } = await comTimeout(query);
   if (error) {
     el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
     return;
@@ -1846,6 +1850,14 @@ async function loadHistorico() {
 }
 
 document.getElementById("filtro-empresa-historico").addEventListener("change", renderHistorico);
+document.getElementById("filtro-data-inicio").addEventListener("change", loadHistorico);
+document.getElementById("filtro-data-fim").addEventListener("change", loadHistorico);
+document.getElementById("btn-limpar-filtros-historico").addEventListener("click", () => {
+  document.getElementById("filtro-empresa-historico").value = "";
+  document.getElementById("filtro-data-inicio").value = "";
+  document.getElementById("filtro-data-fim").value = "";
+  loadHistorico();
+});
 
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-confirmar-recebimento]");
