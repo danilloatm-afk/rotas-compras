@@ -332,6 +332,8 @@ input, select, textarea {
 .tabela-itens tr.linha-divergente { background: var(--atrasado-bg); }
 
 .historico-parada-card { max-width: 640px; margin-bottom: 0.9rem; }
+.recebimento-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
+.recebimento-form textarea { width: 100%; resize: vertical; font-family: inherit; }
 
 .toast-aviso {
   position: fixed;
