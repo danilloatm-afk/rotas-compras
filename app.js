@@ -1384,13 +1384,39 @@ function atualizarConferencia() {
   const { msgValor, divergValor, msgCnpj, divergCnpj } = calcularDivergencias();
   const pedido = paradaEmEdicao.rl_pedidos || {};
 
+  // Monta uma "parada" com os dados AO VIVO do formulário (ainda não
+  // salvos) só pra reaproveitar linkAvisoComprador — usado no botão abaixo,
+  // que deixa o MOTORISTA avisar o comprador na hora, direto do modal.
+  // Diferente do botão de observação do almoxarifado (esse fala em
+  // "divergência", fica só aqui dentro do modal, antes de concluir — nunca
+  // no Histórico, pra não ter como confundir os dois).
+  function montarParadaAoVivo(divergItens) {
+    return {
+      ...paradaEmEdicao,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: divergCnpj,
+      divergencia_itens: divergItens,
+      nota_valor_total: document.getElementById("nota-valor").value ? Number(document.getElementById("nota-valor").value) : null,
+      nota_cnpj: document.getElementById("nota-cnpj").value || null,
+      nota_tipo_documento: notaTipoDocumento,
+      nota_emitente_nome: notaEmitenteExtraido,
+      nota_itens: notaItensExtraidos,
+    };
+  }
+  function botaoAvisarAgora(divergItens) {
+    if (!(divergValor || divergCnpj || divergItens)) return "";
+    return `<a class="btn secondary small" href="${linkAvisoComprador(
+      montarParadaAoVivo(divergItens)
+    )}" target="_blank" rel="noopener">📱 Avisar comprador sobre divergência agora</a>`;
+  }
+
   // Nota de serviço (NFS-e) não tem itens de verdade pra comparar — confere
   // só tomador (CNPJ, já incluso acima), prestadora e valor total.
   if (notaTipoDocumento === "servico") {
     const { msgPrestador, divergPrestador } = compararPrestador(pedido, notaEmitenteExtraido);
     box.classList.remove("hidden", "ok", "warn");
     box.classList.add(divergValor || divergCnpj || divergPrestador ? "warn" : "ok");
-    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>`;
+    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>${botaoAvisarAgora(divergPrestador)}`;
     return;
   }
 
@@ -1405,6 +1431,7 @@ function atualizarConferencia() {
   } else if (!pedido.itens) {
     html += `<div class="muted">Pedido não tem lista de itens registrada — não é possível conferir item a item.</div>`;
   }
+  html += botaoAvisarAgora(resultadoItens.divergente);
   box.innerHTML = html;
 }
 
@@ -1799,7 +1826,7 @@ function renderHistorico() {
                 (p.recebido_observacao
                   ? `<div class="card-meta">💬 ${escapeHtml(p.recebido_observacao)} <a class="arquivo-link" href="${linkAvisoObservacaoRecebimento(
                       p
-                    )}" target="_blank" rel="noopener">📱 Enviar pro comprador</a></div>`
+                    )}" target="_blank" rel="noopener">📱 Enviar observação do almoxarifado pro comprador</a></div>`
                   : "") +
                 (Array.isArray(p.recebido_fotos) && p.recebido_fotos.length
                   ? `<div class="card-meta">${p.recebido_fotos
