@@ -1707,6 +1707,18 @@ function linkAvisoComprador(parada) {
   return linkWhatsapp(comprador.telefone, mensagem);
 }
 
+// Manda pro comprador a observação que o almoxarifado deixou na conferência
+// do recebimento (ex: avaria, embalagem violada, quantidade a menos).
+function linkAvisoObservacaoRecebimento(parada) {
+  const pedido = parada.rl_pedidos || {};
+  const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
+  const mensagem =
+    `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! O almoxarifado deixou uma observação na conferência do ` +
+    `pedido ${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n\n` +
+    `"${parada.recebido_observacao}"`;
+  return linkWhatsapp(comprador.telefone, mensagem);
+}
+
 // Reconstrói as mensagens de divergência a partir do que já ficou salvo na
 // parada (nota_valor_total, nota_cnpj, nota_itens) — não depende de nada
 // que só existia na tela no momento em que o motorista concluiu a parada.
@@ -1784,7 +1796,11 @@ function renderHistorico() {
           ${
             p.recebido_em
               ? `✅ Recebido por ${escapeHtml(p.recebido_por || "—")} em ${formatarDataHora(p.recebido_em)}` +
-                (p.recebido_observacao ? `<div class="card-meta">💬 ${escapeHtml(p.recebido_observacao)}</div>` : "") +
+                (p.recebido_observacao
+                  ? `<div class="card-meta">💬 ${escapeHtml(p.recebido_observacao)} <a class="arquivo-link" href="${linkAvisoObservacaoRecebimento(
+                      p
+                    )}" target="_blank" rel="noopener">📱 Enviar pro comprador</a></div>`
+                  : "") +
                 (Array.isArray(p.recebido_fotos) && p.recebido_fotos.length
                   ? `<div class="card-meta">${p.recebido_fotos
                       .map((url, i) => `<a class="arquivo-link" href="${url}" target="_blank" rel="noopener">📷 foto ${i + 1}</a>`)
