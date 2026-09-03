@@ -190,6 +190,17 @@ async function loadAlmoxarifes() {
   if (atual) sel.value = atual;
 }
 
+// Tabela cs_condicoes_pagamento já existe no mesmo Supabase, criada pelo
+// app "Avanço para Contratos" (de-para código -> dias médios, baseado na
+// planilha "cond pag.xlsx" do ERP) — reaproveitada aqui só de leitura, sem
+// duplicar o cadastro.
+let condicoesPagamentoCache = new Map();
+async function loadCondicoesPagamento() {
+  const { data, error } = await comTimeout(db.from("cs_condicoes_pagamento").select("codigo, dias"));
+  if (error || !data) return;
+  condicoesPagamentoCache = new Map(data.map((c) => [c.codigo, c.dias]));
+}
+
 async function loadEmpresas() {
   const { data, error } = await comTimeout(db.from("rl_empresas").select("*").order("ativo", { ascending: false }).order("nome"));
   empresasCache = error ? empresasCache : data || [];
@@ -346,6 +357,7 @@ async function selecionarOuCriarComprador(nomeLido) {
 // ---------- comprador: ler pedido com IA ----------
 let pedidoItensExtraidos = null;
 let pedidoFornecedorExtraido = null;
+let pedidoCondicaoPagamentoExtraida = null;
 
 document.getElementById("btn-ler-pedido").addEventListener("click", async () => {
   const input = document.getElementById("pedido-arquivo");
@@ -362,6 +374,7 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
     const extraido = await lerComIA(file, "pedido");
     pedidoItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
     pedidoFornecedorExtraido = extraido.fornecedor_nome || null;
+    pedidoCondicaoPagamentoExtraida = extraido.condicao_pagamento_codigo || null;
     if (extraido.valor_total != null) document.getElementById("pedido-valor").value = extraido.valor_total;
     if (extraido.numero_pedido) document.getElementById("pedido-numero").value = extraido.numero_pedido;
     if (extraido.local_retirada) document.getElementById("pedido-local").value = extraido.local_retirada;
@@ -443,6 +456,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       valor_total: valor ? Number(valor) : null,
       itens: pedidoItensExtraidos,
       fornecedor_nome: pedidoFornecedorExtraido,
+      condicao_pagamento_codigo: pedidoCondicaoPagamentoExtraida,
     });
     if (error) throw error;
 
@@ -454,6 +468,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
     document.getElementById("pedido-duplicado-aviso").classList.add("hidden");
     pedidoItensExtraidos = null;
     pedidoFornecedorExtraido = null;
+    pedidoCondicaoPagamentoExtraida = null;
     loadMeusPedidos();
   } catch (err) {
     feedback.textContent = "Erro: " + err.message;
@@ -1171,6 +1186,8 @@ function abrirModalConcluir(parada) {
   notaItensExtraidos = null;
   notaTipoDocumento = null;
   notaEmitenteExtraido = null;
+  notaDataEmissaoExtraida = null;
+  notaParcelasExtraidas = null;
   document.getElementById("form-modal-nota").reset();
   // já vem pré-marcado se o comprador/motorista sinalizou antes, em
   // "Pedidos disponíveis", que esse pedido costuma vir em partes.
@@ -1197,6 +1214,8 @@ document.getElementById("btn-modal-fechar").addEventListener("click", () => {
 let notaItensExtraidos = null;
 let notaTipoDocumento = null;
 let notaEmitenteExtraido = null;
+let notaDataEmissaoExtraida = null;
+let notaParcelasExtraidas = null;
 
 async function lerNotaComIA() {
   const input = document.getElementById("nota-arquivo");
@@ -1217,6 +1236,9 @@ async function lerNotaComIA() {
     notaItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
     notaTipoDocumento = extraido.tipo_documento || null;
     notaEmitenteExtraido = extraido.emitente_nome || null;
+    notaDataEmissaoExtraida = extraido.data_emissao || null;
+    notaParcelasExtraidas =
+      Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null;
     feedback.textContent =
       notaTipoDocumento === "servico"
         ? "Nota de serviço lida. Confira o tomador, a prestadora e o valor abaixo."
@@ -1435,6 +1457,44 @@ function compararPrestador(pedido, emitenteNome) {
       };
 }
 
+const TOLERANCIA_DIAS_PAGAMENTO = 5; // absorve vencimento caindo em fim de semana/feriado
+
+// Confere se o prazo de pagamento que saiu na nota bate com a condição
+// combinada no pedido (código -> dias médios, tabela cs_condicoes_pagamento
+// compartilhada com o Avanço para Contratos). Quando há mais de uma parcela,
+// usa a média ponderada pelo valor de cada uma, do mesmo jeito que os dias
+// da própria tabela foram calculados.
+function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
+  const codigo = pedido.condicao_pagamento_codigo;
+  if (!codigo) return { msgCondicao: null, divergCondicao: false };
+  const diasEsperados = condicoesPagamentoCache.get(codigo);
+  if (diasEsperados == null) {
+    return { msgCondicao: `Condição de pagamento ${escapeHtml(codigo)} não encontrada na tabela — não é possível conferir.`, divergCondicao: false };
+  }
+  if (!dataEmissao || !Array.isArray(parcelas) || !parcelas.length) {
+    return { msgCondicao: "Não foi possível ler as datas de pagamento da nota — não é possível conferir o prazo.", divergCondicao: false };
+  }
+  const emissao = new Date(dataEmissao + "T00:00:00");
+  const comValor = parcelas.every((p) => p.valor != null);
+  const pesoTotal = comValor ? parcelas.reduce((s, p) => s + p.valor, 0) : parcelas.length;
+  const diasNota =
+    parcelas.reduce((soma, p) => {
+      const venc = new Date(p.data_vencimento + "T00:00:00");
+      const dias = (venc - emissao) / (1000 * 60 * 60 * 24);
+      const peso = comValor ? p.valor : 1;
+      return soma + dias * peso;
+    }, 0) / pesoTotal;
+  const diferenca = Math.abs(diasEsperados - diasNota);
+  return diferenca <= TOLERANCIA_DIAS_PAGAMENTO
+    ? { msgCondicao: `✅ Prazo de pagamento confere (${Math.round(diasNota)} dias, condição ${escapeHtml(codigo)}).`, divergCondicao: false }
+    : {
+        msgCondicao: `⚠️ Prazo de pagamento diferente: condição ${escapeHtml(codigo)} do pedido espera ~${Math.round(
+          diasEsperados
+        )} dias, nota saiu com ${Math.round(diasNota)} dias.`,
+        divergCondicao: true,
+      };
+}
+
 function atualizarConferencia() {
   if (!paradaEmEdicao) return;
   const box = document.getElementById("conferencia-resultado");
@@ -1452,21 +1512,24 @@ function atualizarConferencia() {
   const { msgValor, divergValor, msgCnpj, divergCnpj } = calcularDivergencias();
   const pedido = paradaEmEdicao.rl_pedidos || {};
 
+  const { msgCondicao, divergCondicao } = compararCondicaoPagamento(pedido, notaDataEmissaoExtraida, notaParcelasExtraidas);
+  const msgCondicaoHtml = msgCondicao ? `<div>${msgCondicao}</div>` : "";
+
   // Nota de serviço (NFS-e) não tem itens de verdade pra comparar — confere
   // só tomador (CNPJ, já incluso acima), prestadora e valor total.
   if (notaTipoDocumento === "servico") {
     const { msgPrestador, divergPrestador } = compararPrestador(pedido, notaEmitenteExtraido);
     box.classList.remove("hidden", "ok", "warn");
-    box.classList.add(divergValor || divergCnpj || divergPrestador ? "warn" : "ok");
-    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>`;
+    box.classList.add(divergValor || divergCnpj || divergPrestador || divergCondicao ? "warn" : "ok");
+    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>${msgCondicaoHtml}`;
     return;
   }
 
   const resultadoItens = compararItens(pedido.itens, notaItensExtraidos);
 
   box.classList.remove("hidden", "ok", "warn");
-  box.classList.add(divergValor || divergCnpj || resultadoItens.divergente ? "warn" : "ok");
-  let html = `<div>${msgValor}</div><div>${msgCnpj}</div>`;
+  box.classList.add(divergValor || divergCnpj || resultadoItens.divergente || divergCondicao ? "warn" : "ok");
+  let html = `<div>${msgValor}</div><div>${msgCnpj}</div>${msgCondicaoHtml}`;
   if (resultadoItens.temDados) {
     html += `<div>${resultadoItens.divergente ? "⚠️ Divergência nos itens (veja a tabela abaixo)." : "✅ Itens conferem."}</div>`;
     html += renderTabelaItens(resultadoItens);
@@ -1501,6 +1564,7 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     let divergValor = false;
     let divergCnpj = false;
     let itensDivergentes = false;
+    let divergCondicao = false;
     if (!entregaParcial) {
       ({ divergValor, divergCnpj } = calcularDivergencias());
       // Nota de serviço não tem itens de verdade pra comparar — a divergência
@@ -1510,6 +1574,11 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       } else {
         itensDivergentes = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos).divergente;
       }
+      divergCondicao = compararCondicaoPagamento(
+        paradaEmEdicao.rl_pedidos || {},
+        notaDataEmissaoExtraida,
+        notaParcelasExtraidas
+      ).divergCondicao;
     }
 
     const { error: errParada } = await db
@@ -1523,10 +1592,13 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
         nota_itens: notaItensExtraidos,
         nota_tipo_documento: notaTipoDocumento,
         nota_emitente_nome: notaEmitenteExtraido,
+        nota_data_emissao: notaDataEmissaoExtraida,
+        nota_parcelas: notaParcelasExtraidas,
         entrega_parcial: entregaParcial,
         divergencia_valor: divergValor,
         divergencia_cnpj: divergCnpj,
         divergencia_itens: itensDivergentes,
+        divergencia_condicao_pagamento: divergCondicao,
         concluido_em: new Date().toISOString(),
       })
       .eq("id", paradaEmEdicao.id);
@@ -1761,6 +1833,10 @@ function resumoDivergenciasTexto(parada) {
       linhas.push("Itens com quantidade ou valor unitário diferente do esperado (confira no sistema).");
     }
   }
+  if (parada.divergencia_condicao_pagamento) {
+    const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
+    if (msgCondicao) linhas.push(msgCondicao.replace(/^[⚠️✅]\s*/, ""));
+  }
   return linhas.join("\n");
 }
 
@@ -1809,6 +1885,10 @@ function renderDivergenciasParada(parada) {
       html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
     }
   }
+  if (parada.divergencia_condicao_pagamento) {
+    const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
+    if (msgCondicao) html += `<div>${msgCondicao}</div>`;
+  }
   return html;
 }
 
@@ -1834,7 +1914,7 @@ function renderHistorico() {
     .map((p) => {
       const pedido = p.rl_pedidos || {};
       const motorista = (p.rl_rotas || {}).motorista_nome || "—";
-      const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens;
+      const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
       const status = p.entrega_parcial ? "📦 Entrega parcial" : divergente ? "⚠️ Divergência" : "✅ OK";
       return `
       <div class="card-pedido historico-parada-card">
@@ -2003,6 +2083,6 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
 
 // ---------- inicialização ----------
 (async function init() {
-  await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes()]);
+  await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes(), loadCondicoesPagamento()]);
   loadMeusPedidos();
 })();
