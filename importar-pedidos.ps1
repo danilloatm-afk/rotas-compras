@@ -241,7 +241,11 @@ foreach ($arquivo in $arquivos) {
             comprador_nome  = $compradorNome
             empresa_id      = if ($empresa) { $empresa.id } else { $null }
             empresa_nome    = if ($empresa) { $empresa.nome } else { $dados.empresa_compradora_nome }
-            empresa_cnpj    = if ($empresa) { $empresa.cnpj } else { $dados.empresa_compradora_cnpj }
+            # Prefere o CNPJ REALMENTE lido no pedido — a Wehrmann tem mais de
+            # uma filial (CNPJs diferentes) sob o mesmo nome no cadastro; usar
+            # o CNPJ genérico do cadastro em vez do lido causava divergência
+            # falsa na conferência com a nota (que vem da filial certa).
+            empresa_cnpj    = if ($dados.empresa_compradora_cnpj) { $dados.empresa_compradora_cnpj } elseif ($empresa) { $empresa.cnpj } else { $null }
             fornecedor_nome = if ($dados.fornecedor_nome) { $dados.fornecedor_nome } else { $null }
             condicao_pagamento_codigo = if ($dados.condicao_pagamento_codigo) { $dados.condicao_pagamento_codigo } else { $null }
             numero_pedido   = if ($dados.numero_pedido) { $dados.numero_pedido } else { $null }
