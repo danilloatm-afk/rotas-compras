@@ -1251,13 +1251,9 @@ function compararItens(pedidoItens, notaItens) {
   if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
 
   const restantes = notaItens.map((it) => ({ ...it, usado: false }));
-  const mesmaQuantidadeDeLinhas = pedidoItens.length === notaItens.length;
 
-  // 1ª tentativa: nome igual ou um contendo o outro. Nomes costumam variar
-  // entre o pedido (ERP do comprador) e a nota (do fornecedor) — quando as
-  // duas listas têm o mesmo número de linhas, usa a posição como reforço
-  // pra quem não deu match por nome (bem mais provável de estar certo do
-  // que deixar "não encontrado" por causa só do texto ser diferente).
+  // 1ª tentativa: nome igual ou um contendo o outro.
+  const semMatchPorNome = [];
   const pedidoComMatch = pedidoItens.map((pItem, idx) => {
     const nomeP = normalizarProduto(pItem.produto_nome);
     let match =
@@ -1265,9 +1261,57 @@ function compararItens(pedidoItens, notaItens) {
       restantes.find(
         (n) => !n.usado && nomeP && (normalizarProduto(n.produto_nome).includes(nomeP) || nomeP.includes(normalizarProduto(n.produto_nome)))
       );
-    if (!match && mesmaQuantidadeDeLinhas && !restantes[idx].usado) match = restantes[idx];
     if (match) match.usado = true;
+    else semMatchPorNome.push(idx);
     return { pItem, match };
+  });
+
+  // 2ª tentativa, pra quem sobrou: o fornecedor costuma abreviar o nome do
+  // produto de um jeito bem diferente do ERP do comprador (ex: "DISJUNTOR
+  // TRIPOLAR 40A MDWP40A WEG" vira "DISJ. TRIP 40A MDWP-C40-3 3KA"), então o
+  // nome sozinho não basta — e como o pedido pode listar os itens numa
+  // ordem e a nota noutra, casar só pela POSIÇÃO também dá pareamento
+  // errado (uma linha "diverge" de outra que nem é o mesmo produto).
+  // Usa dois sinais, nessa ordem de prioridade:
+  //  1) "códigos" em comum no nome (ex: 10A, 20A, 40A, 3KA) — específicos o
+  //     bastante pra distinguir itens de preço quase idêntico (ex: dois
+  //     disjuntores de amperagens diferentes custando quase a mesma coisa);
+  //  2) valor unitário mais PRÓXIMO ainda livre, como critério de desempate
+  //     ou quando não há nenhum código em comum.
+  function codigosProduto(nome) {
+    return new Set((normalizarProduto(nome).match(/\d+[a-z]*/g) || []).filter((c) => c.length >= 2));
+  }
+  restantes.forEach((n) => (n.__codigos = codigosProduto(n.produto_nome)));
+  const candidatos = [];
+  semMatchPorNome.forEach((idxPedido) => {
+    const pItem = pedidoItens[idxPedido];
+    const codigosP = codigosProduto(pItem.produto_nome);
+    restantes.forEach((n, idxNota) => {
+      if (n.usado) return;
+      const codigosComuns = [...codigosP].filter((c) => n.__codigos.has(c)).length;
+      const diffPreco = pItem.valor_unitario != null && n.valor_unitario != null ? Math.abs(pItem.valor_unitario - n.valor_unitario) : null;
+      if (!codigosComuns && diffPreco == null) return;
+      candidatos.push({ idxPedido, idxNota, codigosComuns, diffPreco });
+    });
+  });
+  candidatos.sort((a, b) => {
+    if (b.codigosComuns !== a.codigosComuns) return b.codigosComuns - a.codigosComuns;
+    if (a.diffPreco == null) return 1;
+    if (b.diffPreco == null) return -1;
+    return a.diffPreco - b.diffPreco;
+  });
+  const pedidoUsado = new Set();
+  candidatos.forEach(({ idxPedido, idxNota, codigosComuns, diffPreco }) => {
+    if (pedidoUsado.has(idxPedido) || restantes[idxNota].usado) return;
+    // Sem nenhum código em comum, só casa por preço se estiver de fato
+    // perto — preço muito diferente significa que são produtos diferentes.
+    if (!codigosComuns) {
+      if (diffPreco == null) return;
+      if (diffPreco > TOLERANCIA_VALOR * 20 && diffPreco > pedidoItens[idxPedido].valor_unitario * 0.3) return;
+    }
+    pedidoComMatch[idxPedido].match = restantes[idxNota];
+    restantes[idxNota].usado = true;
+    pedidoUsado.add(idxPedido);
   });
 
   let divergente = false;
