@@ -358,6 +358,7 @@ async function selecionarOuCriarComprador(nomeLido) {
 let pedidoItensExtraidos = null;
 let pedidoFornecedorExtraido = null;
 let pedidoCondicaoPagamentoExtraida = null;
+let pedidoCnpjExtraido = null;
 
 document.getElementById("btn-ler-pedido").addEventListener("click", async () => {
   const input = document.getElementById("pedido-arquivo");
@@ -381,6 +382,13 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
     await checarPedidoDuplicado(extraido.numero_pedido);
     await selecionarOuCriarComprador(extraido.solicitante_nome);
 
+    // Guarda o CNPJ REALMENTE impresso neste pedido — a Wehrmann tem mais de
+    // uma filial (CNPJs diferentes) sob o mesmo nome no cadastro, então usar
+    // o CNPJ genérico do cadastro em vez do que foi lido aqui causava
+    // divergência falsa na conferência com a nota (a nota vem da filial
+    // certa, mas o pedido ficava salvo com o CNPJ errado da matriz).
+    pedidoCnpjExtraido = extraido.empresa_compradora_cnpj || null;
+
     const cnpjLido = apenasDigitos(extraido.empresa_compradora_cnpj);
     let empresaEncontrada = null;
     if (cnpjLido) empresaEncontrada = empresasCache.find((e) => apenasDigitos(e.cnpj) === cnpjLido);
@@ -392,7 +400,10 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
     const info = document.getElementById("pedido-empresa-info");
     if (empresaEncontrada) {
       document.getElementById("pedido-empresa").value = String(empresaEncontrada.id);
-      info.textContent = "";
+      info.textContent =
+        cnpjLido && cnpjLido !== apenasDigitos(empresaEncontrada.cnpj)
+          ? `⚠️ CNPJ lido (${extraido.empresa_compradora_cnpj}) é diferente do cadastrado pra "${empresaEncontrada.nome}" — provavelmente outra filial. O CNPJ lido será usado na conferência.`
+          : "";
     } else {
       info.textContent = `IA leu: "${extraido.empresa_compradora_nome || "?"}"${
         extraido.empresa_compradora_cnpj ? ` (CNPJ ${extraido.empresa_compradora_cnpj})` : ""
@@ -444,7 +455,10 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       comprador_nome: compradorNome,
       empresa_id: empresaId,
       empresa_nome: empresa ? empresa.nome : null,
-      empresa_cnpj: empresa ? empresa.cnpj : null,
+      // Prefere o CNPJ REALMENTE lido no pedido (pode ser de uma filial
+      // diferente da cadastrada) — só cai pro CNPJ do cadastro se a IA não
+      // conseguiu ler nenhum.
+      empresa_cnpj: pedidoCnpjExtraido || (empresa ? empresa.cnpj : null),
       numero_pedido: document.getElementById("pedido-numero").value.trim() || null,
       local_retirada: document.getElementById("pedido-local").value.trim() || null,
       arquivo_url: url,
@@ -469,6 +483,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
     pedidoItensExtraidos = null;
     pedidoFornecedorExtraido = null;
     pedidoCondicaoPagamentoExtraida = null;
+    pedidoCnpjExtraido = null;
     loadMeusPedidos();
   } catch (err) {
     feedback.textContent = "Erro: " + err.message;
@@ -1915,7 +1930,21 @@ function renderHistorico() {
       const pedido = p.rl_pedidos || {};
       const motorista = (p.rl_rotas || {}).motorista_nome || "—";
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
-      const status = p.entrega_parcial ? "📦 Entrega parcial" : divergente ? "⚠️ Divergência" : "✅ OK";
+      // "OK" só quando teve dado de verdade pra comparar — se a nota não foi
+      // lida (foto ruim, ilegível), não teve conferência nenhuma, então não
+      // pode aparecer como se tivesse batido tudo certinho.
+      const notaSemLeitura =
+        p.nota_valor_total == null &&
+        !p.nota_cnpj &&
+        !p.nota_emitente_nome &&
+        (!Array.isArray(p.nota_itens) || !p.nota_itens.length);
+      const status = p.entrega_parcial
+        ? "📦 Entrega parcial"
+        : divergente
+          ? "⚠️ Divergência"
+          : notaSemLeitura
+            ? "❓ Nota não lida"
+            : "✅ OK";
       return `
       <div class="card-pedido historico-parada-card">
         <div class="card-pedido-head">
