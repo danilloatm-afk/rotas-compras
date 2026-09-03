@@ -1198,7 +1198,7 @@ let notaItensExtraidos = null;
 let notaTipoDocumento = null;
 let notaEmitenteExtraido = null;
 
-document.getElementById("btn-ler-nota").addEventListener("click", async () => {
+async function lerNotaComIA() {
   const input = document.getElementById("nota-arquivo");
   const feedback = document.getElementById("nota-ia-feedback");
   const file = input.files && input.files[0];
@@ -1227,7 +1227,15 @@ document.getElementById("btn-ler-nota").addEventListener("click", async () => {
     feedback.textContent = "Erro: " + err.message;
     feedback.className = "feedback error";
   }
-});
+}
+
+document.getElementById("btn-ler-nota").addEventListener("click", lerNotaComIA);
+// Roda sozinho assim que a foto é escolhida — sem depender do motorista
+// lembrar de clicar em "Ler nota com IA" (na prática, quando ele esquecia,
+// a conferência ficava toda em branco e ele acabava marcando qualquer coisa
+// como "Entrega parcial" só pra conseguir enviar). O botão continua aqui
+// pra reler manualmente se precisar.
+document.getElementById("nota-arquivo").addEventListener("change", lerNotaComIA);
 
 // Casa os itens do pedido com os da nota pelo nome do produto (a ordem pode
 // mudar de um documento pro outro). Tenta igualdade exata primeiro, depois
