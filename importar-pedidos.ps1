@@ -243,6 +243,7 @@ foreach ($arquivo in $arquivos) {
             empresa_nome    = if ($empresa) { $empresa.nome } else { $dados.empresa_compradora_nome }
             empresa_cnpj    = if ($empresa) { $empresa.cnpj } else { $dados.empresa_compradora_cnpj }
             fornecedor_nome = if ($dados.fornecedor_nome) { $dados.fornecedor_nome } else { $null }
+            condicao_pagamento_codigo = if ($dados.condicao_pagamento_codigo) { $dados.condicao_pagamento_codigo } else { $null }
             numero_pedido   = if ($dados.numero_pedido) { $dados.numero_pedido } else { $null }
             local_retirada  = if ($dados.local_retirada) { $dados.local_retirada } else { $null }
             arquivo_url     = $arquivoUrl
