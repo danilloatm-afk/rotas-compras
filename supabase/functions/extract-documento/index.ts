@@ -79,6 +79,13 @@ const SCHEMA_PEDIDO = {
         "Nome/razão social da empresa VENDEDORA — o FORNECEDOR que está vendendo a mercadoria (seção 'Dados do Fornecedor'), " +
         "nunca a empresa compradora do cabeçalho/timbre. Omita se não conseguir identificar com confiança.",
     },
+    condicao_pagamento_codigo: {
+      type: "string",
+      description:
+        "Código da condição de pagamento — número (geralmente com 3 dígitos, ex: '038') que aparece perto do rótulo " +
+        "'Condições de Pagamento:' na seção 'Informações Adicionais'. Copie exatamente os dígitos impressos, sem adicionar " +
+        "nem remover zeros à esquerda. Omita se não encontrar esse campo.",
+    },
     frete_fob: {
       type: "boolean",
       description:
@@ -159,6 +166,28 @@ const SCHEMA_NOTA = {
         "Nome/razão social de quem EMITIU a nota — o 'Emitente' numa nota de produto (DANFE), ou o 'Prestador'/'Fornecedor' " +
         "numa nota de SERVIÇO (NFS-e/DANFSe).",
     },
+    data_emissao: {
+      type: "string",
+      description:
+        "Data de emissão da nota (campo 'Data da Emissão' ou 'DATA DA EMISSÃO'). Formato AAAA-MM-DD (ex: 2026-09-02). Omita " +
+        "se não conseguir ler com confiança.",
+    },
+    parcelas_pagamento: {
+      type: "array",
+      description:
+        "Cada parcela/duplicata da seção 'Fatura/Duplicata' (ou 'Cálculo de Imposto'/rodapé equivalente) — ex: 'A PRAZO 30 " +
+        "DIAS --> 1: 02/10/2026 - R$ 104,00' vira uma parcela com essa data e valor. Se a nota for à vista ou não tiver essa " +
+        "seção, omita o campo inteiro (não invente uma parcela).",
+      items: {
+        type: "object",
+        properties: {
+          data_vencimento: { type: "string", description: "Data de vencimento desta parcela, formato AAAA-MM-DD." },
+          valor: { type: "number", description: "Valor desta parcela em R$, apenas números." },
+        },
+        required: ["data_vencimento"],
+        additionalProperties: false,
+      },
+    },
     itens: {
       type: "array",
       description:
@@ -212,7 +241,9 @@ const PROMPT_PEDIDO =
   "documento. Retorne frete_fob=true só se a palavra aparecer literalmente; caso contrário, frete_fob=false.\n\n" +
   "6) ITENS: extraia cada linha da tabela de itens (produto, quantidade, valor unitário) — não misture o valor/quantidade " +
   "de uma linha com o de outra linha vizinha.\n\n" +
-  "7) Leia os números (CNPJ, valores) com cuidado, dígito por dígito, sem inventar ou aproximar.";
+  "7) CONDIÇÃO DE PAGAMENTO: copie o código numérico do campo 'Condições de Pagamento:' (seção 'Informações Adicionais'), " +
+  "exatamente como impresso (com os zeros à esquerda, se houver).\n\n" +
+  "8) Leia os números (CNPJ, valores) com cuidado, dígito por dígito, sem inventar ou aproximar.";
 
 const PROMPT_NOTA =
   "Extraia os dados desta nota fiscal. Pode ser uma nota de PRODUTO (DANFE) ou uma nota de SERVIÇO (NFS-e/DANFSe, " +
@@ -226,7 +257,10 @@ const PROMPT_NOTA =
   "monte um único item em itens[] usando essa descrição como produto_nome, quantidade 1 e valor_total = valor total da nota.\n\n" +
   "Em qualquer um dos dois casos: o CNPJ e nome de quem RECEBE (destinatário/tomador) são os mais importantes de extrair " +
   "corretamente, não confunda com o de quem emitiu/prestou. A foto pode ter qualidade ruim, reflexo ou estar levemente " +
-  "torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em vez de arriscar um valor errado.";
+  "torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em vez de arriscar um valor errado.\n\n" +
+  "Extraia também a DATA DE EMISSÃO da nota, e cada parcela/duplicata de pagamento (data de vencimento e valor) da seção " +
+  "'Fatura/Duplicata' ou equivalente — usadas depois pra conferir se o prazo de pagamento bate com a condição combinada no " +
+  "pedido. Se a nota for à vista ou não tiver essa seção, não invente uma parcela.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
