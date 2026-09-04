@@ -2144,6 +2144,28 @@ function renderCardsHistorico(paradas) {
     .join("");
 }
 
+// Detecta divergências NOVAS entre uma atualização e outra (pra avisar por
+// voz só o que apareceu agora, não repetir o que já tinha sido avisado) —
+// pensado pro app ficar aberto o dia todo numa TV/tela fixa no setor.
+let idsHistoricoConhecidos = null; // null = ainda não carregou nenhuma vez
+function avisarDivergenciasNovas(paradasAtuais) {
+  const idsAtuais = new Set(paradasAtuais.map((p) => p.id));
+  if (idsHistoricoConhecidos) {
+    paradasAtuais
+      .filter((p) => !idsHistoricoConhecidos.has(p.id) && !p.entrega_parcial)
+      .filter((p) => p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento)
+      .forEach((p) => {
+        const pedido = p.rl_pedidos || {};
+        falarAlerta(
+          `Atenção! Divergência encontrada. Comprador ${pedido.comprador_nome || "não informado"}, pedido ${
+            pedido.numero_pedido || "sem número"
+          }.`
+        );
+      });
+  }
+  idsHistoricoConhecidos = idsAtuais;
+}
+
 async function loadHistorico() {
   const el = document.getElementById("lista-historico");
   const dataInicio = document.getElementById("filtro-data-inicio").value;
@@ -2163,6 +2185,9 @@ async function loadHistorico() {
     return;
   }
   historicoCache = data || [];
+  // Só avisa por voz quando a busca não tem filtro de data (senão uma busca
+  // por um dia antigo dispararia alerta de coisa que já é velha).
+  if (!dataInicio && !dataFim) avisarDivergenciasNovas(historicoCache);
 
   const selEmpresa = document.getElementById("filtro-empresa-historico");
   const empresaAtual = selEmpresa.value;
@@ -2307,4 +2332,9 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
 (async function init() {
   await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes(), loadCondicoesPagamento()]);
   loadMeusPedidos();
+
+  // Atualização automática do Histórico a cada 1 min — pensado pro app ficar
+  // aberto o dia todo (ex: numa TV do setor), avisando por voz na hora que
+  // uma divergência nova aparecer, sem precisar de ninguém clicar em nada.
+  setInterval(loadHistorico, 60000);
 })();
