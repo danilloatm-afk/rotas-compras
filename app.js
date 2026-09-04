@@ -1951,7 +1951,8 @@ function renderResolucaoDivergencia(parada) {
     }${parada.resolucao_em ? `, ${formatarDataHora(parada.resolucao_em)}` : ""} <button class="link-btn" type="button" data-editar-resolucao="${parada.id}">Editar</button></div>`;
   }
   return `<div class="resolucao-form">
-    <textarea class="input-resolucao" data-parada-id="${parada.id}" rows="2" placeholder="O que foi decidido sobre essa divergência? (ex: fornecedor vai reemitir a nota)">${escapeHtml(
+    <label class="form-label">⚠️ Decisão sobre a divergência acima (o que foi combinado com fornecedor/comprador)</label>
+    <textarea class="input-resolucao" data-parada-id="${parada.id}" rows="2" placeholder="Ex: fornecedor vai reemitir a nota">${escapeHtml(
       parada.resolucao_divergencia || ""
     )}</textarea>
     <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}">Salvar decisão</button>
@@ -2030,7 +2031,8 @@ function renderHistorico() {
                       .join(" ")}</div>`
                   : "")
               : `<div class="recebimento-form">
-                  <textarea class="input-obs-recebimento" data-parada-id="${p.id}" rows="2" placeholder="Observação (opcional)"></textarea>
+                  <label class="form-label">📦 Observação do almoxarifado sobre o recebimento (opcional — ex: avaria, embalagem violada, faltou algo)</label>
+                  <textarea class="input-obs-recebimento" data-parada-id="${p.id}" rows="2" placeholder="Ex: caixa chegou amassada"></textarea>
                   <input type="file" class="input-fotos-recebimento" data-parada-id="${p.id}" accept="image/*" capture="environment" multiple>
                   <button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>
                 </div>`
