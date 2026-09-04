@@ -50,6 +50,20 @@ function mostrarAviso(mensagem) {
   setTimeout(() => toast.remove(), 5000);
 }
 
+// Fala em voz alta usando a síntese de voz do próprio navegador — sem custo,
+// sem chave de API. Nem todo navegador/dispositivo suporta, então falha em
+// silêncio se não tiver (o alerta visual normal continua funcionando igual).
+function falarAlerta(texto) {
+  if (!("speechSynthesis" in window)) return;
+  try {
+    const utterance = new SpeechSynthesisUtterance(texto);
+    utterance.lang = "pt-BR";
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    // silencioso de propósito — alerta sonoro é um extra, nunca deve travar o fluxo
+  }
+}
+
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -1683,6 +1697,17 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     const { data: pendentes } = await db.from("rl_rota_paradas").select("id").eq("rota_id", rotaAtualId).eq("status", "pendente");
     if (!pendentes || !pendentes.length) {
       await db.from("rl_rotas").update({ status: "concluida" }).eq("id", rotaAtualId);
+    }
+
+    // Alerta sonoro (voz do navegador, sem custo) na hora que uma divergência
+    // é encontrada — pra quem estiver por perto ouvir na hora, sem precisar
+    // ficar checando o Histórico depois.
+    const pedidoConcluido = paradaEmEdicao.rl_pedidos || {};
+    if (!entregaParcial && (divergValor || divergCnpj || itensDivergentes || divergCondicao)) {
+      falarAlerta(
+        `Atenção! Divergência encontrada. Comprador ${pedidoConcluido.comprador_nome || "não informado"}, ` +
+          `pedido ${pedidoConcluido.numero_pedido || "sem número"}.`
+      );
     }
 
     document.getElementById("modal-overlay").classList.add("hidden");
