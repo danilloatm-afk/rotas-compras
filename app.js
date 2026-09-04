@@ -1959,19 +1959,61 @@ function renderResolucaoDivergencia(parada) {
   </div>`;
 }
 
+const ITENS_POR_PAGINA_HISTORICO = 10;
+let paginaHistoricoAtual = 1;
+
 function renderHistorico() {
   const el = document.getElementById("lista-historico");
   const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
-  const paradas = empresaFiltro
+  const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim().toLowerCase();
+  let paradas = empresaFiltro
     ? historicoCache.filter((p) => (p.rl_pedidos || {}).empresa_nome === empresaFiltro)
     : historicoCache;
+  if (numeroFiltro) {
+    paradas = paradas.filter((p) => ((p.rl_pedidos || {}).numero_pedido || "").toLowerCase().includes(numeroFiltro));
+  }
 
   if (!paradas.length) {
     el.innerHTML = `<p class="empty-state">${
-      historicoCache.length ? "Nenhuma parada concluída dessa empresa." : "Nenhuma parada concluída ainda."
+      historicoCache.length ? "Nenhuma parada concluída com esse filtro." : "Nenhuma parada concluída ainda."
     }</p>`;
+    document.getElementById("paginacao-historico").innerHTML = "";
     return;
   }
+
+  const totalPaginas = Math.ceil(paradas.length / ITENS_POR_PAGINA_HISTORICO);
+  if (paginaHistoricoAtual > totalPaginas) paginaHistoricoAtual = totalPaginas;
+  if (paginaHistoricoAtual < 1) paginaHistoricoAtual = 1;
+  const inicio = (paginaHistoricoAtual - 1) * ITENS_POR_PAGINA_HISTORICO;
+  const paradasPagina = paradas.slice(inicio, inicio + ITENS_POR_PAGINA_HISTORICO);
+
+  renderPaginacaoHistorico(totalPaginas);
+  renderCardsHistorico(paradasPagina);
+}
+
+function renderPaginacaoHistorico(totalPaginas) {
+  const el = document.getElementById("paginacao-historico");
+  if (totalPaginas <= 1) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = Array.from({ length: totalPaginas }, (_, i) => i + 1)
+    .map(
+      (n) =>
+        `<button type="button" class="btn-pagina${n === paginaHistoricoAtual ? " ativa" : ""}" data-pagina-historico="${n}">${n}</button>`
+    )
+    .join("");
+}
+
+document.getElementById("paginacao-historico").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-pagina-historico]");
+  if (!btn) return;
+  paginaHistoricoAtual = Number(btn.dataset.paginaHistorico);
+  renderHistorico();
+});
+
+function renderCardsHistorico(paradas) {
+  const el = document.getElementById("lista-historico");
   el.innerHTML = paradas
     .map((p) => {
       const pedido = p.rl_pedidos || {};
@@ -2074,13 +2116,28 @@ async function loadHistorico() {
   renderHistorico();
 }
 
-document.getElementById("filtro-empresa-historico").addEventListener("change", renderHistorico);
-document.getElementById("filtro-data-inicio").addEventListener("change", loadHistorico);
-document.getElementById("filtro-data-fim").addEventListener("change", loadHistorico);
+document.getElementById("filtro-empresa-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  renderHistorico();
+});
+document.getElementById("filtro-numero-historico").addEventListener("input", () => {
+  paginaHistoricoAtual = 1;
+  renderHistorico();
+});
+document.getElementById("filtro-data-inicio").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-data-fim").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
 document.getElementById("btn-limpar-filtros-historico").addEventListener("click", () => {
   document.getElementById("filtro-empresa-historico").value = "";
+  document.getElementById("filtro-numero-historico").value = "";
   document.getElementById("filtro-data-inicio").value = "";
   document.getElementById("filtro-data-fim").value = "";
+  paginaHistoricoAtual = 1;
   loadHistorico();
 });
 
