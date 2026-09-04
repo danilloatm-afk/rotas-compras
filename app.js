@@ -1939,6 +1939,25 @@ function renderDivergenciasParada(parada) {
 // terminar (rotas costumam levar o dia todo).
 let historicoCache = [];
 
+// Registra o que foi decidido sobre uma divergência (ex: "fornecedor vai
+// reemitir a nota", "confirmado, é a filial certa mesmo") — fica visível
+// pra quem olhar o Histórico depois, sem precisar perguntar de novo.
+let resolucoesEmEdicao = new Set();
+function renderResolucaoDivergencia(parada) {
+  const jaTemResolucao = !!parada.resolucao_divergencia;
+  if (jaTemResolucao && !resolucoesEmEdicao.has(parada.id)) {
+    return `<div class="card-meta">💬 Decisão: ${escapeHtml(parada.resolucao_divergencia)}${
+      parada.resolucao_por ? ` — ${escapeHtml(parada.resolucao_por)}` : ""
+    }${parada.resolucao_em ? `, ${formatarDataHora(parada.resolucao_em)}` : ""} <button class="link-btn" type="button" data-editar-resolucao="${parada.id}">Editar</button></div>`;
+  }
+  return `<div class="resolucao-form">
+    <textarea class="input-resolucao" data-parada-id="${parada.id}" rows="2" placeholder="O que foi decidido sobre essa divergência? (ex: fornecedor vai reemitir a nota)">${escapeHtml(
+      parada.resolucao_divergencia || ""
+    )}</textarea>
+    <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}">Salvar decisão</button>
+  </div>`;
+}
+
 function renderHistorico() {
   const el = document.getElementById("lista-historico");
   const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
@@ -1993,7 +2012,7 @@ function renderHistorico() {
             : divergente
               ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}<a class="btn secondary small" href="${linkAvisoComprador(
                   p
-                )}" target="_blank" rel="noopener">📱 Avisar comprador</a></div>`
+                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}</div>`
               : ""
         }
         <div class="card-meta">
@@ -2122,6 +2141,36 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
     return;
   }
   loadHistorico();
+});
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btnEditar = e.target.closest("button[data-editar-resolucao]");
+  if (btnEditar) {
+    resolucoesEmEdicao.add(btnEditar.dataset.editarResolucao);
+    renderHistorico();
+    return;
+  }
+  const btnSalvar = e.target.closest("button[data-salvar-resolucao]");
+  if (btnSalvar) {
+    const paradaId = btnSalvar.dataset.salvarResolucao;
+    const textarea = document.querySelector(`.input-resolucao[data-parada-id="${paradaId}"]`);
+    const texto = textarea.value.trim();
+    if (!texto) {
+      mostrarAviso("Escreva o que foi decidido antes de salvar.");
+      return;
+    }
+    const quemRegistrou = document.getElementById("almoxarife-select").value || null;
+    const { error } = await db
+      .from("rl_rota_paradas")
+      .update({ resolucao_divergencia: texto, resolucao_por: quemRegistrou, resolucao_em: new Date().toISOString() })
+      .eq("id", paradaId);
+    if (error) {
+      mostrarAviso("Erro ao salvar: " + error.message);
+      return;
+    }
+    resolucoesEmEdicao.delete(paradaId);
+    await loadHistorico();
+  }
 });
 
 // ---------- botões de atualizar (dados podem mudar por outro comprador/motorista usando o site ao mesmo tempo) ----------
