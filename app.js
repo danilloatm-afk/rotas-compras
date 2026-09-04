@@ -1591,6 +1591,34 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     feedback.className = "feedback error";
     return;
   }
+
+  const btnConcluir = document.getElementById("btn-concluir-parada");
+  // Sem isso, uma nota que não foi lida (foto ruim, motorista esqueceu de
+  // esperar a leitura, ou fotografou o documento errado) ia direto pro banco
+  // em branco, sem ninguém perceber — só aparecia depois, no Histórico,
+  // como "❓ Nota não lida". Bloqueia a primeira tentativa e exige confirmar
+  // de novo, igual ao padrão de "clique duas vezes" já usado no resto do app.
+  const entregaParcialAgora = document.getElementById("nota-parcial").checked;
+  const nadaLido =
+    !entregaParcialAgora &&
+    !document.getElementById("nota-valor").value &&
+    !document.getElementById("nota-cnpj").value.trim() &&
+    !notaEmitenteExtraido &&
+    (!notaItensExtraidos || !notaItensExtraidos.length);
+  if (nadaLido && !btnConcluir.dataset.confirmandoSemDados) {
+    btnConcluir.dataset.confirmandoSemDados = "1";
+    btnConcluir.textContent = "Nota não lida — clique de novo pra enviar assim mesmo";
+    feedback.textContent = "⚠️ Não conseguimos ler nada da nota (valor, CNPJ e itens em branco). Confira se a foto está nítida e tente ler de novo, ou clique no botão acima pra enviar mesmo assim.";
+    feedback.className = "feedback error";
+    setTimeout(() => {
+      delete btnConcluir.dataset.confirmandoSemDados;
+      btnConcluir.textContent = "Concluir parada";
+    }, 8000);
+    return;
+  }
+  delete btnConcluir.dataset.confirmandoSemDados;
+  btnConcluir.textContent = "Concluir parada";
+
   feedback.textContent = "Salvando...";
   feedback.className = "feedback";
   try {
