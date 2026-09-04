@@ -337,6 +337,7 @@ input, select, textarea {
 .recebimento-form textarea { width: 100%; resize: vertical; font-family: inherit; }
 .resolucao-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
 .resolucao-form textarea { width: 100%; resize: vertical; font-family: inherit; }
+.form-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
 
 .toast-aviso {
   position: fixed;
