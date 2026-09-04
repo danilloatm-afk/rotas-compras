@@ -335,6 +335,8 @@ input, select, textarea {
 .historico-parada-card { max-width: 640px; margin-bottom: 0.9rem; }
 .recebimento-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
 .recebimento-form textarea { width: 100%; resize: vertical; font-family: inherit; }
+.resolucao-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
+.resolucao-form textarea { width: 100%; resize: vertical; font-family: inherit; }
 
 .toast-aviso {
   position: fixed;
