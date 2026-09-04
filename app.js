@@ -53,12 +53,17 @@ function mostrarAviso(mensagem) {
 // Fala em voz alta usando a síntese de voz do próprio navegador — sem custo,
 // sem chave de API. Nem todo navegador/dispositivo suporta, então falha em
 // silêncio se não tiver (o alerta visual normal continua funcionando igual).
-function falarAlerta(texto) {
+function falarAlerta(texto, vezes = 2) {
   if (!("speechSynthesis" in window)) return;
   try {
-    const utterance = new SpeechSynthesisUtterance(texto);
-    utterance.lang = "pt-BR";
-    window.speechSynthesis.speak(utterance);
+    // Fala mais de uma vez de propósito — num ambiente barulhento (pátio,
+    // oficina) um aviso só, uma vez, passa despercebido fácil. As falas
+    // entram na fila do navegador e tocam uma depois da outra sozinhas.
+    for (let i = 0; i < vezes; i++) {
+      const utterance = new SpeechSynthesisUtterance(texto);
+      utterance.lang = "pt-BR";
+      window.speechSynthesis.speak(utterance);
+    }
   } catch (e) {
     // silencioso de propósito — alerta sonoro é um extra, nunca deve travar o fluxo
   }
