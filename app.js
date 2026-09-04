@@ -2067,17 +2067,25 @@ function renderResolucaoDivergencia(parada) {
 
 const ITENS_POR_PAGINA_HISTORICO = 10;
 let paginaHistoricoAtual = 1;
+let somenteDivergentesHistorico = false;
+
+function paradaEDivergente(p) {
+  return !p.entrega_parcial && (p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento);
+}
 
 function renderHistorico() {
   const el = document.getElementById("lista-historico");
   const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
+  const compradorFiltro = document.getElementById("filtro-comprador-historico").value;
   const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim().toLowerCase();
   let paradas = empresaFiltro
     ? historicoCache.filter((p) => (p.rl_pedidos || {}).empresa_nome === empresaFiltro)
     : historicoCache;
+  if (compradorFiltro) paradas = paradas.filter((p) => (p.rl_pedidos || {}).comprador_nome === compradorFiltro);
   if (numeroFiltro) {
     paradas = paradas.filter((p) => ((p.rl_pedidos || {}).numero_pedido || "").toLowerCase().includes(numeroFiltro));
   }
+  if (somenteDivergentesHistorico) paradas = paradas.filter(paradaEDivergente);
 
   if (!paradas.length) {
     el.innerHTML = `<p class="empty-state">${
@@ -2244,10 +2252,21 @@ async function loadHistorico() {
     `<option value="">Todas as empresas</option>` + empresas.map((emp) => `<option value="${escapeHtml(emp)}">${escapeHtml(emp)}</option>`).join("");
   if (empresas.includes(empresaAtual)) selEmpresa.value = empresaAtual;
 
+  const selComprador = document.getElementById("filtro-comprador-historico");
+  const compradorAtual = selComprador.value;
+  const compradores = [...new Set(historicoCache.map((p) => (p.rl_pedidos || {}).comprador_nome).filter(Boolean))].sort();
+  selComprador.innerHTML =
+    `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
+
   renderHistorico();
 }
 
 document.getElementById("filtro-empresa-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  renderHistorico();
+});
+document.getElementById("filtro-comprador-historico").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
   renderHistorico();
 });
@@ -2263,11 +2282,20 @@ document.getElementById("filtro-data-fim").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
+document.getElementById("btn-somente-divergentes").addEventListener("click", (e) => {
+  somenteDivergentesHistorico = !somenteDivergentesHistorico;
+  e.currentTarget.classList.toggle("ativo", somenteDivergentesHistorico);
+  paginaHistoricoAtual = 1;
+  renderHistorico();
+});
 document.getElementById("btn-limpar-filtros-historico").addEventListener("click", () => {
   document.getElementById("filtro-empresa-historico").value = "";
+  document.getElementById("filtro-comprador-historico").value = "";
   document.getElementById("filtro-numero-historico").value = "";
   document.getElementById("filtro-data-inicio").value = "";
   document.getElementById("filtro-data-fim").value = "";
+  somenteDivergentesHistorico = false;
+  document.getElementById("btn-somente-divergentes").classList.remove("ativo");
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
