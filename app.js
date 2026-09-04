@@ -1397,8 +1397,53 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     pedidoUsado.add(idxPedido);
   });
 
+  // 3ª tentativa, pra quem ainda sobrou: fornecedor às vezes vende por
+  // "pacote" (ex: nome do produto vem com "C/100" — cento de folhas — e a
+  // nota lista 5 pacotes a R$64 enquanto o pedido lista 500 folhas a R$0,64)
+  // — quantidade e valor unitário nunca vão bater nesse caso, mas o VALOR
+  // TOTAL da linha continua sendo o mesmo dinheiro, então casa por ele.
+  function valorTotalDoItem(item) {
+    if (item.valor_total != null) return item.valor_total;
+    if (item.quantidade != null && item.valor_unitario != null) return item.quantidade * item.valor_unitario;
+    return null;
+  }
+  const candidatosPorTotal = [];
+  pedidoComMatch.forEach(({ pItem, match }, idxPedido) => {
+    if (match) return;
+    const totalP = valorTotalDoItem(pItem);
+    if (totalP == null) return;
+    restantes.forEach((n, idxNota) => {
+      if (n.usado) return;
+      const totalN = valorTotalDoItem(n);
+      if (totalN == null) return;
+      const diff = Math.abs(totalP - totalN);
+      if (diff <= TOLERANCIA_VALOR) candidatosPorTotal.push({ idxPedido, idxNota, diff });
+    });
+  });
+  candidatosPorTotal.sort((a, b) => a.diff - b.diff);
+  candidatosPorTotal.forEach(({ idxPedido, idxNota }) => {
+    if (pedidoComMatch[idxPedido].match || restantes[idxNota].usado) return;
+    pedidoComMatch[idxPedido].match = restantes[idxNota];
+    pedidoComMatch[idxPedido].matchPorTotal = true;
+    restantes[idxNota].usado = true;
+  });
+
   let divergente = false;
-  const linhas = pedidoComMatch.map(({ pItem, match }) => {
+  const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal }) => {
+    // Casado só pelo valor total (embalagem diferente) — quantidade e valor
+    // unitário não vão bater mesmo, e tudo bem; o que importa é o total.
+    if (matchPorTotal) {
+      return {
+        produto: pItem.produto_nome,
+        qtdP: pItem.quantidade,
+        qtdN: match.quantidade,
+        vuP: pItem.valor_unitario,
+        vuN: match.valor_unitario,
+        match: true,
+        divergente: false,
+        obs: "embalagem diferente, mesmo valor total",
+      };
+    }
     const qtdOk = match && pItem.quantidade != null && match.quantidade != null ? Math.abs(pItem.quantidade - match.quantidade) < 0.01 : null;
     const vuOk =
       match && pItem.valor_unitario != null && match.valor_unitario != null
@@ -1427,7 +1472,7 @@ function renderTabelaItens(resultado) {
     .map(
       (l) => `
     <tr class="${l.divergente ? "linha-divergente" : ""}">
-      <td>${escapeHtml(l.produto)}</td>
+      <td>${escapeHtml(l.produto)}${l.obs ? `<div class="hint">📦 ${escapeHtml(l.obs)}</div>` : ""}</td>
       <td>${l.qtdP ?? "—"}</td>
       <td>${l.match ? l.qtdN ?? "—" : "não encontrado"}</td>
       <td>${formatarMoeda(l.vuP)}</td>
