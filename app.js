@@ -1545,11 +1545,14 @@ function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
       const peso = comValor ? p.valor : 1;
       return soma + dias * peso;
     }, 0) / pesoTotal;
-  const diferenca = Math.abs(diasEsperados - diasNota);
+  // Só é problema quando a nota dá MENOS prazo do que o combinado (a empresa
+  // acaba tendo que pagar mais cedo do que devia). Prazo maior é bom pra nós
+  // — mais tempo pra pagar — então nunca conta como divergência.
+  const diferenca = diasEsperados - diasNota;
   return diferenca <= TOLERANCIA_DIAS_PAGAMENTO
     ? { msgCondicao: `✅ Prazo de pagamento confere (${Math.round(diasNota)} dias, condição ${escapeHtml(codigo)}).`, divergCondicao: false }
     : {
-        msgCondicao: `⚠️ Prazo de pagamento diferente: condição ${escapeHtml(codigo)} do pedido espera ~${Math.round(
+        msgCondicao: `⚠️ Prazo de pagamento menor que o esperado: condição ${escapeHtml(codigo)} do pedido espera ~${Math.round(
           diasEsperados
         )} dias, nota saiu com ${Math.round(diasNota)} dias.`,
         divergCondicao: true,
