@@ -191,6 +191,7 @@ input, select, textarea {
 .btn.primary { background: var(--primary); color: white; }
 .btn.primary:hover { background: var(--primary-hover); }
 .btn.secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.btn.secondary.ativo { background: var(--atrasado-bg); border-color: var(--atrasado); color: var(--atrasado); }
 .btn.secondary.danger { color: var(--atrasado); border-color: var(--atrasado); }
 .btn.small { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
