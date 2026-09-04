@@ -84,6 +84,9 @@ create table rl_rota_paradas (
   recebido_em timestamptz,
   recebido_observacao text,
   recebido_fotos jsonb,
+  resolucao_divergencia text,
+  resolucao_por text,
+  resolucao_em timestamptz,
   concluido_em timestamptz,
   criado_em timestamptz not null default now()
 );
