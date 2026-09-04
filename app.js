@@ -1282,9 +1282,36 @@ function normalizarProduto(nome) {
   return String(nome || "").toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-function compararItens(pedidoItens, notaItens) {
-  pedidoItens = Array.isArray(pedidoItens) ? pedidoItens : [];
-  notaItens = Array.isArray(notaItens) ? notaItens : [];
+// O mesmo produto às vezes aparece em mais de uma linha num dos dois
+// documentos (ex: pedido lista "FILTRO DE ÓLEO" em 2 linhas de 5, cada uma
+// com um centro de custo/data diferente, e a nota junta tudo numa linha só
+// de 10) — sem agrupar antes, a comparação linha-a-linha acusaria
+// divergência de quantidade numa linha e "não encontrado" na outra, mesmo
+// batendo tudo certo no total. Agrupa por nome antes de comparar, somando
+// quantidade e tirando a média do valor unitário ponderada pela quantidade.
+function agruparPorProduto(itens) {
+  const grupos = new Map();
+  itens.forEach((item) => {
+    const chave = normalizarProduto(item.produto_nome);
+    if (!grupos.has(chave)) grupos.set(chave, { ...item, quantidade: 0, __pesoValor: 0, __pesoQtd: 0 });
+    const g = grupos.get(chave);
+    const qtd = item.quantidade || 0;
+    g.quantidade += qtd;
+    if (item.valor_unitario != null) {
+      g.__pesoValor += item.valor_unitario * (qtd || 1);
+      g.__pesoQtd += qtd || 1;
+    }
+  });
+  return [...grupos.values()].map((g) => {
+    const valor_unitario = g.__pesoQtd > 0 ? g.__pesoValor / g.__pesoQtd : g.valor_unitario;
+    const { __pesoValor, __pesoQtd, ...resto } = g;
+    return { ...resto, valor_unitario };
+  });
+}
+
+function compararItens(pedidoItensBrutos, notaItensBrutos) {
+  const pedidoItens = agruparPorProduto(Array.isArray(pedidoItensBrutos) ? pedidoItensBrutos : []);
+  const notaItens = agruparPorProduto(Array.isArray(notaItensBrutos) ? notaItensBrutos : []);
   if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
 
   const restantes = notaItens.map((it) => ({ ...it, usado: false }));
