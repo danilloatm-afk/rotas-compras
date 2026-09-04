@@ -339,6 +339,20 @@ input, select, textarea {
 .resolucao-form textarea { width: 100%; resize: vertical; font-family: inherit; }
 .form-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
 
+.paginacao { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 1rem 0; }
+.btn-pagina {
+  min-width: 2.2rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.btn-pagina:hover { background: var(--surface-hover, var(--border)); }
+.btn-pagina.ativa { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+
 .toast-aviso {
   position: fixed;
   left: 50%;
