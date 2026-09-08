@@ -1913,16 +1913,20 @@ function chaveAnoMes(data) {
 async function loadIndicadores() {
   const container = document.getElementById("grafico-coletados");
   const containerDivergencias = document.getElementById("grafico-divergencias");
+  const containerSemResposta = document.getElementById("tabela-divergencias-sem-resposta");
   const { data, error } = await comTimeout(
     db
       .from("rl_rota_paradas")
-      .select("concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento")
+      .select(
+        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, rl_pedidos(comprador_nome)"
+      )
       .eq("status", "concluida")
       .not("concluido_em", "is", null)
   );
   if (error) {
     container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerDivergencias.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerSemResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     return;
   }
 
@@ -1944,6 +1948,12 @@ async function loadIndicadores() {
     { chave: "divergencia_condicao_pagamento", label: "Cond. pgto", total: 0 },
   ];
 
+  // Divergências que ainda não têm uma decisão registrada (resolucao_divergencia
+  // vazia), agrupadas por comprador, com os dias corridos desde a conclusão da
+  // parada — pra saber quem está devendo resposta e há quanto tempo.
+  const semRespostaPorComprador = new Map();
+  const hojeMs = Date.now();
+
   (data || []).forEach((p) => {
     const chave = chaveAnoMes(new Date(p.concluido_em));
     if (porChave[chave]) porChave[chave].total++;
@@ -1951,11 +1961,49 @@ async function loadIndicadores() {
       tiposDivergencia.forEach((t) => {
         if (p[t.chave]) t.total++;
       });
+
+      const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
+      if (divergente && !p.resolucao_divergencia) {
+        const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+        const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
+        const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0 };
+        atual.total++;
+        atual.diasMax = Math.max(atual.diasMax, dias);
+        semRespostaPorComprador.set(comprador, atual);
+      }
     }
   });
 
   renderGraficoBarras(container, meses, "var(--primary)", (m) => `${m.label}: ${m.total} pedido(s) coletado(s)`);
   renderGraficoBarras(containerDivergencias, tiposDivergencia, "var(--atrasado)", (t) => `${t.label}: ${t.total} divergência(s)`);
+
+  const listaSemResposta = Array.from(semRespostaPorComprador.values()).sort((a, b) => b.diasMax - a.diasMax);
+  renderTabelaSemResposta(listaSemResposta);
+}
+
+function renderTabelaSemResposta(lista) {
+  const container = document.getElementById("tabela-divergencias-sem-resposta");
+  if (!lista.length) {
+    container.innerHTML = `<p class="empty-state">Nenhuma divergência sem resposta. 🎉</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="tabela-itens">
+      <thead>
+        <tr><th>Comprador</th><th>Divergências sem resposta</th><th>Dias sem resposta (mais antiga)</th></tr>
+      </thead>
+      <tbody>
+        ${lista
+          .map(
+            (l) => `<tr class="${l.diasMax >= 3 ? "linha-atrasada" : ""}">
+              <td>${escapeHtml(l.comprador)}</td>
+              <td>${l.total}</td>
+              <td>${l.diasMax} dia(s)</td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>`;
 }
 
 function renderGraficoBarras(container, itens, cor, tituloFn) {
