@@ -41,8 +41,26 @@ document.getElementById("btn-theme-toggle").addEventListener("click", () => {
 
 // Toque manual pra "destravar" o som nesta aba — importante numa TV que fica
 // ligada o dia todo sem ninguém tocar na tela (ver falarAlerta mais abaixo).
+// Dá retorno visual IMEDIATO ao apertar (mesmo antes de saber se o som vai
+// funcionar) porque em navegadores de TV (ex: o "Browser" da própria Samsung)
+// às vezes o speak() simplesmente não faz nada — nem toca, nem dá erro — daí
+// sem esse retorno a pessoa acha que o botão "não fez nada" ao apertar.
 document.getElementById("btn-ativar-som").addEventListener("click", () => {
+  const btn = document.getElementById("btn-ativar-som");
+  if (somAlertaDesbloqueado) return;
+  if (!("speechSynthesis" in window)) {
+    btn.textContent = "⚠️ Som não suportado aqui";
+    btn.classList.add("som-indisponivel");
+    return;
+  }
+  btn.textContent = "🔄 Testando som...";
   falarAlerta("Som ativado", 1);
+  setTimeout(() => {
+    if (!somAlertaDesbloqueado) {
+      btn.textContent = "⚠️ Som não funcionou aqui";
+      btn.classList.add("som-indisponivel");
+    }
+  }, 2500);
 });
 
 // ---------- helpers ----------
@@ -62,10 +80,14 @@ function mostrarAviso(mensagem) {
 // ninguém tocar na tela, isso significa que NENHUM alerta toca depois de
 // uma recarga de página. Por isso avisamos visualmente quando isso acontece,
 // pra alguém saber que precisa tocar no botão "🔊 Ativar som" uma vez.
+let somAlertaDesbloqueado = false;
+
 function marcarSomDesbloqueado() {
+  somAlertaDesbloqueado = true;
   const btn = document.getElementById("btn-ativar-som");
   if (btn && !btn.classList.contains("som-ativo")) {
     btn.textContent = "🔊 Som ativo";
+    btn.classList.remove("som-indisponivel");
     btn.classList.add("som-ativo");
   }
   const aviso = document.getElementById("aviso-som-bloqueado");
