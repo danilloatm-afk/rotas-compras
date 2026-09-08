@@ -1914,11 +1914,13 @@ async function loadIndicadores() {
   const container = document.getElementById("grafico-coletados");
   const containerDivergencias = document.getElementById("grafico-divergencias");
   const containerSemResposta = document.getElementById("tabela-divergencias-sem-resposta");
+  const containerFornecedor = document.getElementById("tabela-divergencias-fornecedor");
+  const containerTempoResposta = document.getElementById("tabela-tempo-resposta");
   const { data, error } = await comTimeout(
     db
       .from("rl_rota_paradas")
       .select(
-        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, rl_pedidos(comprador_nome, numero_pedido)"
+        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, resolucao_em, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome)"
       )
       .eq("status", "concluida")
       .not("concluido_em", "is", null)
@@ -1927,6 +1929,8 @@ async function loadIndicadores() {
     container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerDivergencias.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerSemResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerFornecedor.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerTempoResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     return;
   }
 
@@ -1952,6 +1956,8 @@ async function loadIndicadores() {
   // vazia), agrupadas por comprador, com os dias corridos desde a conclusão da
   // parada — pra saber quem está devendo resposta e há quanto tempo.
   const semRespostaPorComprador = new Map();
+  const divergenciasPorFornecedor = new Map();
+  const tempoRespostaPorComprador = new Map();
   const hojeMs = Date.now();
 
   (data || []).forEach((p) => {
@@ -1963,15 +1969,27 @@ async function loadIndicadores() {
       });
 
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
-      if (divergente && !p.resolucao_divergencia) {
-        const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
-        const numero = (p.rl_pedidos || {}).numero_pedido || "—";
-        const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
-        const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0, pedidos: [] };
-        atual.total++;
-        atual.diasMax = Math.max(atual.diasMax, dias);
-        atual.pedidos.push({ numero, dias });
-        semRespostaPorComprador.set(comprador, atual);
+      if (divergente) {
+        const fornecedor = (p.rl_pedidos || {}).fornecedor_nome || "—";
+        divergenciasPorFornecedor.set(fornecedor, (divergenciasPorFornecedor.get(fornecedor) || 0) + 1);
+
+        if (!p.resolucao_divergencia) {
+          const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+          const numero = (p.rl_pedidos || {}).numero_pedido || "—";
+          const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
+          const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0, pedidos: [] };
+          atual.total++;
+          atual.diasMax = Math.max(atual.diasMax, dias);
+          atual.pedidos.push({ numero, dias });
+          semRespostaPorComprador.set(comprador, atual);
+        } else if (p.resolucao_em) {
+          const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+          const diasResposta = Math.max(0, (new Date(p.resolucao_em).getTime() - new Date(p.concluido_em).getTime()) / 86400000);
+          const atual = tempoRespostaPorComprador.get(comprador) || { comprador, soma: 0, total: 0 };
+          atual.soma += diasResposta;
+          atual.total++;
+          tempoRespostaPorComprador.set(comprador, atual);
+        }
       }
     }
   });
@@ -1981,6 +1999,53 @@ async function loadIndicadores() {
 
   const listaSemResposta = Array.from(semRespostaPorComprador.values()).sort((a, b) => b.diasMax - a.diasMax);
   renderTabelaSemResposta(listaSemResposta);
+
+  const listaFornecedor = Array.from(divergenciasPorFornecedor.entries())
+    .map(([fornecedor, total]) => ({ fornecedor, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+  renderTabelaFornecedor(listaFornecedor);
+
+  const listaTempoResposta = Array.from(tempoRespostaPorComprador.values())
+    .map((c) => ({ comprador: c.comprador, total: c.total, mediaDias: c.soma / c.total }))
+    .sort((a, b) => b.mediaDias - a.mediaDias);
+  renderTabelaTempoResposta(listaTempoResposta);
+}
+
+function renderTabelaFornecedor(lista) {
+  const container = document.getElementById("tabela-divergencias-fornecedor");
+  if (!lista.length) {
+    container.innerHTML = `<p class="empty-state">Nenhuma divergência registrada ainda.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="tabela-itens">
+      <thead>
+        <tr><th>Fornecedor</th><th>Divergências</th></tr>
+      </thead>
+      <tbody>
+        ${lista.map((f) => `<tr><td>${escapeHtml(f.fornecedor)}</td><td>${f.total}</td></tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderTabelaTempoResposta(lista) {
+  const container = document.getElementById("tabela-tempo-resposta");
+  if (!lista.length) {
+    container.innerHTML = `<p class="empty-state">Nenhuma divergência respondida ainda.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="tabela-itens">
+      <thead>
+        <tr><th>Comprador</th><th>Divergências respondidas</th><th>Tempo médio de resposta</th></tr>
+      </thead>
+      <tbody>
+        ${lista
+          .map((c) => `<tr><td>${escapeHtml(c.comprador)}</td><td>${c.total}</td><td>${c.mediaDias.toFixed(1)} dia(s)</td></tr>`)
+          .join("")}
+      </tbody>
+    </table>`;
 }
 
 function renderTabelaSemResposta(lista) {
