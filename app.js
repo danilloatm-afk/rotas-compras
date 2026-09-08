@@ -1918,7 +1918,7 @@ async function loadIndicadores() {
     db
       .from("rl_rota_paradas")
       .select(
-        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, rl_pedidos(comprador_nome)"
+        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, rl_pedidos(comprador_nome, numero_pedido)"
       )
       .eq("status", "concluida")
       .not("concluido_em", "is", null)
@@ -1965,10 +1965,12 @@ async function loadIndicadores() {
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
       if (divergente && !p.resolucao_divergencia) {
         const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+        const numero = (p.rl_pedidos || {}).numero_pedido || "—";
         const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
-        const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0 };
+        const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0, pedidos: [] };
         atual.total++;
         atual.diasMax = Math.max(atual.diasMax, dias);
+        atual.pedidos.push({ numero, dias });
         semRespostaPorComprador.set(comprador, atual);
       }
     }
@@ -1994,16 +1996,22 @@ function renderTabelaSemResposta(lista) {
       </thead>
       <tbody>
         ${lista
-          .map(
-            (l) => `<tr class="${l.diasMax >= 3 ? "linha-atrasada" : ""}">
+          .map((l) => {
+            const detalhe = l.pedidos
+              .slice()
+              .sort((a, b) => b.dias - a.dias)
+              .map((pd) => `Pedido ${pd.numero}: ${pd.dias} dia(s)`)
+              .join(" | ");
+            return `<tr class="${l.diasMax >= 3 ? "linha-atrasada" : ""}" title="${escapeHtml(detalhe)}">
               <td>${escapeHtml(l.comprador)}</td>
               <td>${l.total}</td>
               <td>${l.diasMax} dia(s)</td>
-            </tr>`
-          )
+            </tr>`;
+          })
           .join("")}
       </tbody>
-    </table>`;
+    </table>
+    <p class="hint">Passe o mouse sobre uma linha pra ver quais pedidos estão pendentes.</p>`;
 }
 
 function renderGraficoBarras(container, itens, cor, tituloFn) {
