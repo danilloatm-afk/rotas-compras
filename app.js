@@ -1912,11 +1912,17 @@ function chaveAnoMes(data) {
 
 async function loadIndicadores() {
   const container = document.getElementById("grafico-coletados");
+  const containerDivergencias = document.getElementById("grafico-divergencias");
   const { data, error } = await comTimeout(
-    db.from("rl_rota_paradas").select("concluido_em").eq("status", "concluida").not("concluido_em", "is", null)
+    db
+      .from("rl_rota_paradas")
+      .select("concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento")
+      .eq("status", "concluida")
+      .not("concluido_em", "is", null)
   );
   if (error) {
     container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerDivergencias.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     return;
   }
 
@@ -1928,32 +1934,47 @@ async function loadIndicadores() {
     meses.push({ chave: chaveAnoMes(d), label: `${MESES_ABREV[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`, total: 0 });
   }
   const porChave = Object.fromEntries(meses.map((m) => [m.chave, m]));
+
+  // Um indicador por tipo de divergência — entregas parciais não contam
+  // como divergência (o pedido simplesmente não veio todo de uma vez).
+  const tiposDivergencia = [
+    { chave: "divergencia_valor", label: "Valor", total: 0 },
+    { chave: "divergencia_cnpj", label: "CNPJ", total: 0 },
+    { chave: "divergencia_itens", label: "Itens", total: 0 },
+    { chave: "divergencia_condicao_pagamento", label: "Cond. pgto", total: 0 },
+  ];
+
   (data || []).forEach((p) => {
     const chave = chaveAnoMes(new Date(p.concluido_em));
     if (porChave[chave]) porChave[chave].total++;
+    if (!p.entrega_parcial) {
+      tiposDivergencia.forEach((t) => {
+        if (p[t.chave]) t.total++;
+      });
+    }
   });
 
-  renderGraficoColetados(meses);
+  renderGraficoBarras(container, meses, "var(--primary)", (m) => `${m.label}: ${m.total} pedido(s) coletado(s)`);
+  renderGraficoBarras(containerDivergencias, tiposDivergencia, "var(--atrasado)", (t) => `${t.label}: ${t.total} divergência(s)`);
 }
 
-function renderGraficoColetados(meses) {
-  const container = document.getElementById("grafico-coletados");
-  const max = Math.max(1, ...meses.map((m) => m.total));
+function renderGraficoBarras(container, itens, cor, tituloFn) {
+  const max = Math.max(1, ...itens.map((m) => m.total));
   const larguraBarra = 56;
   const espaco = 28;
   const alturaBarraMax = 160;
-  const larguraTotal = meses.length * (larguraBarra + espaco) + espaco;
+  const larguraTotal = itens.length * (larguraBarra + espaco) + espaco;
   const alturaTotal = alturaBarraMax + 56;
 
-  const barras = meses
+  const barras = itens
     .map((m, i) => {
       const x = espaco + i * (larguraBarra + espaco);
       const altura = m.total === 0 ? 0 : Math.max(4, Math.round((m.total / max) * alturaBarraMax));
       const y = alturaBarraMax - altura + 20;
       return `
       <g class="grafico-barra">
-        <title>${m.label}: ${m.total} pedido(s) coletado(s)</title>
-        <rect x="${x}" y="${y}" width="${larguraBarra}" height="${altura}" rx="4" fill="var(--primary)"></rect>
+        <title>${tituloFn(m)}</title>
+        <rect x="${x}" y="${y}" width="${larguraBarra}" height="${altura}" rx="4" fill="${cor}"></rect>
         <text class="grafico-valor" x="${x + larguraBarra / 2}" y="${y - 6}" text-anchor="middle">${m.total}</text>
         <text class="grafico-mes" x="${x + larguraBarra / 2}" y="${alturaBarraMax + 40}" text-anchor="middle">${m.label}</text>
       </g>`;
@@ -2258,6 +2279,19 @@ async function loadHistorico() {
   // Só avisa por voz quando a busca não tem filtro de data (senão uma busca
   // por um dia antigo dispararia alerta de coisa que já é velha).
   if (!dataInicio && !dataFim) avisarDivergenciasNovas(historicoCache);
+
+  // Não redesenha a tela se alguém estiver digitando algo no Histórico agora
+  // (ex: a justificativa da divergência, ou a observação do almoxarifado) —
+  // sem isso, o refresh automático de 1 em 1 minuto podia cair bem no meio
+  // de um texto mais longo (que demora mais pra digitar) e apagar tudo,
+  // porque redesenhar a lista destrói e recria a caixinha de texto.
+  const elementoAtivo = document.activeElement;
+  const digitandoNoHistorico =
+    elementoAtivo &&
+    elementoAtivo.closest &&
+    elementoAtivo.closest("#tab-historico") &&
+    (elementoAtivo.tagName === "TEXTAREA" || elementoAtivo.tagName === "INPUT");
+  if (digitandoNoHistorico) return;
 
   const selEmpresa = document.getElementById("filtro-empresa-historico");
   const empresaAtual = selEmpresa.value;
