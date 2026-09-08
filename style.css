@@ -88,6 +88,14 @@ body {
 .theme-toggle { font-size: 1rem; line-height: 1; padding: 0.4rem 0.55rem; }
 
 .btn.secondary.som-ativo { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+.btn.secondary.som-indisponivel { background: var(--atrasado-bg); border-color: var(--atrasado); color: var(--atrasado); }
+
+/* Foco bem visível pra navegação por controle remoto de TV (setas + OK),
+   onde o contorno padrão do navegador costuma ser fraco demais pra ver de longe. */
+#btn-ativar-som:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
 
 .aviso-som-bloqueado {
   margin: 0;
