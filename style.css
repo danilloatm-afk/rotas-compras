@@ -87,6 +87,18 @@ body {
 
 .theme-toggle { font-size: 1rem; line-height: 1; padding: 0.4rem 0.55rem; }
 
+.btn.secondary.som-ativo { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+
+.aviso-som-bloqueado {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--atrasado-bg);
+  color: var(--atrasado);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
 .tabs { display: flex; gap: 0.25rem; overflow-x: auto; }
 
 .tab-btn {
