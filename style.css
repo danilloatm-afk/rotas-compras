@@ -332,6 +332,7 @@ input, select, textarea {
 .tabela-itens th, .tabela-itens td { text-align: left; padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--border); }
 .tabela-itens th { color: var(--text-muted); font-weight: 600; }
 .tabela-itens tr.linha-divergente { background: var(--atrasado-bg); }
+.tabela-itens tr.linha-atrasada td { color: var(--atrasado); font-weight: 600; }
 
 .historico-parada-card { max-width: 640px; margin-bottom: 0.9rem; }
 .recebimento-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
