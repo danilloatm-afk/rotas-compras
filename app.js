@@ -39,6 +39,12 @@ document.getElementById("btn-theme-toggle").addEventListener("click", () => {
   aplicarTema(temaAtual);
 });
 
+// Toque manual pra "destravar" o som nesta aba — importante numa TV que fica
+// ligada o dia todo sem ninguém tocar na tela (ver falarAlerta mais abaixo).
+document.getElementById("btn-ativar-som").addEventListener("click", () => {
+  falarAlerta("Som ativado", 1);
+});
+
 // ---------- helpers ----------
 // alert()/prompt() nativos não são confiáveis em vários navegadores/webviews
 // (já vimos prompt() falhar em produção) — este toast substitui os avisos.
@@ -48,6 +54,27 @@ function mostrarAviso(mensagem) {
   toast.textContent = mensagem;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 5000);
+}
+
+// O Chrome só toca som (inclusive voz sintetizada) numa aba depois de um
+// toque/clique real do usuário nela — antes disso, speak() falha em
+// silêncio com erro "not-allowed". Numa TV que fica ligada o dia todo sem
+// ninguém tocar na tela, isso significa que NENHUM alerta toca depois de
+// uma recarga de página. Por isso avisamos visualmente quando isso acontece,
+// pra alguém saber que precisa tocar no botão "🔊 Ativar som" uma vez.
+function marcarSomDesbloqueado() {
+  const btn = document.getElementById("btn-ativar-som");
+  if (btn && !btn.classList.contains("som-ativo")) {
+    btn.textContent = "🔊 Som ativo";
+    btn.classList.add("som-ativo");
+  }
+  const aviso = document.getElementById("aviso-som-bloqueado");
+  if (aviso) aviso.hidden = true;
+}
+
+function mostrarAvisoSomBloqueado() {
+  const aviso = document.getElementById("aviso-som-bloqueado");
+  if (aviso) aviso.hidden = false;
 }
 
 // Fala em voz alta usando a síntese de voz do próprio navegador — sem custo,
@@ -62,6 +89,10 @@ function falarAlerta(texto, vezes = 2) {
     for (let i = 0; i < vezes; i++) {
       const utterance = new SpeechSynthesisUtterance(texto);
       utterance.lang = "pt-BR";
+      utterance.onstart = marcarSomDesbloqueado;
+      utterance.onerror = (e) => {
+        if (e.error === "not-allowed") mostrarAvisoSomBloqueado();
+      };
       window.speechSynthesis.speak(utterance);
     }
   } catch (e) {
