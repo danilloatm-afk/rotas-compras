@@ -14,9 +14,13 @@
   <div class="topbar-title-row">
     <h1>🚚 Rotas de Compras</h1>
     <div class="topbar-actions">
+      <button id="btn-ativar-som" type="button" class="btn secondary small" title="Ativa o alerta sonoro de divergência nesta tela (precisa de 1 toque por causa do navegador)">🔊 Ativar som</button>
       <button id="btn-theme-toggle" type="button" class="btn secondary small theme-toggle" title="Alternar modo claro/escuro">🌙</button>
     </div>
   </div>
+  <p id="aviso-som-bloqueado" class="aviso-som-bloqueado" hidden>
+    🔇 O navegador bloqueou o som dos alertas nesta tela. Toque no botão "🔊 Ativar som" acima pra liberar.
+  </p>
   <nav class="tabs">
     <button class="tab-btn active" data-tab="comprador">📥 Comprador</button>
     <button class="tab-btn" data-tab="motorista">🚚 Motorista</button>
