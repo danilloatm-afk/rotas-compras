@@ -214,10 +214,20 @@ async function loadAlmoxarifes() {
 // planilha "cond pag.xlsx" do ERP) — reaproveitada aqui só de leitura, sem
 // duplicar o cadastro.
 let condicoesPagamentoCache = new Map();
-async function loadCondicoesPagamento() {
-  const { data, error } = await comTimeout(db.from("cs_condicoes_pagamento").select("codigo, dias"));
-  if (error || !data) return;
-  condicoesPagamentoCache = new Map(data.map((c) => [c.codigo, c.dias]));
+// Tenta algumas vezes com espera entre elas — sem isso, uma conexão ruim no
+// exato momento em que o app abre (comum pro motorista no campo) fazia essa
+// tabela ficar vazia pro resto da sessão inteira, mesmo a internet
+// melhorando alguns segundos depois, e toda condição de pagamento aparecia
+// como "não encontrada na tabela" sem motivo real.
+async function loadCondicoesPagamento(tentativas = 3) {
+  for (let i = 0; i < tentativas; i++) {
+    const { data, error } = await comTimeout(db.from("cs_condicoes_pagamento").select("codigo, dias"));
+    if (!error && data && data.length) {
+      condicoesPagamentoCache = new Map(data.map((c) => [c.codigo, c.dias]));
+      return;
+    }
+    if (i < tentativas - 1) await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
 }
 
 async function loadEmpresas() {
@@ -1573,6 +1583,10 @@ const TOLERANCIA_DIAS_PAGAMENTO = 5; // absorve vencimento caindo em fim de sema
 function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
   const codigo = pedido.condicao_pagamento_codigo;
   if (!codigo) return { msgCondicao: null, divergCondicao: false };
+  // Se a tabela nunca carregou de verdade (conexão ruim na hora que o app
+  // abriu), tenta buscar de novo em segundo plano — assim a PRÓXIMA
+  // conferência já vem certa, sem precisar recarregar a página inteira.
+  if (condicoesPagamentoCache.size === 0) loadCondicoesPagamento();
   const diasEsperados = condicoesPagamentoCache.get(codigo);
   if (diasEsperados == null) {
     return { msgCondicao: `Condição de pagamento ${escapeHtml(codigo)} não encontrada na tabela — não é possível conferir.`, divergCondicao: false };
