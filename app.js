@@ -1391,9 +1391,32 @@ function agruparPorProduto(itens) {
   });
 }
 
+// Fornecedor às vezes vende por embalagem "fechada" (ex: nota em CENTO/CT =
+// 100 unidades, DÚZIA/DZ = 12) enquanto o pedido conta unidade por unidade —
+// sem converter ANTES de comparar, tanto a quantidade quanto o valor
+// unitário da nota ficam numa escala totalmente diferente da do pedido (10
+// CT x R$3,50 vs 1000 UN x R$0,09), o que quebra até o casamento por nome
+// parecido/código, porque o preço "não bate nem de longe". Convertendo pra
+// unidade individual antes de tentar casar os itens, o valor unitário passa
+// a ficar bem próximo do esperado e o casamento funciona normal.
+const FATORES_EMBALAGEM = { ct: 100, cento: 100, dz: 12, duzia: 12, milheiro: 1000 };
+
+function converterEmbalagem(item) {
+  const fator = FATORES_EMBALAGEM[String(item.unidade || "").toLowerCase().trim()];
+  if (!fator) return item;
+  return {
+    ...item,
+    quantidade: item.quantidade != null ? item.quantidade * fator : item.quantidade,
+    valor_unitario: item.valor_unitario != null ? item.valor_unitario / fator : item.valor_unitario,
+    __embalagemOriginal: { unidade: item.unidade, quantidade: item.quantidade, fator },
+  };
+}
+
 function compararItens(pedidoItensBrutos, notaItensBrutos) {
   const pedidoItens = agruparPorProduto(Array.isArray(pedidoItensBrutos) ? pedidoItensBrutos : []);
-  const notaItens = agruparPorProduto(Array.isArray(notaItensBrutos) ? notaItensBrutos : []);
+  const notaItens = agruparPorProduto(
+    (Array.isArray(notaItensBrutos) ? notaItensBrutos : []).map(converterEmbalagem)
+  );
   if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
 
   const restantes = notaItens.map((it) => ({ ...it, usado: false }));
@@ -1516,6 +1539,7 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     const linhaDivergente = !match || qtdOk === false || vuOk === false;
     if (linhaDivergente) divergente = true;
 
+    const embalagem = match && match.__embalagemOriginal;
     return {
       produto: pItem.produto_nome,
       qtdP: pItem.quantidade,
@@ -1524,6 +1548,9 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
       vuN: match ? match.valor_unitario : null,
       match: !!match,
       divergente: linhaDivergente,
+      obs: embalagem
+        ? `nota: ${embalagem.quantidade} ${embalagem.unidade} (1 ${embalagem.unidade} = ${embalagem.fator} un)`
+        : undefined,
     };
   });
   return { temDados: true, divergente, linhas };
