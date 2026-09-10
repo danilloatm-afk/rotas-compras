@@ -1399,7 +1399,7 @@ function agruparPorProduto(itens) {
 // parecido/código, porque o preço "não bate nem de longe". Convertendo pra
 // unidade individual antes de tentar casar os itens, o valor unitário passa
 // a ficar bem próximo do esperado e o casamento funciona normal.
-const FATORES_EMBALAGEM = { ct: 100, cento: 100, dz: 12, duzia: 12, milheiro: 1000 };
+const FATORES_EMBALAGEM = { ct: 100, cento: 100, dz: 12, duzia: 12, milheiro: 1000, mil: 1000 };
 
 function converterEmbalagem(item) {
   const fator = FATORES_EMBALAGEM[String(item.unidade || "").toLowerCase().trim()];
