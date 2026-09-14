@@ -2395,6 +2395,7 @@ function renderCardsHistorico(paradas) {
           ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
           · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
         </div>
+        ${pedido.observacao ? `<div class="card-meta">💬 Observação do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
         ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
         ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
         ${
