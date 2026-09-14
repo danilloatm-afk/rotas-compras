@@ -133,6 +133,17 @@ function comTimeout(promise, ms = 8000) {
   ]);
 }
 
+// Espera a pessoa parar de digitar antes de buscar de novo — sem isso, um
+// campo de busca (ex: filtro por fornecedor) dispararia uma consulta ao
+// banco a cada letra digitada.
+function debounce(fn, ms) {
+  let temporizador;
+  return (...args) => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => fn(...args), ms);
+  };
+}
+
 function apenasDigitos(str) {
   return String(str || "").replace(/\D/g, "");
 }
@@ -218,7 +229,10 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       loadRotaAtual();
     }
     if (btn.dataset.tab === "indicadores") loadIndicadores();
-    if (btn.dataset.tab === "historico") loadHistorico();
+    if (btn.dataset.tab === "historico") {
+      carregarFiltrosHistorico();
+      loadHistorico();
+    }
     if (btn.dataset.tab === "config") renderCadastros();
   });
 });
@@ -2276,11 +2290,6 @@ function renderDivergenciasParada(parada) {
   return html;
 }
 
-// Lista achatada de PARADAS concluídas (não agrupada por rota) — assim uma
-// parada aparece aqui assim que é concluída, sem esperar a rota inteira
-// terminar (rotas costumam levar o dia todo).
-let historicoCache = [];
-
 // Registra o que foi decidido sobre uma divergência (ex: "fornecedor vai
 // reemitir a nota", "confirmado, é a filial certa mesmo") — fica visível
 // pra quem olhar o Histórico depois, sem precisar perguntar de novo.
@@ -2304,41 +2313,27 @@ function renderResolucaoDivergencia(parada) {
 const ITENS_POR_PAGINA_HISTORICO = 10;
 let paginaHistoricoAtual = 1;
 let somenteDivergentesHistorico = false;
+// Guarda só a página atual (já filtrada e paginada pelo próprio banco) — não
+// o histórico inteiro. Assim a busca sempre alcança qualquer registro, não
+// importa o quão antigo ou quantos existam no total.
+let paginaAtualDados = [];
+let algumFiltroAtivoHistorico = false;
 
 function paradaEDivergente(p) {
   return !p.entrega_parcial && (p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento);
 }
 
+// Só redesenha com o que já foi buscado (não refaz consulta ao banco) — usado
+// quando o filtro não muda, ex: entrar/sair do modo de editar uma decisão.
 function renderHistorico() {
   const el = document.getElementById("lista-historico");
-  const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
-  const compradorFiltro = document.getElementById("filtro-comprador-historico").value;
-  const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim().toLowerCase();
-  let paradas = empresaFiltro
-    ? historicoCache.filter((p) => (p.rl_pedidos || {}).empresa_nome === empresaFiltro)
-    : historicoCache;
-  if (compradorFiltro) paradas = paradas.filter((p) => (p.rl_pedidos || {}).comprador_nome === compradorFiltro);
-  if (numeroFiltro) {
-    paradas = paradas.filter((p) => ((p.rl_pedidos || {}).numero_pedido || "").toLowerCase().includes(numeroFiltro));
-  }
-  if (somenteDivergentesHistorico) paradas = paradas.filter(paradaEDivergente);
-
-  if (!paradas.length) {
+  if (!paginaAtualDados.length) {
     el.innerHTML = `<p class="empty-state">${
-      historicoCache.length ? "Nenhuma parada concluída com esse filtro." : "Nenhuma parada concluída ainda."
+      algumFiltroAtivoHistorico ? "Nenhuma parada concluída com esse filtro." : "Nenhuma parada concluída ainda."
     }</p>`;
-    document.getElementById("paginacao-historico").innerHTML = "";
     return;
   }
-
-  const totalPaginas = Math.ceil(paradas.length / ITENS_POR_PAGINA_HISTORICO);
-  if (paginaHistoricoAtual > totalPaginas) paginaHistoricoAtual = totalPaginas;
-  if (paginaHistoricoAtual < 1) paginaHistoricoAtual = 1;
-  const inicio = (paginaHistoricoAtual - 1) * ITENS_POR_PAGINA_HISTORICO;
-  const paradasPagina = paradas.slice(inicio, inicio + ITENS_POR_PAGINA_HISTORICO);
-
-  renderPaginacaoHistorico(totalPaginas);
-  renderCardsHistorico(paradasPagina);
+  renderCardsHistorico(paginaAtualDados);
 }
 
 function renderPaginacaoHistorico(totalPaginas) {
@@ -2359,7 +2354,7 @@ document.getElementById("paginacao-historico").addEventListener("click", (e) => 
   const btn = e.target.closest("button[data-pagina-historico]");
   if (!btn) return;
   paginaHistoricoAtual = Number(btn.dataset.paginaHistorico);
-  renderHistorico();
+  loadHistorico();
 });
 
 function renderCardsHistorico(paradas) {
@@ -2437,16 +2432,18 @@ function renderCardsHistorico(paradas) {
     .join("");
 }
 
-// Detecta divergências NOVAS entre uma atualização e outra (pra avisar por
+// Detecta divergências NOVAS entre uma verificação e outra (pra avisar por
 // voz só o que apareceu agora, não repetir o que já tinha sido avisado) —
-// pensado pro app ficar aberto o dia todo numa TV/tela fixa no setor.
-let idsHistoricoConhecidos = null; // null = ainda não carregou nenhuma vez
-function avisarDivergenciasNovas(paradasAtuais) {
-  const idsAtuais = new Set(paradasAtuais.map((p) => p.id));
+// pensado pro app ficar aberto o dia todo numa TV/tela fixa no setor. Roda
+// numa consulta PRÓPRIA (não a lista visível/paginada), porque precisa
+// enxergar TODAS as divergências em aberto, não só a página/filtro que a
+// pessoa está olhando na hora.
+let idsHistoricoConhecidos = null; // null = ainda não verificou nenhuma vez
+function avisarDivergenciasNovas(paradasDivergentesAtuais) {
+  const idsAtuais = new Set(paradasDivergentesAtuais.map((p) => p.id));
   if (idsHistoricoConhecidos) {
-    paradasAtuais
-      .filter((p) => !idsHistoricoConhecidos.has(p.id) && !p.entrega_parcial)
-      .filter((p) => p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento)
+    paradasDivergentesAtuais
+      .filter((p) => !idsHistoricoConhecidos.has(p.id))
       .forEach((p) => {
         const pedido = p.rl_pedidos || {};
         falarAlerta(
@@ -2459,28 +2456,105 @@ function avisarDivergenciasNovas(paradasAtuais) {
   idsHistoricoConhecidos = idsAtuais;
 }
 
+async function verificarDivergenciasNovas() {
+  const { data, error } = await comTimeout(
+    db
+      .from("rl_rota_paradas")
+      .select("id, rl_pedidos(comprador_nome, numero_pedido)")
+      .eq("status", "concluida")
+      .eq("entrega_parcial", false)
+      .or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true")
+  );
+  if (error || !data) return;
+  avisarDivergenciasNovas(data);
+}
+
+// Preenche os filtros de empresa/comprador (dropdown) a partir de TODOS os
+// pedidos já cadastrados — não só da página atual do histórico — pra sempre
+// oferecer a lista completa de opções, mesmo filtrando por algo raro/antigo.
+// Só é chamado ao abrir a aba (não a cada atualização de 1 min), já que essas
+// opções mudam bem devagar.
+async function carregarFiltrosHistorico() {
+  const { data, error } = await comTimeout(db.from("rl_pedidos").select("empresa_nome, comprador_nome"));
+  if (error || !data) return;
+
+  const selEmpresa = document.getElementById("filtro-empresa-historico");
+  const empresaAtual = selEmpresa.value;
+  const empresas = [...new Set(data.map((p) => p.empresa_nome).filter(Boolean))].sort();
+  selEmpresa.innerHTML =
+    `<option value="">Todas as empresas</option>` + empresas.map((emp) => `<option value="${escapeHtml(emp)}">${escapeHtml(emp)}</option>`).join("");
+  if (empresas.includes(empresaAtual)) selEmpresa.value = empresaAtual;
+
+  const selComprador = document.getElementById("filtro-comprador-historico");
+  const compradorAtual = selComprador.value;
+  const compradores = [...new Set(data.map((p) => p.comprador_nome).filter(Boolean))].sort();
+  selComprador.innerHTML =
+    `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
+}
+
+// Busca só a página atual, já filtrada, direto no banco — nunca baixa o
+// histórico inteiro. Por isso qualquer filtro (número, empresa, comprador,
+// fornecedor, data, só-divergentes) sempre alcança TODO o histórico, não
+// importa o quão antigo o registro seja nem quantos existam no total.
 async function loadHistorico() {
   const el = document.getElementById("lista-historico");
+  const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim();
+  const fornecedorFiltro = document.getElementById("filtro-fornecedor-historico").value.trim();
+  const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
+  const compradorFiltro = document.getElementById("filtro-comprador-historico").value;
   const dataInicio = document.getElementById("filtro-data-inicio").value;
   const dataFim = document.getElementById("filtro-data-fim").value;
+
+  algumFiltroAtivoHistorico = !!(
+    numeroFiltro ||
+    fornecedorFiltro ||
+    empresaFiltro ||
+    compradorFiltro ||
+    dataInicio ||
+    dataFim ||
+    somenteDivergentesHistorico
+  );
+  // Filtrar por uma coluna do pedido (número/empresa/comprador/fornecedor)
+  // exige "!inner" no embed — sem isso o Supabase filtra só o que aparece
+  // dentro de rl_pedidos, mas não restringe quais paradas voltam.
+  const precisaInner = numeroFiltro || empresaFiltro || compradorFiltro || fornecedorFiltro;
   let query = db
     .from("rl_rota_paradas")
-    .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
+    .select(`*, rl_pedidos${precisaInner ? "!inner" : ""}(*), rl_rotas(motorista_nome)`, { count: "exact" })
     .eq("status", "concluida")
-    .order("concluido_em", { ascending: false })
-    .limit(500);
+    .not("concluido_em", "is", null);
+
   // "Até" inclui o dia inteiro (23:59:59), não só a meia-noite.
   if (dataInicio) query = query.gte("concluido_em", `${dataInicio}T00:00:00`);
   if (dataFim) query = query.lte("concluido_em", `${dataFim}T23:59:59`);
-  const { data, error } = await comTimeout(query);
+  if (numeroFiltro) query = query.ilike("rl_pedidos.numero_pedido", `%${numeroFiltro}%`);
+  if (fornecedorFiltro) query = query.ilike("rl_pedidos.fornecedor_nome", `%${fornecedorFiltro}%`);
+  if (empresaFiltro) query = query.eq("rl_pedidos.empresa_nome", empresaFiltro);
+  if (compradorFiltro) query = query.eq("rl_pedidos.comprador_nome", compradorFiltro);
+  if (somenteDivergentesHistorico) {
+    query = query
+      .eq("entrega_parcial", false)
+      .or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true");
+  }
+
+  query = query.order("concluido_em", { ascending: false });
+  const inicio = (paginaHistoricoAtual - 1) * ITENS_POR_PAGINA_HISTORICO;
+  query = query.range(inicio, inicio + ITENS_POR_PAGINA_HISTORICO - 1);
+
+  const { data, error, count } = await comTimeout(query);
   if (error) {
     el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
     return;
   }
-  historicoCache = data || [];
-  // Só avisa por voz quando a busca não tem filtro de data (senão uma busca
-  // por um dia antigo dispararia alerta de coisa que já é velha).
-  if (!dataInicio && !dataFim) avisarDivergenciasNovas(historicoCache);
+
+  // Se a página pedida ficou além do total (ex: um filtro novo reduziu o
+  // total de páginas), volta pra última página válida e busca de novo.
+  const totalPaginas = Math.max(1, Math.ceil((count || 0) / ITENS_POR_PAGINA_HISTORICO));
+  if (paginaHistoricoAtual > totalPaginas) {
+    paginaHistoricoAtual = totalPaginas;
+    return loadHistorico();
+  }
 
   // Não redesenha a tela se alguém estiver digitando algo no Histórico agora
   // (ex: a justificativa da divergência, ou a observação do almoxarifado) —
@@ -2489,41 +2563,29 @@ async function loadHistorico() {
   // porque redesenhar a lista destrói e recria a caixinha de texto.
   const elementoAtivo = document.activeElement;
   const digitandoNoHistorico =
-    elementoAtivo &&
-    elementoAtivo.closest &&
-    elementoAtivo.closest("#tab-historico") &&
-    (elementoAtivo.tagName === "TEXTAREA" || elementoAtivo.tagName === "INPUT");
+    elementoAtivo && elementoAtivo.matches && elementoAtivo.matches(".input-resolucao, .input-obs-recebimento");
   if (digitandoNoHistorico) return;
 
-  const selEmpresa = document.getElementById("filtro-empresa-historico");
-  const empresaAtual = selEmpresa.value;
-  const empresas = [...new Set(historicoCache.map((p) => (p.rl_pedidos || {}).empresa_nome).filter(Boolean))].sort();
-  selEmpresa.innerHTML =
-    `<option value="">Todas as empresas</option>` + empresas.map((emp) => `<option value="${escapeHtml(emp)}">${escapeHtml(emp)}</option>`).join("");
-  if (empresas.includes(empresaAtual)) selEmpresa.value = empresaAtual;
-
-  const selComprador = document.getElementById("filtro-comprador-historico");
-  const compradorAtual = selComprador.value;
-  const compradores = [...new Set(historicoCache.map((p) => (p.rl_pedidos || {}).comprador_nome).filter(Boolean))].sort();
-  selComprador.innerHTML =
-    `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
-  if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
-
+  paginaAtualDados = data || [];
+  renderPaginacaoHistorico(totalPaginas);
   renderHistorico();
 }
 
+const buscarHistoricoDebounced = debounce(() => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+}, 400);
+
 document.getElementById("filtro-empresa-historico").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
-  renderHistorico();
+  loadHistorico();
 });
 document.getElementById("filtro-comprador-historico").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
-  renderHistorico();
+  loadHistorico();
 });
-document.getElementById("filtro-numero-historico").addEventListener("input", () => {
-  paginaHistoricoAtual = 1;
-  renderHistorico();
-});
+document.getElementById("filtro-numero-historico").addEventListener("input", buscarHistoricoDebounced);
+document.getElementById("filtro-fornecedor-historico").addEventListener("input", buscarHistoricoDebounced);
 document.getElementById("filtro-data-inicio").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
   loadHistorico();
@@ -2536,12 +2598,13 @@ document.getElementById("btn-somente-divergentes").addEventListener("click", (e)
   somenteDivergentesHistorico = !somenteDivergentesHistorico;
   e.currentTarget.classList.toggle("ativo", somenteDivergentesHistorico);
   paginaHistoricoAtual = 1;
-  renderHistorico();
+  loadHistorico();
 });
 document.getElementById("btn-limpar-filtros-historico").addEventListener("click", () => {
   document.getElementById("filtro-empresa-historico").value = "";
   document.getElementById("filtro-comprador-historico").value = "";
   document.getElementById("filtro-numero-historico").value = "";
+  document.getElementById("filtro-fornecedor-historico").value = "";
   document.getElementById("filtro-data-inicio").value = "";
   document.getElementById("filtro-data-fim").value = "";
   somenteDivergentesHistorico = false;
@@ -2659,8 +2722,17 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
   await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes(), loadCondicoesPagamento()]);
   loadMeusPedidos();
 
-  // Atualização automática do Histórico a cada 1 min — pensado pro app ficar
-  // aberto o dia todo (ex: numa TV do setor), avisando por voz na hora que
-  // uma divergência nova aparecer, sem precisar de ninguém clicar em nada.
-  setInterval(loadHistorico, 60000);
+  // Verifica divergências em aberto assim que a página carrega, pra já
+  // conhecer o que existe agora e só avisar por voz do que aparecer DEPOIS
+  // disso (ver avisarDivergenciasNovas).
+  verificarDivergenciasNovas();
+
+  // Atualização automática a cada 1 min — pensado pro app ficar aberto o dia
+  // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência nova
+  // em qualquer lugar do histórico (não só na página/filtro visível agora) e
+  // atualiza a lista visível, sem precisar de ninguém clicar em nada.
+  setInterval(() => {
+    verificarDivergenciasNovas();
+    loadHistorico();
+  }, 60000);
 })();
