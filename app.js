@@ -2467,7 +2467,7 @@ async function loadHistorico() {
     .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
     .eq("status", "concluida")
     .order("concluido_em", { ascending: false })
-    .limit(50);
+    .limit(500);
   // "Até" inclui o dia inteiro (23:59:59), não só a meia-noite.
   if (dataInicio) query = query.gte("concluido_em", `${dataInicio}T00:00:00`);
   if (dataFim) query = query.lte("concluido_em", `${dataFim}T23:59:59`);
