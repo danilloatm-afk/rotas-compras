@@ -3069,7 +3069,7 @@ function renderPedidosCifPendentes() {
   }
   el.innerHTML = `
     <table class="tabela-itens">
-      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Comprador</th><th>Valor</th><th colspan="2"></th></tr></thead>
+      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Comprador</th><th>Valor</th><th></th><th><input type="checkbox" id="chk-todos-terceiro" title="Selecionar todos"></th></tr></thead>
       <tbody>
         ${pedidosCifPendentesCache
           .map(
@@ -3080,13 +3080,13 @@ function renderPedidosCifPendentes() {
               <td>${escapeHtml(p.comprador_nome || "—")}</td>
               <td>${formatarMoeda(p.valor_total)}</td>
               <td><button type="button" class="btn small" data-conferir-pedido-cif-geral="${p.id}">🔍 Conferir</button></td>
-              <td><button type="button" class="btn secondary small" data-recebido-terceiro="${p.id}">🤝 Recebido por terceiro</button></td>
+              <td><input type="checkbox" class="chk-recebido-terceiro" data-id="${p.id}"></td>
             </tr>`
           )
           .join("")}
       </tbody>
     </table>
-    <p class="hint">"Recebido por terceiro" é pra quando a entrega foi recebida fora do almoxarifado (sem nota fiscal pra conferir aqui) — marca o pedido como recebido sem passar pela comparação de divergência.</p>`;
+    <p class="hint">Marque o(s) pedido(s) recebido(s) fora do almoxarifado (sem nota fiscal pra conferir aqui) e use "Recebido por terceiro" acima — marca como recebido sem passar pela comparação de divergência.</p>`;
 }
 
 document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click", async (e) => {
@@ -3097,56 +3097,70 @@ document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click",
     return;
   }
 
-  const btnTerceiro = e.target.closest("button[data-recebido-terceiro]");
-  if (btnTerceiro) {
-    // Mesmo padrão de confirmação em dois cliques já usado no resto do app
-    // (ex: "Excluir" no Histórico) — marcar como recebido sem conferência
-    // não tem volta fácil, então evita clique acidental.
-    if (!btnTerceiro.dataset.confirmando) {
-      btnTerceiro.dataset.confirmando = "1";
-      btnTerceiro.textContent = "Confirma? Clique de novo";
-      setTimeout(() => {
-        delete btnTerceiro.dataset.confirmando;
-        btnTerceiro.textContent = "🤝 Recebido por terceiro";
-      }, 4000);
-      return;
-    }
-    await marcarRecebidoPorTerceiro(btnTerceiro.dataset.recebidoTerceiro);
+  if (e.target.id === "chk-todos-terceiro") {
+    document.querySelectorAll(".chk-recebido-terceiro").forEach((chk) => (chk.checked = e.target.checked));
   }
+});
+
+const btnRecebidoTerceiroSelecionados = document.getElementById("btn-recebido-terceiro-selecionados");
+btnRecebidoTerceiroSelecionados.addEventListener("click", async () => {
+  const ids = Array.from(document.querySelectorAll(".chk-recebido-terceiro:checked")).map((chk) => chk.dataset.id);
+  if (!ids.length) {
+    mostrarAviso("Selecione ao menos um pedido na lista.");
+    return;
+  }
+  // Mesmo padrão de confirmação em dois cliques já usado no resto do app
+  // (ex: "Excluir" no Histórico) — marcar como recebido sem conferência não
+  // tem volta fácil, então evita clique acidental.
+  if (!btnRecebidoTerceiroSelecionados.dataset.confirmando) {
+    btnRecebidoTerceiroSelecionados.dataset.confirmando = "1";
+    btnRecebidoTerceiroSelecionados.textContent = `Confirma ${ids.length} pedido(s)? Clique de novo`;
+    setTimeout(() => {
+      delete btnRecebidoTerceiroSelecionados.dataset.confirmando;
+      btnRecebidoTerceiroSelecionados.textContent = "🤝 Recebido por terceiro (selecionados)";
+    }, 4000);
+    return;
+  }
+  delete btnRecebidoTerceiroSelecionados.dataset.confirmando;
+  btnRecebidoTerceiroSelecionados.textContent = "🤝 Recebido por terceiro (selecionados)";
+  await marcarRecebidoPorTerceiro(ids);
 });
 
 // Registra o recebimento sem nenhuma conferência de nota — cria a mesma rota
 // "virtual" usada na conferência normal (só pra manter um registro no
 // Histórico), mas já marca concluído na hora, sem divergência nenhuma (não
-// há nota pra comparar).
-async function marcarRecebidoPorTerceiro(pedidoId) {
-  const pedido = pedidosCifPendentesCache.find((p) => p.id === pedidoId);
-  if (!pedido) return;
+// há nota pra comparar). Aceita um ou mais pedidos de uma vez (seleção via
+// checkbox na lista geral).
+async function marcarRecebidoPorTerceiro(pedidoIds) {
+  const pedidos = pedidosCifPendentesCache.filter((p) => pedidoIds.includes(p.id));
+  if (!pedidos.length) return;
   const almoxarife = document.getElementById("almoxarife-select-cif").value;
   try {
-    const { data: rota, error: errRota } = await db
-      .from("rl_rotas")
-      .insert({ motorista_nome: `${almoxarife || "Almoxarifado"} (recebimento CIF)`, status: "concluida" })
-      .select()
-      .single();
-    if (errRota) throw errRota;
+    for (const pedido of pedidos) {
+      const { data: rota, error: errRota } = await db
+        .from("rl_rotas")
+        .insert({ motorista_nome: `${almoxarife || "Almoxarifado"} (recebimento CIF)`, status: "concluida" })
+        .select()
+        .single();
+      if (errRota) throw errRota;
 
-    const { error: errParada } = await db.from("rl_rota_paradas").insert({
-      rota_id: rota.id,
-      pedido_id: pedido.id,
-      ordem: 0,
-      status: "concluida",
-      recebido_por_terceiro: true,
-      recebido_por: almoxarife || null,
-      recebido_em: new Date().toISOString(),
-      concluido_em: new Date().toISOString(),
-    });
-    if (errParada) throw errParada;
+      const { error: errParada } = await db.from("rl_rota_paradas").insert({
+        rota_id: rota.id,
+        pedido_id: pedido.id,
+        ordem: 0,
+        status: "concluida",
+        recebido_por_terceiro: true,
+        recebido_por: almoxarife || null,
+        recebido_em: new Date().toISOString(),
+        concluido_em: new Date().toISOString(),
+      });
+      if (errParada) throw errParada;
 
-    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedido.id);
-    if (errPedido) throw errPedido;
+      const { error: errPedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedido.id);
+      if (errPedido) throw errPedido;
+    }
 
-    mostrarAviso("Pedido marcado como recebido por terceiro.");
+    mostrarAviso(pedidos.length > 1 ? `${pedidos.length} pedidos marcados como recebidos por terceiro.` : "Pedido marcado como recebido por terceiro.");
     carregarPedidosCifPendentes();
   } catch (err) {
     mostrarAviso("Erro ao marcar recebimento: " + err.message);
