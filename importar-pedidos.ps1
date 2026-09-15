@@ -1,4 +1,4 @@
-﻿# importar-pedidos.ps1
+# importar-pedidos.ps1
 #
 # Varre a pasta "Processados" do robô do Avanço para Contratos (que já
 # processa os pedidos de compra pra rastrear spot x contrato) e, pra cada
@@ -9,15 +9,16 @@
 #
 # FRETE CIF x FOB: decidido pelo NOME DO ARQUIVO (mesma lógica que o robô do
 # Avanço para Contratos usa pra decidir spot x contrato). Se o nome do
-# arquivo contiver a palavra "FOB" (sem diferenciar maiúsculas/minúsculas),
-# o pedido é registrado — só esses precisam de coleta pelo motorista.
-# Pedidos sem "FOB" no nome são considerados CIF (fornecedor entrega) e são
-# simplesmente ignorados, sem entrar no banco de dados.
+# arquivo contiver a palavra "FOB" (sem diferenciar maiúsculas/minúsculas), o
+# pedido precisa de coleta pelo motorista. Sem "FOB" no nome, é considerado
+# CIF (fornecedor entrega) — AMBOS são importados (campo frete_fob marca
+# qual é qual); só os FOB aparecem pro motorista montar rota, os CIF ficam
+# disponíveis pro almoxarifado conferir quando a entrega chegar na portaria.
 #
 # Depois de processado, o arquivo é movido para uma subpasta (dentro da
 # própria pasta "Processados" monitorada):
-#   Roteirizados\            -> importado com sucesso (nome tem "FOB", precisa de rota)
-#   Roteirizados-CIF\        -> ignorado (nome sem "FOB" — assume CIF)
+#   Roteirizados\            -> importado como FOB (nome tem "FOB", precisa de rota)
+#   Roteirizados-CIF\        -> importado como CIF (nome sem "FOB", fornecedor entrega)
 #   Roteirizados-Duplicados\ -> pulado porque o número do pedido já tinha sido importado
 #   Roteirizados-Erros\      -> deu algum problema (confira o log)
 #
@@ -219,12 +220,6 @@ foreach ($arquivo in $arquivos) {
         # na transportadora todo dia sem saber de antemão o que já chegou.
         $retirarTransportadora = $arquivo.Name -imatch "transportadora"
 
-        if (-not $ehFob) {
-            Write-Log "  Sem 'FOB' no nome do arquivo — assumindo CIF (fornecedor entrega), não roteirizado. Movido para Roteirizados-CIF."
-            Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaCIF $arquivo.Name) -Force
-            continue
-        }
-
         if (Test-PedidoJaImportado $dados.numero_pedido) {
             Write-Log "  Pedido Nº $($dados.numero_pedido) já importado antes — pulando (movido para Roteirizados-Duplicados)."
             Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaDuplicados $arquivo.Name) -Force
@@ -256,12 +251,14 @@ foreach ($arquivo in $arquivos) {
             itens           = if ($dados.itens) { $dados.itens } else { $null }
             urgente         = $false
             retirar_transportadora = $retirarTransportadora
+            frete_fob       = $ehFob
             status          = "pendente"
         } | ConvertTo-Json -Depth 6
         Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_pedidos" $HeadersJson $pedido | Out-Null
 
-        Write-Log "  OK (FOB$(if ($retirarTransportadora) { ', transportadora' })): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
-        Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaRoteirizados $arquivo.Name) -Force
+        $pastaDestino = if ($ehFob) { $PastaRoteirizados } else { $PastaCIF }
+        Write-Log "  OK ($(if ($ehFob) { 'FOB' } else { 'CIF' })$(if ($retirarTransportadora) { ', transportadora' })): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
+        Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDestino $arquivo.Name) -Force
     }
     catch {
         Write-Log "  ERRO: $(Detalhe-Erro $_)"
