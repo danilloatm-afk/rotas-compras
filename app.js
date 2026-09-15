@@ -1893,27 +1893,26 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       ).divergCondicao;
     }
 
-    const { error: errParada } = await db
-      .from("rl_rota_paradas")
-      .update({
-        status: "concluida",
-        nota_arquivo_url: url,
-        nota_numero: notaNumero || null,
-        nota_valor_total: notaValor ? Number(notaValor) : null,
-        nota_cnpj: notaCnpj || null,
-        nota_itens: notaItensExtraidos,
-        nota_tipo_documento: notaTipoDocumento,
-        nota_emitente_nome: notaEmitenteExtraido,
-        nota_data_emissao: notaDataEmissaoExtraida,
-        nota_parcelas: notaParcelasExtraidas,
-        entrega_parcial: entregaParcial,
-        divergencia_valor: divergValor,
-        divergencia_cnpj: divergCnpj,
-        divergencia_itens: itensDivergentes,
-        divergencia_condicao_pagamento: divergCondicao,
-        concluido_em: new Date().toISOString(),
-      })
-      .eq("id", paradaEmEdicao.id);
+    const dadosConclusao = {
+      status: "concluida",
+      nota_arquivo_url: url,
+      nota_numero: notaNumero || null,
+      nota_valor_total: notaValor ? Number(notaValor) : null,
+      nota_cnpj: notaCnpj || null,
+      nota_itens: notaItensExtraidos,
+      nota_tipo_documento: notaTipoDocumento,
+      nota_emitente_nome: notaEmitenteExtraido,
+      nota_data_emissao: notaDataEmissaoExtraida,
+      nota_parcelas: notaParcelasExtraidas,
+      entrega_parcial: entregaParcial,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: divergCnpj,
+      divergencia_itens: itensDivergentes,
+      divergencia_condicao_pagamento: divergCondicao,
+      concluido_em: new Date().toISOString(),
+    };
+
+    const { error: errParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaEmEdicao.id);
     if (errParada) throw errParada;
 
     const { error: errPedido } = await db
@@ -1921,6 +1920,15 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       .update({ status: entregaParcial ? "pendente" : "concluido" })
       .eq("id", paradaEmEdicao.pedido_id);
     if (errPedido) throw errPedido;
+
+    // Nota que cobre mais de um pedido junto (ver iniciarConferenciaCif) —
+    // aplica a MESMA conferência e o mesmo resultado nas outras paradas, pra
+    // cada pedido real ficar com seu próprio registro completo no Histórico.
+    const paradasIrmas = paradaEmEdicao._paradasIrmas || [];
+    for (const irma of paradasIrmas) {
+      await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", irma.paradaId);
+      await db.from("rl_pedidos").update({ status: entregaParcial ? "pendente" : "concluido" }).eq("id", irma.pedidoId);
+    }
 
     // Usa a rota DESSA parada (não a "rota atual" global do motorista) — o
     // mesmo modal também é reaproveitado pra conferência CIF da portaria, que
@@ -2142,13 +2150,11 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
     const selPedido = document.getElementById("portaria-pedido-relacionado");
     const labelPedido = document.getElementById("label-portaria-pedido-relacionado");
     if (portariaPedidosCandidatos.length) {
-      selPedido.innerHTML =
-        `<option value="">— nenhum, só avisar —</option>` +
-        portariaPedidosCandidatos
-          .map((p) => `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(p.valor_total)}</option>`)
-          .join("");
+      selPedido.innerHTML = portariaPedidosCandidatos
+        .map((p) => `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(p.valor_total)}</option>`)
+        .join("");
       labelPedido.classList.remove("hidden");
-      feedback.textContent = `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — escolha qual é esse abaixo.`;
+      feedback.textContent = `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — marque qual(is) é(são) esse(s) abaixo (a nota pode cobrir mais de um).`;
     } else {
       labelPedido.classList.add("hidden");
       feedback.textContent = `Nota lida! Não achamos pedido CIF pendente de "${extraido.emitente_nome || "fornecedor não identificado"}" — o almoxarifado escolhe manualmente depois.`;
@@ -2166,7 +2172,7 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
   const fornecedor = document.getElementById("portaria-fornecedor").value.trim();
   const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
   const mensagem = document.getElementById("portaria-mensagem").value.trim();
-  const pedidoRelacionadoId = document.getElementById("portaria-pedido-relacionado").value || null;
+  const pedidoRelacionadoIds = Array.from(document.getElementById("portaria-pedido-relacionado").selectedOptions).map((o) => o.value);
   if (!cnpj && !fornecedor && !pedidoNumero) {
     mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o número do pedido.");
     return;
@@ -2185,7 +2191,7 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
       fornecedor_nome: fornecedor || null,
       pedido_numero: pedidoNumero || null,
       mensagem: mensagem || null,
-      pedido_id: pedidoRelacionadoId,
+      pedido_ids: pedidoRelacionadoIds.length ? pedidoRelacionadoIds : null,
       nota_arquivo_url: notaArquivoUrl,
       nota_numero: nota ? nota.numero : null,
       nota_valor_total: nota ? nota.valor_total : null,
@@ -2767,7 +2773,15 @@ function renderAvisosPortariaPendentes() {
           ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
           ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
           · ${formatarDataHora(a.criado_em)}
-          ${a.nota_arquivo_url ? `<div class="card-meta">📎 Nota já lida pela portaria${a.pedido_id ? " e já relacionada a um pedido" : ""} — conferência pronta pra revisar.</div>` : ""}
+          ${
+            a.nota_arquivo_url
+              ? `<div class="card-meta">📎 Nota já lida pela portaria${
+                  a.pedido_ids && a.pedido_ids.length
+                    ? ` e já relacionada a ${a.pedido_ids.length > 1 ? `${a.pedido_ids.length} pedidos` : "um pedido"}`
+                    : ""
+                } — conferência pronta pra revisar.</div>`
+              : ""
+          }
           ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
         </div>
         <div style="display:flex; gap:0.5rem; flex-shrink:0;">
@@ -2830,15 +2844,15 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
     const avisoId = btnConferir.dataset.conferirAvisoPortaria;
     const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoId);
 
-    // Portaria já leu a nota E já relacionou um pedido — pula direto pra
+    // Portaria já leu a nota E já relacionou pedido(s) — pula direto pra
     // conferência, sem precisar escolher de novo qual pedido é.
-    if (aviso.nota_arquivo_url && aviso.pedido_id) {
-      const { data: pedido, error } = await comTimeout(db.from("rl_pedidos").select("*").eq("id", aviso.pedido_id).single());
-      if (error || !pedido) {
-        mostrarAviso("Erro ao buscar o pedido relacionado: " + (error ? error.message : "não encontrado"));
+    if (aviso.nota_arquivo_url && aviso.pedido_ids && aviso.pedido_ids.length) {
+      const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids));
+      if (error || !pedidos || !pedidos.length) {
+        mostrarAviso("Erro ao buscar o(s) pedido(s) relacionado(s): " + (error ? error.message : "não encontrado(s)"));
         return;
       }
-      await iniciarConferenciaCif(pedido, notaPreLidaDoAviso(aviso));
+      await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
       return;
     }
 
@@ -2879,7 +2893,7 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
   if (btnConferirPedido) {
     const pedido = pedidosCifDoAvisoExpandido.find((p) => p.id === btnConferirPedido.dataset.conferirPedidoCif);
     const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoPortariaExpandidoId);
-    if (pedido) await iniciarConferenciaCif(pedido, aviso ? notaPreLidaDoAviso(aviso) : null);
+    if (pedido) await iniciarConferenciaCif([pedido], aviso ? notaPreLidaDoAviso(aviso) : null);
   }
 });
 
@@ -2888,7 +2902,24 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
 // da leitura de nota por IA e da comparação de itens/valor/CNPJ/condição de
 // pagamento, sem duplicar nada disso só porque dessa vez quem confere é o
 // almoxarifado (entrega CIF), não o motorista numa rota de coleta.
-async function iniciarConferenciaCif(pedido, notaPreLida) {
+// Junta vários pedidos pendentes num só "pedido" pra fins de comparação —
+// usado quando uma nota só cobre mais de um pedido do mesmo fornecedor
+// (soma o valor esperado, junta os itens de todos).
+function mesclarPedidosParaConferencia(pedidos) {
+  if (pedidos.length === 1) return pedidos[0];
+  return {
+    ...pedidos[0],
+    numero_pedido: pedidos.map((p) => p.numero_pedido || "s/ nº").join(" + "),
+    valor_total: pedidos.reduce((soma, p) => soma + (Number(p.valor_total) || 0), 0),
+    itens: pedidos.flatMap((p) => (Array.isArray(p.itens) ? p.itens : [])),
+  };
+}
+
+// "pedidos" é sempre um array — normalmente com 1 item, mas pode ter mais de
+// um quando o fornecedor manda uma nota só cobrindo vários pedidos juntos.
+// Cria uma parada por pedido real (pra cada um ficar registrado certinho no
+// Histórico), mas mostra/compara tudo junto numa conferência só.
+async function iniciarConferenciaCif(pedidos, notaPreLida) {
   const almoxarife = document.getElementById("almoxarife-select-cif").value;
   try {
     const { data: rota, error: errRota } = await db
@@ -2898,14 +2929,22 @@ async function iniciarConferenciaCif(pedido, notaPreLida) {
       .single();
     if (errRota) throw errRota;
 
-    const { data: parada, error: errParada } = await db
+    const { data: paradas, error: errParada } = await db
       .from("rl_rota_paradas")
-      .insert({ rota_id: rota.id, pedido_id: pedido.id, ordem: 0, status: "pendente" })
-      .select()
-      .single();
+      .insert(pedidos.map((p, i) => ({ rota_id: rota.id, pedido_id: p.id, ordem: i, status: "pendente" })))
+      .select();
     if (errParada) throw errParada;
 
-    abrirModalConcluir({ ...parada, rl_pedidos: pedido }, notaPreLida);
+    const [paradaPrimaria, ...paradasIrmas] = paradas;
+    const pedidoMesclado = mesclarPedidosParaConferencia(pedidos);
+    abrirModalConcluir(
+      {
+        ...paradaPrimaria,
+        rl_pedidos: pedidoMesclado,
+        _paradasIrmas: paradasIrmas.map((par, i) => ({ paradaId: par.id, pedidoId: pedidos[i + 1].id })),
+      },
+      notaPreLida
+    );
   } catch (err) {
     mostrarAviso("Erro ao iniciar conferência: " + err.message);
   }
@@ -2962,7 +3001,7 @@ document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click",
   const btn = e.target.closest("button[data-conferir-pedido-cif-geral]");
   if (!btn) return;
   const pedido = pedidosCifPendentesCache.find((p) => p.id === btn.dataset.conferirPedidoCifGeral);
-  if (pedido) await iniciarConferenciaCif(pedido);
+  if (pedido) await iniciarConferenciaCif([pedido]);
 });
 
 document.getElementById("filtro-numero-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
