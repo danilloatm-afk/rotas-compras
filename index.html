@@ -204,6 +204,18 @@
     <p class="hint">Pra entregas que o fornecedor traz até aqui (frete CIF) — avisa o almoxarifado na hora, com som, sem precisar ligar ou ir até lá.</p>
     <div class="card-pedido">
       <label>
+        Empresa (pra qual empresa é a entrega)
+        <select id="portaria-empresa"><option value="">— selecione —</option></select>
+      </label>
+      <label id="label-portaria-setor" class="hidden">
+        Almoxarifado (setor)
+        <select id="portaria-setor">
+          <option value="">— selecione —</option>
+          <option value="Uso e Consumo">Uso e Consumo</option>
+          <option value="Insumos">Insumos</option>
+        </select>
+      </label>
+      <label>
         Nota fiscal (opcional — só se tiver o arquivo no computador)
         <input type="file" id="portaria-nota-arquivo" accept="image/*,application/pdf">
       </label>
