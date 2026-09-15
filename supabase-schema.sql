@@ -45,6 +45,7 @@ create table rl_pedidos (
   urgente boolean not null default false,
   parcial_esperado boolean not null default false,
   retirar_transportadora boolean not null default false,
+  frete_fob boolean not null default true,
   condicao_pagamento_codigo text,
   valor_total numeric,
   itens jsonb,
@@ -100,6 +101,20 @@ create table rl_almoxarifes (
   criado_em timestamptz not null default now()
 );
 
+-- Avisos da portaria pro almoxarifado ("chegou uma entrega") — independente
+-- de rota/motorista, pensado pra entregas CIF (fornecedor traz até aqui).
+create table rl_avisos_portaria (
+  id uuid primary key default gen_random_uuid(),
+  fornecedor_nome text,
+  pedido_numero text,
+  mensagem text,
+  criado_por text,
+  criado_em timestamptz not null default now(),
+  lido boolean not null default false,
+  lido_por text,
+  lido_em timestamptz
+);
+
 create index on rl_pedidos (status);
 create index on rl_pedidos (numero_pedido);
 create index on rl_rota_paradas (rota_id);
@@ -112,6 +127,7 @@ alter table rl_pedidos enable row level security;
 alter table rl_rotas enable row level security;
 alter table rl_rota_paradas enable row level security;
 alter table rl_almoxarifes enable row level security;
+alter table rl_avisos_portaria enable row level security;
 
 create policy "allow all" on rl_empresas for all using (true) with check (true);
 create policy "allow all" on rl_compradores for all using (true) with check (true);
@@ -120,6 +136,7 @@ create policy "allow all" on rl_pedidos for all using (true) with check (true);
 create policy "allow all" on rl_rotas for all using (true) with check (true);
 create policy "allow all" on rl_rota_paradas for all using (true) with check (true);
 create policy "allow all" on rl_almoxarifes for all using (true) with check (true);
+create policy "allow all" on rl_avisos_portaria for all using (true) with check (true);
 
 -- Pré-cadastro das empresas do grupo (CNPJs confirmados em pedidos reais),
 -- usadas na conferência com a nota fiscal.
