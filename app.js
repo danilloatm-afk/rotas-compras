@@ -2822,7 +2822,12 @@ async function carregarAvisosPortariaPendentes() {
 
   // Avisa por voz só o que apareceu de novo desde a última verificação —
   // mesmo padrão já usado pras divergências (ver avisarDivergenciasNovas).
-  const idsAtuais = new Set(avisosVisiveis.map((a) => a.id));
+  // IMPORTANTE: o conjunto de "já conhecidos" usa TODOS os avisos pendentes
+  // (não só os visíveis pro almoxarife selecionado agora) — senão, trocar de
+  // almoxarife no mesmo aparelho (empresa/setor diferente) faz um aviso
+  // antigo, que só ficou fora do filtro até agora, parecer "novo" de novo e
+  // repete o alerta sonoro à toa toda vez que alguém troca a seleção.
+  const idsAtuais = new Set(data.map((a) => a.id));
   if (idsAvisosPortariaConhecidos) {
     avisosVisiveis
       .filter((a) => !idsAvisosPortariaConhecidos.has(a.id))
