@@ -106,6 +106,7 @@ create table rl_almoxarifes (
 create table rl_avisos_portaria (
   id uuid primary key default gen_random_uuid(),
   fornecedor_nome text,
+  fornecedor_cnpj text,
   pedido_numero text,
   mensagem text,
   criado_por text,
