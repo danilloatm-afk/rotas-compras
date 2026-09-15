@@ -325,6 +325,13 @@ async function loadEmpresas() {
       .map((e) => `<option value="${e.id}">${escapeHtml(e.nome)}${e.cnpj ? ` — ${escapeHtml(e.cnpj)}` : ""}</option>`)
       .join("");
   if (atual) sel.value = atual;
+
+  const selPortaria = document.getElementById("portaria-empresa");
+  const atualPortaria = selPortaria.value;
+  selPortaria.innerHTML =
+    `<option value="">— selecione —</option>` +
+    empresasCache.filter((e) => e.ativo).map((e) => `<option value="${escapeHtml(e.nome)}">${escapeHtml(e.nome)}</option>`).join("");
+  if (atualPortaria) selPortaria.value = atualPortaria;
 }
 
 document.getElementById("comprador-select").addEventListener("change", (e) => {
@@ -451,6 +458,9 @@ document.getElementById("almoxarife-select").addEventListener("change", (e) => {
 document.getElementById("almoxarife-select-cif").addEventListener("change", (e) => {
   localStorage.setItem("rl_almoxarife_atual", e.target.value);
   document.getElementById("almoxarife-select").value = e.target.value;
+  // Troca de almoxarife pode mudar o filtro por empresa/setor — reconfere.
+  carregarAvisosPortariaPendentes();
+  carregarPedidosCifPendentes();
 });
 
 // O nome de quem pediu já vem escrito no próprio documento (campo
@@ -2027,16 +2037,50 @@ function renderCadastros() {
   const listaAlmoxarifes = document.getElementById("lista-almoxarifes-config");
   listaAlmoxarifes.innerHTML = almoxarifesCache.length
     ? almoxarifesCache
-        .map(
-          (a) => `
+        .map((a) => {
+          const ehWehrmann = a.empresa_nome === "AGRICOLA WEHRMANN LTDA";
+          return `
       <li class="${a.ativo ? "" : "inativo"}">
         <span>${escapeHtml(a.nome)}</span>
+        <select class="select-empresa-almoxarife" data-almoxarife-id="${a.id}">
+          <option value="">Todas as empresas</option>
+          ${empresasCache
+            .filter((e) => e.ativo)
+            .map((e) => `<option value="${escapeHtml(e.nome)}" ${a.empresa_nome === e.nome ? "selected" : ""}>${escapeHtml(e.nome)}</option>`)
+            .join("")}
+        </select>
+        <select class="select-setor-almoxarife${ehWehrmann ? "" : " hidden"}" data-almoxarife-id="${a.id}">
+          <option value="">Todos os setores</option>
+          <option value="Uso e Consumo" ${a.setor === "Uso e Consumo" ? "selected" : ""}>Uso e Consumo</option>
+          <option value="Insumos" ${a.setor === "Insumos" ? "selected" : ""}>Insumos</option>
+        </select>
         <button class="link-btn" data-toggle-almoxarife="${a.id}" data-ativo="${a.ativo}" type="button">${a.ativo ? "Desativar" : "Ativar"}</button>
-      </li>`
-        )
+      </li>`;
+        })
         .join("")
     : `<li class="empty-state">Nenhum almoxarife cadastrado.</li>`;
 }
+
+document.getElementById("tab-config").addEventListener("change", async (e) => {
+  const selEmpresa = e.target.closest("select.select-empresa-almoxarife");
+  if (selEmpresa) {
+    const ehWehrmann = selEmpresa.value === "AGRICOLA WEHRMANN LTDA";
+    const selSetor = selEmpresa.closest("li").querySelector(".select-setor-almoxarife");
+    selSetor.classList.toggle("hidden", !ehWehrmann);
+    if (!ehWehrmann) selSetor.value = "";
+    await db
+      .from("rl_almoxarifes")
+      .update({ empresa_nome: selEmpresa.value || null, setor: ehWehrmann ? selSetor.value || null : null })
+      .eq("id", selEmpresa.dataset.almoxarifeId);
+    await loadAlmoxarifes();
+    return;
+  }
+  const selSetor = e.target.closest("select.select-setor-almoxarife");
+  if (selSetor) {
+    await db.from("rl_almoxarifes").update({ setor: selSetor.value || null }).eq("id", selSetor.dataset.almoxarifeId);
+    await loadAlmoxarifes();
+  }
+});
 
 document.getElementById("tab-config").addEventListener("click", async (e) => {
   const btnEmp = e.target.closest("button[data-toggle-empresa]");
@@ -2097,6 +2141,14 @@ let portariaNotaArquivo = null;
 let portariaNotaExtraida = null; // { itens, tipo_documento, emitente_nome, data_emissao, parcelas, valor_total, cnpj, numero }
 let portariaPedidosCandidatos = [];
 
+// Só a AGRICOLA WEHRMANN LTDA tem dois almoxarifados (Uso e Consumo /
+// Insumos) — o campo "Setor" só aparece quando essa empresa é escolhida.
+document.getElementById("portaria-empresa").addEventListener("change", (e) => {
+  const ehWehrmann = e.target.value === "AGRICOLA WEHRMANN LTDA";
+  document.getElementById("label-portaria-setor").classList.toggle("hidden", !ehWehrmann);
+  if (!ehWehrmann) document.getElementById("portaria-setor").value = "";
+});
+
 function resetPortariaNota() {
   portariaNotaArquivo = null;
   portariaNotaExtraida = null;
@@ -2137,9 +2189,14 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
     }
 
     // Sugere os pedidos CIF pendentes do mesmo fornecedor (por nome — a nota
-    // não traz o CNPJ de quem emite, só de quem recebe).
+    // não traz o CNPJ de quem emite, só de quem recebe) e da mesma empresa,
+    // se a portaria já tiver escolhido uma — ajuda a desambiguar quando mais
+    // de uma empresa do grupo compra do mesmo fornecedor.
+    const empresaAlvo = document.getElementById("portaria-empresa").value;
     const nomeAlvo = normalizarEmpresa(extraido.emitente_nome || "");
-    const { data } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
+    let queryCandidatos = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
+    if (empresaAlvo) queryCandidatos = queryCandidatos.eq("empresa_nome", empresaAlvo);
+    const { data } = await comTimeout(queryCandidatos);
     portariaPedidosCandidatos = nomeAlvo
       ? (data || []).filter((p) => {
           const nomeP = normalizarEmpresa(p.fornecedor_nome || "");
@@ -2168,6 +2225,8 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
 
 document.getElementById("btn-avisar-portaria").addEventListener("click", async () => {
   const btn = document.getElementById("btn-avisar-portaria");
+  const empresa = document.getElementById("portaria-empresa").value;
+  const setor = document.getElementById("portaria-setor").value;
   const cnpj = document.getElementById("portaria-cnpj").value.trim();
   const fornecedor = document.getElementById("portaria-fornecedor").value.trim();
   const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
@@ -2187,6 +2246,8 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
     }
     const nota = portariaNotaExtraida;
     const { error } = await db.from("rl_avisos_portaria").insert({
+      empresa_nome: empresa || null,
+      setor: setor || null,
       fornecedor_cnpj: cnpj || null,
       fornecedor_nome: fornecedor || null,
       pedido_numero: pedidoNumero || null,
@@ -2237,6 +2298,7 @@ async function carregarAvisosPortariaEnviados() {
     .map(
       (a) => `
     <div class="aviso-portaria-enviado">
+      ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}
       ${a.fornecedor_nome ? `<strong>${escapeHtml(a.fornecedor_nome)}</strong>` : "<strong>Fornecedor não informado</strong>"}
       ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
       ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
@@ -2726,17 +2788,34 @@ let avisosPortariaPendentesCache = [];
 let avisoPortariaExpandidoId = null; // id do aviso com o seletor de pedidos CIF aberto
 let pedidosCifDoAvisoExpandido = [];
 
+// O almoxarife selecionado (aba Recebimento CIF) pode estar amarrado a uma
+// empresa (e, só na Wehrmann, também a um setor: Uso e Consumo/Insumos) —
+// nesse caso só vê os avisos daquela empresa/setor. Sem empresa definida no
+// cadastro dele, continua vendo tudo (comportamento de antes).
+function filtrarAvisosPorAlmoxarifeAtual(avisos) {
+  const nomeAtual = document.getElementById("almoxarife-select-cif").value;
+  const almoxarife = almoxarifesCache.find((a) => a.nome === nomeAtual);
+  if (!almoxarife || !almoxarife.empresa_nome) return avisos;
+  return avisos.filter((a) => {
+    if (a.empresa_nome !== almoxarife.empresa_nome) return false;
+    if (almoxarife.setor && a.setor !== almoxarife.setor) return false;
+    return true;
+  });
+}
+
 async function carregarAvisosPortariaPendentes() {
   const { data, error } = await comTimeout(
     db.from("rl_avisos_portaria").select("*").eq("lido", false).order("criado_em", { ascending: true })
   );
   if (error || !data) return;
 
+  const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
+
   // Avisa por voz só o que apareceu de novo desde a última verificação —
   // mesmo padrão já usado pras divergências (ver avisarDivergenciasNovas).
-  const idsAtuais = new Set(data.map((a) => a.id));
+  const idsAtuais = new Set(avisosVisiveis.map((a) => a.id));
   if (idsAvisosPortariaConhecidos) {
-    data
+    avisosVisiveis
       .filter((a) => !idsAvisosPortariaConhecidos.has(a.id))
       .forEach((a) => {
         falarAlerta(`Atenção! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "não informado"}.`);
@@ -2744,12 +2823,12 @@ async function carregarAvisosPortariaPendentes() {
   }
   idsAvisosPortariaConhecidos = idsAtuais;
 
-  avisosPortariaPendentesCache = data;
+  avisosPortariaPendentesCache = avisosVisiveis;
   renderAvisosPortariaPendentes();
 
   const badge = document.getElementById("badge-avisos-portaria");
-  if (data.length) {
-    badge.textContent = String(data.length);
+  if (avisosVisiveis.length) {
+    badge.textContent = String(avisosVisiveis.length);
     badge.hidden = false;
   } else {
     badge.hidden = true;
@@ -2769,7 +2848,7 @@ function renderAvisosPortariaPendentes() {
       return `
       <div class="aviso-portaria-card">
         <div>
-          🚪 <strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
+          🚪 ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
           ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
           ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
           · ${formatarDataHora(a.criado_em)}
@@ -2961,6 +3040,12 @@ async function carregarPedidosCifPendentes() {
   let query = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false).order("criado_em");
   if (numeroFiltro) query = query.ilike("numero_pedido", `%${numeroFiltro}%`);
   if (fornecedorFiltro) query = query.ilike("fornecedor_nome", `%${fornecedorFiltro}%`);
+
+  // Mesma regra dos avisos: almoxarife com empresa cadastrada só vê pedidos
+  // daquela empresa (o pedido não tem "setor", só a nota/aviso tem).
+  const nomeAtual = document.getElementById("almoxarife-select-cif").value;
+  const almoxarife = almoxarifesCache.find((a) => a.nome === nomeAtual);
+  if (almoxarife && almoxarife.empresa_nome) query = query.eq("empresa_nome", almoxarife.empresa_nome);
 
   const { data, error } = await comTimeout(query);
   if (error) {
