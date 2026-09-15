@@ -338,7 +338,14 @@ Deno.serve(async (req: Request) => {
             return soma + (linha || 0);
           }, 0)
         : null;
-      const mercadorias = extraido.total_mercadorias ?? somaItens;
+      // "|| somaItens" (não "?? somaItens") de propósito — alguns modelos de
+      // pedido não têm coluna de total por linha nem um "Total das
+      // Mercadorias" de verdade, e a IA às vezes copia um "0,00" literal do
+      // documento (não omite o campo) nesse caso. Um pedido de verdade nunca
+      // tem valor 0 nas mercadorias, então trata 0 igual a "não veio" e cai
+      // pro fallback (soma dos itens) — sem isso, o pedido inteiro salvava
+      // com valor zerado (ou até negativo, se tinha desconto).
+      const mercadorias = extraido.total_mercadorias || somaItens;
       if (mercadorias != null) {
         extraido.valor_total = mercadorias + (extraido.frete || 0) + (extraido.despesas || 0) - (extraido.descontos || 0);
       }
