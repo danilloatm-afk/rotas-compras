@@ -1327,13 +1327,17 @@ document.getElementById("lista-rota").addEventListener("drop", async (e) => {
 });
 
 // ---------- concluir parada (modal com conferência) ----------
-function abrirModalConcluir(parada) {
+// "notaPreLida" (opcional) vem preenchido quando a portaria já anexou e leu
+// a nota com IA no aviso — nesse caso pula direto pra conferência, sem pedir
+// pra fotografar/ler de novo o mesmo documento.
+function abrirModalConcluir(parada, notaPreLida) {
   paradaEmEdicao = parada;
-  notaItensExtraidos = null;
-  notaTipoDocumento = null;
-  notaEmitenteExtraido = null;
-  notaDataEmissaoExtraida = null;
-  notaParcelasExtraidas = null;
+  notaItensExtraidos = notaPreLida ? notaPreLida.itens : null;
+  notaTipoDocumento = notaPreLida ? notaPreLida.tipo_documento : null;
+  notaEmitenteExtraido = notaPreLida ? notaPreLida.emitente_nome : null;
+  notaDataEmissaoExtraida = notaPreLida ? notaPreLida.data_emissao : null;
+  notaParcelasExtraidas = notaPreLida ? notaPreLida.parcelas : null;
+  notaArquivoUrlPreLido = notaPreLida ? notaPreLida.arquivo_url : null;
   document.getElementById("form-modal-nota").reset();
   // já vem pré-marcado se o comprador/motorista sinalizou antes, em
   // "Pedidos disponíveis", que esse pedido costuma vir em partes.
@@ -1341,8 +1345,32 @@ function abrirModalConcluir(parada) {
   document.getElementById("nota-ia-feedback").textContent = "";
   document.getElementById("modal-feedback").textContent = "";
   document.getElementById("conferencia-resultado").classList.add("hidden");
+
+  const inputNota = document.getElementById("nota-arquivo");
+  if (notaPreLida) {
+    document.getElementById("nota-valor").value = notaPreLida.valor_total ?? "";
+    document.getElementById("nota-cnpj").value = notaPreLida.cnpj || "";
+    document.getElementById("nota-numero").value = notaPreLida.numero || "";
+    document.getElementById("link-nota-pre-lida").href = notaPreLida.arquivo_url;
+    document.getElementById("bloco-nota-pre-lida").classList.remove("hidden");
+    document.getElementById("bloco-upload-nota").classList.add("hidden");
+    inputNota.required = false;
+    atualizarConferencia();
+  } else {
+    document.getElementById("bloco-nota-pre-lida").classList.add("hidden");
+    document.getElementById("bloco-upload-nota").classList.remove("hidden");
+    inputNota.required = true;
+  }
+
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
+
+document.getElementById("btn-reler-nota").addEventListener("click", () => {
+  notaArquivoUrlPreLido = null;
+  document.getElementById("bloco-nota-pre-lida").classList.add("hidden");
+  document.getElementById("bloco-upload-nota").classList.remove("hidden");
+  document.getElementById("nota-arquivo").required = true;
+});
 
 document.getElementById("lista-rota").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-concluir]");
@@ -1362,6 +1390,9 @@ let notaTipoDocumento = null;
 let notaEmitenteExtraido = null;
 let notaDataEmissaoExtraida = null;
 let notaParcelasExtraidas = null;
+// Preenchido quando a nota já veio lida da portaria (ver iniciarConferenciaCif)
+// — nesse caso não faz sentido pedir upload de novo, só reaproveitar a URL.
+let notaArquivoUrlPreLido = null;
 
 async function lerNotaComIA() {
   const input = document.getElementById("nota-arquivo");
@@ -1794,9 +1825,10 @@ function atualizarConferencia() {
 document.getElementById("form-modal-nota").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!paradaEmEdicao) return;
+  const rotaId = paradaEmEdicao.rota_id;
   const feedback = document.getElementById("modal-feedback");
   const file = document.getElementById("nota-arquivo").files[0];
-  if (!file) {
+  if (!file && !notaArquivoUrlPreLido) {
     feedback.textContent = "Anexe a foto da nota fiscal.";
     feedback.className = "feedback error";
     return;
@@ -1832,7 +1864,7 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   feedback.textContent = "Salvando...";
   feedback.className = "feedback";
   try {
-    const { url } = await uploadArquivo(file, "rl_notas");
+    const url = file ? (await uploadArquivo(file, "rl_notas")).url : notaArquivoUrlPreLido;
     const entregaParcial = document.getElementById("nota-parcial").checked;
     const notaValor = document.getElementById("nota-valor").value;
     const notaCnpj = document.getElementById("nota-cnpj").value.trim();
@@ -2048,12 +2080,93 @@ document.getElementById("tab-config").addEventListener(
 );
 
 // ---------- portaria (avisa o almoxarifado que uma entrega chegou) ----------
+// Se a portaria tiver o arquivo da nota em mãos, lê com IA na hora — o
+// almoxarifado reaproveita essa leitura na conferência CIF depois, sem
+// fotografar/gastar outra chamada de IA pro mesmo documento. Guarda o File
+// (não a URL) porque só faz sentido subir pro Storage se o aviso for enviado
+// de verdade.
+let portariaNotaArquivo = null;
+let portariaNotaExtraida = null; // { itens, tipo_documento, emitente_nome, data_emissao, parcelas, valor_total, cnpj, numero }
+let portariaPedidosCandidatos = [];
+
+function resetPortariaNota() {
+  portariaNotaArquivo = null;
+  portariaNotaExtraida = null;
+  portariaPedidosCandidatos = [];
+  document.getElementById("portaria-nota-arquivo").value = "";
+  document.getElementById("portaria-nota-ia-feedback").textContent = "";
+  document.getElementById("label-portaria-pedido-relacionado").classList.add("hidden");
+  document.getElementById("portaria-pedido-relacionado").innerHTML = "";
+}
+
+document.getElementById("btn-portaria-ler-nota").addEventListener("click", async () => {
+  const input = document.getElementById("portaria-nota-arquivo");
+  const feedback = document.getElementById("portaria-nota-ia-feedback");
+  const file = input.files && input.files[0];
+  if (!file) {
+    feedback.textContent = "Anexe o arquivo da nota primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  feedback.textContent = "Lendo nota com IA...";
+  feedback.className = "feedback";
+  try {
+    const extraido = await lerComIA(file, "nota");
+    portariaNotaArquivo = file;
+    portariaNotaExtraida = {
+      itens: Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null,
+      tipo_documento: extraido.tipo_documento || null,
+      emitente_nome: extraido.emitente_nome || null,
+      data_emissao: extraido.data_emissao || null,
+      parcelas: Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null,
+      valor_total: extraido.valor_total != null ? extraido.valor_total : null,
+      cnpj: extraido.destinatario_cnpj || null,
+      numero: extraido.numero_nota || null,
+    };
+
+    if (extraido.emitente_nome && !document.getElementById("portaria-fornecedor").value.trim()) {
+      document.getElementById("portaria-fornecedor").value = extraido.emitente_nome;
+    }
+
+    // Sugere os pedidos CIF pendentes do mesmo fornecedor (por nome — a nota
+    // não traz o CNPJ de quem emite, só de quem recebe).
+    const nomeAlvo = normalizarEmpresa(extraido.emitente_nome || "");
+    const { data } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
+    portariaPedidosCandidatos = nomeAlvo
+      ? (data || []).filter((p) => {
+          const nomeP = normalizarEmpresa(p.fornecedor_nome || "");
+          return nomeP && (nomeP.includes(nomeAlvo) || nomeAlvo.includes(nomeP));
+        })
+      : [];
+
+    const selPedido = document.getElementById("portaria-pedido-relacionado");
+    const labelPedido = document.getElementById("label-portaria-pedido-relacionado");
+    if (portariaPedidosCandidatos.length) {
+      selPedido.innerHTML =
+        `<option value="">— nenhum, só avisar —</option>` +
+        portariaPedidosCandidatos
+          .map((p) => `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(p.valor_total)}</option>`)
+          .join("");
+      labelPedido.classList.remove("hidden");
+      feedback.textContent = `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — escolha qual é esse abaixo.`;
+    } else {
+      labelPedido.classList.add("hidden");
+      feedback.textContent = `Nota lida! Não achamos pedido CIF pendente de "${extraido.emitente_nome || "fornecedor não identificado"}" — o almoxarifado escolhe manualmente depois.`;
+    }
+    feedback.className = "feedback success";
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+  }
+});
+
 document.getElementById("btn-avisar-portaria").addEventListener("click", async () => {
   const btn = document.getElementById("btn-avisar-portaria");
   const cnpj = document.getElementById("portaria-cnpj").value.trim();
   const fornecedor = document.getElementById("portaria-fornecedor").value.trim();
   const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
   const mensagem = document.getElementById("portaria-mensagem").value.trim();
+  const pedidoRelacionadoId = document.getElementById("portaria-pedido-relacionado").value || null;
   if (!cnpj && !fornecedor && !pedidoNumero) {
     mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o número do pedido.");
     return;
@@ -2061,17 +2174,34 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
   btn.disabled = true;
   btn.textContent = "Enviando...";
   try {
+    let notaArquivoUrl = null;
+    if (portariaNotaArquivo) {
+      const { url } = await uploadArquivo(portariaNotaArquivo, "rl_notas");
+      notaArquivoUrl = url;
+    }
+    const nota = portariaNotaExtraida;
     const { error } = await db.from("rl_avisos_portaria").insert({
       fornecedor_cnpj: cnpj || null,
       fornecedor_nome: fornecedor || null,
       pedido_numero: pedidoNumero || null,
       mensagem: mensagem || null,
+      pedido_id: pedidoRelacionadoId,
+      nota_arquivo_url: notaArquivoUrl,
+      nota_numero: nota ? nota.numero : null,
+      nota_valor_total: nota ? nota.valor_total : null,
+      nota_cnpj: nota ? nota.cnpj : null,
+      nota_itens: nota ? nota.itens : null,
+      nota_tipo_documento: nota ? nota.tipo_documento : null,
+      nota_emitente_nome: nota ? nota.emitente_nome : null,
+      nota_data_emissao: nota ? nota.data_emissao : null,
+      nota_parcelas: nota ? nota.parcelas : null,
     });
     if (error) throw error;
     document.getElementById("portaria-cnpj").value = "";
     document.getElementById("portaria-fornecedor").value = "";
     document.getElementById("portaria-pedido-numero").value = "";
     document.getElementById("portaria-mensagem").value = "";
+    resetPortariaNota();
     mostrarAviso("Aviso enviado! O almoxarifado vai ser notificado.");
     carregarAvisosPortariaEnviados();
   } catch (err) {
@@ -2637,10 +2767,13 @@ function renderAvisosPortariaPendentes() {
           ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
           ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
           · ${formatarDataHora(a.criado_em)}
+          ${a.nota_arquivo_url ? `<div class="card-meta">📎 Nota já lida pela portaria${a.pedido_id ? " e já relacionada a um pedido" : ""} — conferência pronta pra revisar.</div>` : ""}
           ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
         </div>
         <div style="display:flex; gap:0.5rem; flex-shrink:0;">
-          <button type="button" class="btn secondary small" data-conferir-aviso-portaria="${a.id}">🔍 Conferir</button>
+          <button type="button" class="btn secondary small" data-conferir-aviso-portaria="${a.id}">${
+            a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
+          }</button>
           <button type="button" class="btn secondary small" data-dispensar-aviso-portaria="${a.id}">✅ Liberar acesso</button>
         </div>
       </div>
@@ -2674,16 +2807,46 @@ function renderSeletorPedidosCif(aviso) {
     </table>`;
 }
 
+// Monta o objeto "notaPreLida" (mesmo formato usado por abrirModalConcluir)
+// a partir de um aviso que já veio com a nota lida pela portaria.
+function notaPreLidaDoAviso(aviso) {
+  if (!aviso.nota_arquivo_url) return null;
+  return {
+    arquivo_url: aviso.nota_arquivo_url,
+    valor_total: aviso.nota_valor_total,
+    cnpj: aviso.nota_cnpj,
+    numero: aviso.nota_numero,
+    itens: aviso.nota_itens,
+    tipo_documento: aviso.nota_tipo_documento,
+    emitente_nome: aviso.nota_emitente_nome,
+    data_emissao: aviso.nota_data_emissao,
+    parcelas: aviso.nota_parcelas,
+  };
+}
+
 document.getElementById("avisos-portaria-pendentes").addEventListener("click", async (e) => {
   const btnConferir = e.target.closest("button[data-conferir-aviso-portaria]");
   if (btnConferir) {
     const avisoId = btnConferir.dataset.conferirAvisoPortaria;
+    const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoId);
+
+    // Portaria já leu a nota E já relacionou um pedido — pula direto pra
+    // conferência, sem precisar escolher de novo qual pedido é.
+    if (aviso.nota_arquivo_url && aviso.pedido_id) {
+      const { data: pedido, error } = await comTimeout(db.from("rl_pedidos").select("*").eq("id", aviso.pedido_id).single());
+      if (error || !pedido) {
+        mostrarAviso("Erro ao buscar o pedido relacionado: " + (error ? error.message : "não encontrado"));
+        return;
+      }
+      await iniciarConferenciaCif(pedido, notaPreLidaDoAviso(aviso));
+      return;
+    }
+
     if (avisoPortariaExpandidoId === avisoId) {
       avisoPortariaExpandidoId = null;
       renderAvisosPortariaPendentes();
       return;
     }
-    const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoId);
     let query = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
     if (aviso.fornecedor_nome) query = query.ilike("fornecedor_nome", `%${aviso.fornecedor_nome}%`);
     const { data, error } = await comTimeout(query.order("criado_em"));
@@ -2715,7 +2878,8 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
   const btnConferirPedido = e.target.closest("button[data-conferir-pedido-cif]");
   if (btnConferirPedido) {
     const pedido = pedidosCifDoAvisoExpandido.find((p) => p.id === btnConferirPedido.dataset.conferirPedidoCif);
-    if (pedido) await iniciarConferenciaCif(pedido);
+    const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoPortariaExpandidoId);
+    if (pedido) await iniciarConferenciaCif(pedido, aviso ? notaPreLidaDoAviso(aviso) : null);
   }
 });
 
@@ -2724,7 +2888,7 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
 // da leitura de nota por IA e da comparação de itens/valor/CNPJ/condição de
 // pagamento, sem duplicar nada disso só porque dessa vez quem confere é o
 // almoxarifado (entrega CIF), não o motorista numa rota de coleta.
-async function iniciarConferenciaCif(pedido) {
+async function iniciarConferenciaCif(pedido, notaPreLida) {
   const almoxarife = document.getElementById("almoxarife-select-cif").value;
   try {
     const { data: rota, error: errRota } = await db
@@ -2741,7 +2905,7 @@ async function iniciarConferenciaCif(pedido) {
       .single();
     if (errParada) throw errParada;
 
-    abrirModalConcluir({ ...parada, rl_pedidos: pedido });
+    abrirModalConcluir({ ...parada, rl_pedidos: pedido }, notaPreLida);
   } catch (err) {
     mostrarAviso("Erro ao iniciar conferência: " + err.message);
   }
