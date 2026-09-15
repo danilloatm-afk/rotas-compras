@@ -230,10 +230,13 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     }
     if (btn.dataset.tab === "indicadores") loadIndicadores();
     if (btn.dataset.tab === "portaria") carregarAvisosPortariaEnviados();
+    if (btn.dataset.tab === "recebimento-cif") {
+      carregarAvisosPortariaPendentes();
+      carregarPedidosCifPendentes();
+    }
     if (btn.dataset.tab === "historico") {
       carregarFiltrosHistorico();
       loadHistorico();
-      carregarAvisosPortariaPendentes();
     }
     if (btn.dataset.tab === "config") renderCadastros();
   });
@@ -270,12 +273,23 @@ async function loadMotoristas() {
 async function loadAlmoxarifes() {
   const { data, error } = await comTimeout(db.from("rl_almoxarifes").select("*").order("ativo", { ascending: false }).order("nome"));
   almoxarifesCache = error ? almoxarifesCache : data || [];
-  const sel = document.getElementById("almoxarife-select");
-  const atual = localStorage.getItem("rl_almoxarife_atual") || sel.value;
-  sel.innerHTML =
+  const opcoes =
     `<option value="">— selecione —</option>` +
     almoxarifesCache.filter((a) => a.ativo).map((a) => `<option value="${escapeHtml(a.nome)}">${escapeHtml(a.nome)}</option>`).join("");
-  if (atual) sel.value = atual;
+  const atual = localStorage.getItem("rl_almoxarife_atual");
+
+  // Dois seletores independentes (Histórico e Recebimento CIF), sincronizados
+  // pelo mesmo nome guardado no localStorage — a pessoa escolhe o nome uma
+  // vez em qualquer um dos dois e ele já aparece certo no outro também.
+  const sel = document.getElementById("almoxarife-select");
+  sel.innerHTML = opcoes;
+  if (atual || sel.value) sel.value = atual || sel.value;
+
+  const selCif = document.getElementById("almoxarife-select-cif");
+  if (selCif) {
+    selCif.innerHTML = opcoes;
+    if (atual || selCif.value) selCif.value = atual || selCif.value;
+  }
 }
 
 // Tabela cs_condicoes_pagamento já existe no mesmo Supabase, criada pelo
@@ -431,6 +445,12 @@ document.getElementById("novo-almoxarife-nome").addEventListener("keydown", (e) 
 
 document.getElementById("almoxarife-select").addEventListener("change", (e) => {
   localStorage.setItem("rl_almoxarife_atual", e.target.value);
+  const selCif = document.getElementById("almoxarife-select-cif");
+  if (selCif) selCif.value = e.target.value;
+});
+document.getElementById("almoxarife-select-cif").addEventListener("change", (e) => {
+  localStorage.setItem("rl_almoxarife_atual", e.target.value);
+  document.getElementById("almoxarife-select").value = e.target.value;
 });
 
 // O nome de quem pediu já vem escrito no próprio documento (campo
@@ -1893,14 +1913,15 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     document.getElementById("modal-overlay").classList.add("hidden");
     paradaEmEdicao = null;
     // Fecha o seletor de pedidos CIF (o que acabou de ser conferido já saiu
-    // da lista de pendentes) e atualiza o Histórico, caso a conferência
-    // tenha vindo do fluxo da portaria/almoxarifado, não do motorista.
+    // da lista de pendentes) e atualiza o Histórico/Recebimento CIF, caso a
+    // conferência tenha vindo do fluxo da portaria/almoxarifado, não do motorista.
     avisoPortariaExpandidoId = null;
     pedidosCifDoAvisoExpandido = [];
     await Promise.all([
       loadRotaAtual(),
       entregaParcial ? loadDisponiveis() : Promise.resolve(),
       document.getElementById("tab-historico").classList.contains("active") ? loadHistorico() : Promise.resolve(),
+      document.getElementById("tab-recebimento-cif").classList.contains("active") ? carregarPedidosCifPendentes() : Promise.resolve(),
     ]);
     renderAvisosPortariaPendentes();
   } catch (err) {
@@ -2673,7 +2694,7 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
 
   const btnDispensar = e.target.closest("button[data-dispensar-aviso-portaria]");
   if (btnDispensar) {
-    const almoxarife = document.getElementById("almoxarife-select").value || null;
+    const almoxarife = document.getElementById("almoxarife-select-cif").value || null;
     const { error } = await db
       .from("rl_avisos_portaria")
       .update({ lido: true, lido_por: almoxarife, lido_em: new Date().toISOString() })
@@ -2688,7 +2709,8 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
 
   const btnConferirPedido = e.target.closest("button[data-conferir-pedido-cif]");
   if (btnConferirPedido) {
-    await iniciarConferenciaCif(btnConferirPedido.dataset.conferirPedidoCif);
+    const pedido = pedidosCifDoAvisoExpandido.find((p) => p.id === btnConferirPedido.dataset.conferirPedidoCif);
+    if (pedido) await iniciarConferenciaCif(pedido);
   }
 });
 
@@ -2697,10 +2719,8 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
 // da leitura de nota por IA e da comparação de itens/valor/CNPJ/condição de
 // pagamento, sem duplicar nada disso só porque dessa vez quem confere é o
 // almoxarifado (entrega CIF), não o motorista numa rota de coleta.
-async function iniciarConferenciaCif(pedidoId) {
-  const pedido = pedidosCifDoAvisoExpandido.find((p) => p.id === pedidoId);
-  if (!pedido) return;
-  const almoxarife = document.getElementById("almoxarife-select").value;
+async function iniciarConferenciaCif(pedido) {
+  const almoxarife = document.getElementById("almoxarife-select-cif").value;
   try {
     const { data: rota, error: errRota } = await db
       .from("rl_rotas")
@@ -2721,6 +2741,72 @@ async function iniciarConferenciaCif(pedidoId) {
     mostrarAviso("Erro ao iniciar conferência: " + err.message);
   }
 }
+
+// ---------- lista geral de pedidos CIF pendentes (independe de aviso da portaria) ----------
+let pedidosCifPendentesCache = [];
+
+async function carregarPedidosCifPendentes() {
+  const el = document.getElementById("lista-pedidos-cif-pendentes");
+  const numeroFiltro = document.getElementById("filtro-numero-cif").value.trim();
+  const fornecedorFiltro = document.getElementById("filtro-fornecedor-cif").value.trim();
+
+  let query = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false).order("criado_em");
+  if (numeroFiltro) query = query.ilike("numero_pedido", `%${numeroFiltro}%`);
+  if (fornecedorFiltro) query = query.ilike("fornecedor_nome", `%${fornecedorFiltro}%`);
+
+  const { data, error } = await comTimeout(query);
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos CIF.</p>`;
+    return;
+  }
+  pedidosCifPendentesCache = data || [];
+  renderPedidosCifPendentes();
+}
+
+function renderPedidosCifPendentes() {
+  const el = document.getElementById("lista-pedidos-cif-pendentes");
+  if (!pedidosCifPendentesCache.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum pedido CIF pendente.</p>`;
+    return;
+  }
+  el.innerHTML = `
+    <table class="tabela-itens">
+      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Comprador</th><th>Valor</th><th></th></tr></thead>
+      <tbody>
+        ${pedidosCifPendentesCache
+          .map(
+            (p) => `<tr>
+              <td>${escapeHtml(p.numero_pedido || "—")}</td>
+              <td>${escapeHtml(p.empresa_nome || "—")}</td>
+              <td>${escapeHtml(p.fornecedor_nome || "—")}</td>
+              <td>${escapeHtml(p.comprador_nome || "—")}</td>
+              <td>${formatarMoeda(p.valor_total)}</td>
+              <td><button type="button" class="btn small" data-conferir-pedido-cif-geral="${p.id}">🔍 Conferir</button></td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-conferir-pedido-cif-geral]");
+  if (!btn) return;
+  const pedido = pedidosCifPendentesCache.find((p) => p.id === btn.dataset.conferirPedidoCifGeral);
+  if (pedido) await iniciarConferenciaCif(pedido);
+});
+
+document.getElementById("filtro-numero-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
+document.getElementById("filtro-fornecedor-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
+document.getElementById("btn-limpar-filtros-cif").addEventListener("click", () => {
+  document.getElementById("filtro-numero-cif").value = "";
+  document.getElementById("filtro-fornecedor-cif").value = "";
+  carregarPedidosCifPendentes();
+});
+document.getElementById("btn-atualizar-recebimento-cif").addEventListener("click", () => {
+  carregarAvisosPortariaPendentes();
+  carregarPedidosCifPendentes();
+});
 
 // Preenche os filtros de empresa/comprador (dropdown) a partir de TODOS os
 // pedidos já cadastrados — não só da página atual do histórico — pra sempre
