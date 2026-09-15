@@ -2889,22 +2889,49 @@ let avisosLiberadosPendentesCache = [];
 async function carregarAvisosLiberadosPendentesConferencia() {
   const el = document.getElementById("avisos-liberados-aguardando-conferencia");
   if (!el) return;
+  // Não filtra por pedido_ids aqui: um aviso pode ter sido liberado sem
+  // nenhum pedido vinculado (a portaria não achou pedido pendente do
+  // fornecedor, ou não escolheu nenhum) — esses precisam continuar
+  // aparecendo pro almoxarife vincular manualmente, senão somem sem deixar
+  // rastro (foi exatamente o bug que motivou essa seção existir).
   const { data, error } = await comTimeout(
-    db.from("rl_avisos_portaria").select("*").eq("lido", true).not("pedido_ids", "is", null).order("lido_em", { ascending: false }).limit(30)
+    db.from("rl_avisos_portaria").select("*").eq("lido", true).order("lido_em", { ascending: false }).limit(50)
   );
   if (error || !data) return;
 
   const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
-  const idsPedidos = [...new Set(avisosVisiveis.flatMap((a) => a.pedido_ids || []))];
-  if (!idsPedidos.length) {
-    avisosLiberadosPendentesCache = [];
-    renderAvisosLiberadosPendentesConferencia();
-    return;
-  }
-  const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("id").eq("status", "pendente").in("id", idsPedidos));
-  const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
+  // pedido_ids null = nunca vinculado ainda (precisa de ação); [] = almoxarife
+  // já dispensou explicitamente ("não tem pedido pra conferir aqui").
+  const comPedidos = avisosVisiveis.filter((a) => a.pedido_ids && a.pedido_ids.length);
+  const semPedidos = avisosVisiveis.filter((a) => a.pedido_ids == null);
 
-  avisosLiberadosPendentesCache = avisosVisiveis.filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)));
+  let comPedidosPendentes = [];
+  const idsPedidos = [...new Set(comPedidos.flatMap((a) => a.pedido_ids || []))];
+  if (idsPedidos.length) {
+    const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("id").eq("status", "pendente").in("id", idsPedidos));
+    const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
+    comPedidosPendentes = comPedidos.filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)));
+  }
+
+  let semPedidosComCandidatos = [];
+  if (semPedidos.length) {
+    const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
+    semPedidosComCandidatos = semPedidos.map((a) => {
+      const nomeAlvo = normalizarEmpresa(a.fornecedor_nome || "");
+      let candidatos = pendentesGeral || [];
+      if (a.empresa_nome) candidatos = candidatos.filter((p) => p.empresa_nome === a.empresa_nome);
+      if (nomeAlvo) {
+        const filtrados = candidatos.filter((p) => {
+          const nomeP = normalizarEmpresa(p.fornecedor_nome || "");
+          return nomeP && (nomeP.includes(nomeAlvo) || nomeAlvo.includes(nomeP));
+        });
+        if (filtrados.length) candidatos = filtrados;
+      }
+      return { ...a, _candidatos: candidatos };
+    });
+  }
+
+  avisosLiberadosPendentesCache = [...semPedidosComCandidatos, ...comPedidosPendentes];
   renderAvisosLiberadosPendentesConferencia();
 }
 
@@ -2916,33 +2943,110 @@ function renderAvisosLiberadosPendentesConferencia() {
     return;
   }
   el.innerHTML = avisosLiberadosPendentesCache
-    .map(
-      (a) => `
+    .map((a) => {
+      const cabecalho = `✅ ${
+        a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""
+      }<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong> · liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(
+        a.lido_por || "—"
+      )}`;
+
+      if (a._candidatos) {
+        return `
+        <div class="aviso-portaria-card aviso-sem-pedido">
+          <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda — selecione o pedido certo abaixo antes de conferir.</span></div>
+          ${
+            a._candidatos.length
+              ? `<select multiple size="3" class="select-pedido-aviso-liberado" data-aviso-id="${a.id}">
+                  ${a._candidatos
+                    .map(
+                      (p) =>
+                        `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(
+                          p.fornecedor_nome || ""
+                        )} — ${formatarMoeda(p.valor_total)}</option>`
+                    )
+                    .join("")}
+                </select>
+                <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>`
+              : `<p class="hint">Nenhum pedido CIF pendente encontrado pra vincular ainda.</p>`
+          }
+          <button type="button" class="link-btn" data-dispensar-sem-pedido="${a.id}">Não tem pedido pra conferir aqui</button>
+        </div>`;
+      }
+
+      return `
       <div class="aviso-portaria-card">
-        <div>
-          ✅ ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
-          · liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(a.lido_por || "—")}
-        </div>
+        <div>${cabecalho}</div>
         <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
-          a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
-        }</button>
-      </div>`
-    )
+        a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
+      }</button>
+      </div>`;
+    })
     .join("");
 }
 
 document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-conferir-aviso-liberado]");
-  if (!btn) return;
-  const aviso = avisosLiberadosPendentesCache.find((a) => a.id === btn.dataset.conferirAvisoLiberado);
-  if (!aviso) return;
-  const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids).eq("status", "pendente"));
-  if (error || !pedidos || !pedidos.length) {
-    mostrarAviso("Erro ao buscar o(s) pedido(s): " + (error ? error.message : "já foram conferidos ou não encontrados"));
-    carregarAvisosLiberadosPendentesConferencia();
+  if (btn) {
+    const aviso = avisosLiberadosPendentesCache.find((a) => a.id === btn.dataset.conferirAvisoLiberado);
+    if (!aviso) return;
+    const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids).eq("status", "pendente"));
+    if (error || !pedidos || !pedidos.length) {
+      mostrarAviso("Erro ao buscar o(s) pedido(s): " + (error ? error.message : "já foram conferidos ou não encontrados"));
+      carregarAvisosLiberadosPendentesConferencia();
+      return;
+    }
+    await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
     return;
   }
-  await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+
+  const btnVincular = e.target.closest("button[data-conferir-vinculando]");
+  if (btnVincular) {
+    const avisoId = btnVincular.dataset.conferirVinculando;
+    const select = document.querySelector(`select.select-pedido-aviso-liberado[data-aviso-id="${avisoId}"]`);
+    const ids = select ? Array.from(select.selectedOptions).map((o) => o.value) : [];
+    if (!ids.length) {
+      mostrarAviso("Selecione ao menos um pedido pra vincular a este aviso.");
+      return;
+    }
+    const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
+    const { error: errUpdate } = await db.from("rl_avisos_portaria").update({ pedido_ids: ids }).eq("id", avisoId);
+    if (errUpdate) {
+      mostrarAviso("Erro ao vincular pedido: " + errUpdate.message);
+      return;
+    }
+    const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", ids).eq("status", "pendente"));
+    if (error || !pedidos || !pedidos.length) {
+      mostrarAviso("Erro ao buscar o(s) pedido(s) selecionado(s).");
+      carregarAvisosLiberadosPendentesConferencia();
+      return;
+    }
+    await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+    return;
+  }
+
+  const btnDispensarSemPedido = e.target.closest("button[data-dispensar-sem-pedido]");
+  if (btnDispensarSemPedido) {
+    // Mesmo padrão de confirmação em dois cliques do resto do app — dispensar
+    // sem vincular pedido nenhum tira o aviso da lista pra sempre.
+    if (!btnDispensarSemPedido.dataset.confirmando) {
+      btnDispensarSemPedido.dataset.confirmando = "1";
+      btnDispensarSemPedido.textContent = "Confirma? Clique de novo";
+      setTimeout(() => {
+        delete btnDispensarSemPedido.dataset.confirmando;
+        btnDispensarSemPedido.textContent = "Não tem pedido pra conferir aqui";
+      }, 4000);
+      return;
+    }
+    const { error } = await db
+      .from("rl_avisos_portaria")
+      .update({ pedido_ids: [] })
+      .eq("id", btnDispensarSemPedido.dataset.dispensarSemPedido);
+    if (error) {
+      mostrarAviso("Erro ao dispensar aviso: " + error.message);
+      return;
+    }
+    carregarAvisosLiberadosPendentesConferencia();
+  }
 });
 
 // Monta o objeto "notaPreLida" (mesmo formato usado por abrirModalConcluir)
