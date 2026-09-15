@@ -229,9 +229,11 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       loadRotaAtual();
     }
     if (btn.dataset.tab === "indicadores") loadIndicadores();
+    if (btn.dataset.tab === "portaria") carregarAvisosPortariaEnviados();
     if (btn.dataset.tab === "historico") {
       carregarFiltrosHistorico();
       loadHistorico();
+      carregarAvisosPortariaPendentes();
     }
     if (btn.dataset.tab === "config") renderCadastros();
   });
@@ -563,6 +565,10 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       // Mesmo padrão do FOB: decide pelo nome do arquivo, sem exigir campo
       // manual — a maioria dos pedidos chega pelo robô, não por este formulário.
       retirar_transportadora: /transportadora/i.test(file.name),
+      // Sem "FOB" no nome do arquivo, entende-se que o frete é CIF (o
+      // fornecedor entrega) — esse pedido não entra na tela do motorista,
+      // fica disponível pro almoxarifado conferir quando a entrega chegar.
+      frete_fob: /fob/i.test(file.name),
       valor_total: valor ? Number(valor) : null,
       itens: pedidoItensExtraidos,
       fornecedor_nome: pedidoFornecedorExtraido,
@@ -669,8 +675,17 @@ let cidadesSelecionadas = new Set();
 
 async function loadDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
+  // Só frete FOB precisa de coleta — pedidos CIF (fornecedor entrega) não
+  // entram nessa tela, ficam disponíveis pro almoxarifado conferir na
+  // aba Portaria/Histórico quando a entrega chegar.
   const { data, error } = await comTimeout(
-    db.from("rl_pedidos").select("*").eq("status", "pendente").order("urgente", { ascending: false }).order("criado_em")
+    db
+      .from("rl_pedidos")
+      .select("*")
+      .eq("status", "pendente")
+      .eq("frete_fob", true)
+      .order("urgente", { ascending: false })
+      .order("criado_em")
   );
   if (error) {
     el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos.</p>`;
@@ -1855,9 +1870,13 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       .eq("id", paradaEmEdicao.pedido_id);
     if (errPedido) throw errPedido;
 
-    const { data: pendentes } = await db.from("rl_rota_paradas").select("id").eq("rota_id", rotaAtualId).eq("status", "pendente");
+    // Usa a rota DESSA parada (não a "rota atual" global do motorista) — o
+    // mesmo modal também é reaproveitado pra conferência CIF da portaria, que
+    // roda numa rota "virtual" própria, diferente da que o motorista tem
+    // aberta no momento (se tiver).
+    const { data: pendentes } = await db.from("rl_rota_paradas").select("id").eq("rota_id", rotaId).eq("status", "pendente");
     if (!pendentes || !pendentes.length) {
-      await db.from("rl_rotas").update({ status: "concluida" }).eq("id", rotaAtualId);
+      await db.from("rl_rotas").update({ status: "concluida" }).eq("id", rotaId);
     }
 
     // Alerta sonoro (voz do navegador, sem custo) na hora que uma divergência
@@ -1873,7 +1892,17 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
 
     document.getElementById("modal-overlay").classList.add("hidden");
     paradaEmEdicao = null;
-    await Promise.all([loadRotaAtual(), entregaParcial ? loadDisponiveis() : Promise.resolve()]);
+    // Fecha o seletor de pedidos CIF (o que acabou de ser conferido já saiu
+    // da lista de pendentes) e atualiza o Histórico, caso a conferência
+    // tenha vindo do fluxo da portaria/almoxarifado, não do motorista.
+    avisoPortariaExpandidoId = null;
+    pedidosCifDoAvisoExpandido = [];
+    await Promise.all([
+      loadRotaAtual(),
+      entregaParcial ? loadDisponiveis() : Promise.resolve(),
+      document.getElementById("tab-historico").classList.contains("active") ? loadHistorico() : Promise.resolve(),
+    ]);
+    renderAvisosPortariaPendentes();
   } catch (err) {
     feedback.textContent = "Erro: " + err.message;
     feedback.className = "feedback error";
@@ -1996,6 +2025,67 @@ document.getElementById("tab-config").addEventListener(
   },
   true
 );
+
+// ---------- portaria (avisa o almoxarifado que uma entrega chegou) ----------
+document.getElementById("btn-avisar-portaria").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-avisar-portaria");
+  const fornecedor = document.getElementById("portaria-fornecedor").value.trim();
+  const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
+  const mensagem = document.getElementById("portaria-mensagem").value.trim();
+  if (!fornecedor && !pedidoNumero) {
+    mostrarAviso("Informe pelo menos o fornecedor ou o número do pedido.");
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  try {
+    const { error } = await db.from("rl_avisos_portaria").insert({
+      fornecedor_nome: fornecedor || null,
+      pedido_numero: pedidoNumero || null,
+      mensagem: mensagem || null,
+    });
+    if (error) throw error;
+    document.getElementById("portaria-fornecedor").value = "";
+    document.getElementById("portaria-pedido-numero").value = "";
+    document.getElementById("portaria-mensagem").value = "";
+    mostrarAviso("Aviso enviado! O almoxarifado vai ser notificado.");
+    carregarAvisosPortariaEnviados();
+  } catch (err) {
+    mostrarAviso("Erro ao enviar aviso: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔔 Avisar chegada";
+  }
+});
+
+async function carregarAvisosPortariaEnviados() {
+  const el = document.getElementById("lista-avisos-portaria-enviados");
+  const hojeInicio = new Date();
+  hojeInicio.setHours(0, 0, 0, 0);
+  const { data, error } = await comTimeout(
+    db.from("rl_avisos_portaria").select("*").gte("criado_em", hojeInicio.toISOString()).order("criado_em", { ascending: false })
+  );
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar avisos.</p>`;
+    return;
+  }
+  if (!data || !data.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum aviso enviado ainda hoje.</p>`;
+    return;
+  }
+  el.innerHTML = data
+    .map(
+      (a) => `
+    <div class="aviso-portaria-enviado">
+      ${a.fornecedor_nome ? `<strong>${escapeHtml(a.fornecedor_nome)}</strong>` : "<strong>Fornecedor não informado</strong>"}
+      ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
+      · ${formatarDataHora(a.criado_em)}
+      ${a.lido ? ` · ✅ acesso liberado por ${escapeHtml(a.lido_por || "—")}` : " · ⏳ aguardando liberação"}
+      ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
+    </div>`
+    )
+    .join("");
+}
 
 // ---------- indicadores ----------
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -2469,6 +2559,169 @@ async function verificarDivergenciasNovas() {
   avisarDivergenciasNovas(data);
 }
 
+// ---------- avisos da portaria pendentes (aparecem no topo do Histórico) ----------
+let idsAvisosPortariaConhecidos = null; // null = ainda não verificou nenhuma vez
+let avisosPortariaPendentesCache = [];
+let avisoPortariaExpandidoId = null; // id do aviso com o seletor de pedidos CIF aberto
+let pedidosCifDoAvisoExpandido = [];
+
+async function carregarAvisosPortariaPendentes() {
+  const { data, error } = await comTimeout(
+    db.from("rl_avisos_portaria").select("*").eq("lido", false).order("criado_em", { ascending: true })
+  );
+  if (error || !data) return;
+
+  // Avisa por voz só o que apareceu de novo desde a última verificação —
+  // mesmo padrão já usado pras divergências (ver avisarDivergenciasNovas).
+  const idsAtuais = new Set(data.map((a) => a.id));
+  if (idsAvisosPortariaConhecidos) {
+    data
+      .filter((a) => !idsAvisosPortariaConhecidos.has(a.id))
+      .forEach((a) => {
+        falarAlerta(`Atenção! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "não informado"}.`);
+      });
+  }
+  idsAvisosPortariaConhecidos = idsAtuais;
+
+  avisosPortariaPendentesCache = data;
+  renderAvisosPortariaPendentes();
+
+  const badge = document.getElementById("badge-avisos-portaria");
+  if (data.length) {
+    badge.textContent = String(data.length);
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+}
+
+function renderAvisosPortariaPendentes() {
+  const el = document.getElementById("avisos-portaria-pendentes");
+  if (!el) return;
+  if (!avisosPortariaPendentesCache.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = avisosPortariaPendentesCache
+    .map((a) => {
+      const expandido = avisoPortariaExpandidoId === a.id;
+      return `
+      <div class="aviso-portaria-card">
+        <div>
+          🚪 <strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
+          ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
+          · ${formatarDataHora(a.criado_em)}
+          ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
+        </div>
+        <div style="display:flex; gap:0.5rem; flex-shrink:0;">
+          <button type="button" class="btn secondary small" data-conferir-aviso-portaria="${a.id}">🔍 Conferir</button>
+          <button type="button" class="btn secondary small" data-dispensar-aviso-portaria="${a.id}">✅ Liberar acesso</button>
+        </div>
+      </div>
+      ${expandido ? renderSeletorPedidosCif(a) : ""}`;
+    })
+    .join("");
+}
+
+function renderSeletorPedidosCif(aviso) {
+  if (!pedidosCifDoAvisoExpandido.length) {
+    return `<div class="card-meta">Nenhum pedido CIF pendente encontrado${
+      aviso.fornecedor_nome ? ` pra "${escapeHtml(aviso.fornecedor_nome)}"` : ""
+    }.</div>`;
+  }
+  return `
+    <table class="tabela-itens">
+      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Valor</th><th></th></tr></thead>
+      <tbody>
+        ${pedidosCifDoAvisoExpandido
+          .map(
+            (p) => `<tr>
+              <td>${escapeHtml(p.numero_pedido || "—")}</td>
+              <td>${escapeHtml(p.empresa_nome || "—")}</td>
+              <td>${escapeHtml(p.fornecedor_nome || "—")}</td>
+              <td>${formatarMoeda(p.valor_total)}</td>
+              <td><button type="button" class="btn small" data-conferir-pedido-cif="${p.id}">Conferir este</button></td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+document.getElementById("avisos-portaria-pendentes").addEventListener("click", async (e) => {
+  const btnConferir = e.target.closest("button[data-conferir-aviso-portaria]");
+  if (btnConferir) {
+    const avisoId = btnConferir.dataset.conferirAvisoPortaria;
+    if (avisoPortariaExpandidoId === avisoId) {
+      avisoPortariaExpandidoId = null;
+      renderAvisosPortariaPendentes();
+      return;
+    }
+    const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoId);
+    let query = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
+    if (aviso.fornecedor_nome) query = query.ilike("fornecedor_nome", `%${aviso.fornecedor_nome}%`);
+    const { data, error } = await comTimeout(query.order("criado_em"));
+    if (error) {
+      mostrarAviso("Erro ao buscar pedidos: " + error.message);
+      return;
+    }
+    pedidosCifDoAvisoExpandido = data || [];
+    avisoPortariaExpandidoId = avisoId;
+    renderAvisosPortariaPendentes();
+    return;
+  }
+
+  const btnDispensar = e.target.closest("button[data-dispensar-aviso-portaria]");
+  if (btnDispensar) {
+    const almoxarife = document.getElementById("almoxarife-select").value || null;
+    const { error } = await db
+      .from("rl_avisos_portaria")
+      .update({ lido: true, lido_por: almoxarife, lido_em: new Date().toISOString() })
+      .eq("id", btnDispensar.dataset.dispensarAvisoPortaria);
+    if (error) {
+      mostrarAviso("Erro ao dispensar aviso: " + error.message);
+      return;
+    }
+    carregarAvisosPortariaPendentes();
+    return;
+  }
+
+  const btnConferirPedido = e.target.closest("button[data-conferir-pedido-cif]");
+  if (btnConferirPedido) {
+    await iniciarConferenciaCif(btnConferirPedido.dataset.conferirPedidoCif);
+  }
+});
+
+// Cria uma "rota" mínima (só pra essa entrega) e abre o MESMO modal de
+// conferência que o motorista usa pra concluir uma parada — reaproveita 100%
+// da leitura de nota por IA e da comparação de itens/valor/CNPJ/condição de
+// pagamento, sem duplicar nada disso só porque dessa vez quem confere é o
+// almoxarifado (entrega CIF), não o motorista numa rota de coleta.
+async function iniciarConferenciaCif(pedidoId) {
+  const pedido = pedidosCifDoAvisoExpandido.find((p) => p.id === pedidoId);
+  if (!pedido) return;
+  const almoxarife = document.getElementById("almoxarife-select").value;
+  try {
+    const { data: rota, error: errRota } = await db
+      .from("rl_rotas")
+      .insert({ motorista_nome: `${almoxarife || "Almoxarifado"} (recebimento CIF)`, status: "em_andamento" })
+      .select()
+      .single();
+    if (errRota) throw errRota;
+
+    const { data: parada, error: errParada } = await db
+      .from("rl_rota_paradas")
+      .insert({ rota_id: rota.id, pedido_id: pedido.id, ordem: 0, status: "pendente" })
+      .select()
+      .single();
+    if (errParada) throw errParada;
+
+    abrirModalConcluir({ ...parada, rl_pedidos: pedido });
+  } catch (err) {
+    mostrarAviso("Erro ao iniciar conferência: " + err.message);
+  }
+}
+
 // Preenche os filtros de empresa/comprador (dropdown) a partir de TODOS os
 // pedidos já cadastrados — não só da página atual do histórico — pra sempre
 // oferecer a lista completa de opções, mesmo filtrando por algo raro/antigo.
@@ -2722,17 +2975,19 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
   await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes(), loadCondicoesPagamento()]);
   loadMeusPedidos();
 
-  // Verifica divergências em aberto assim que a página carrega, pra já
-  // conhecer o que existe agora e só avisar por voz do que aparecer DEPOIS
-  // disso (ver avisarDivergenciasNovas).
+  // Verifica divergências e avisos da portaria em aberto assim que a página
+  // carrega, pra já conhecer o que existe agora e só avisar por voz do que
+  // aparecer DEPOIS disso (ver avisarDivergenciasNovas/carregarAvisosPortariaPendentes).
   verificarDivergenciasNovas();
+  carregarAvisosPortariaPendentes();
 
   // Atualização automática a cada 1 min — pensado pro app ficar aberto o dia
-  // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência nova
-  // em qualquer lugar do histórico (não só na página/filtro visível agora) e
-  // atualiza a lista visível, sem precisar de ninguém clicar em nada.
+  // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência ou
+  // aviso da portaria novo em qualquer lugar (não só na página/filtro visível
+  // agora) e atualiza a lista visível, sem precisar de ninguém clicar em nada.
   setInterval(() => {
     verificarDivergenciasNovas();
+    carregarAvisosPortariaPendentes();
     loadHistorico();
   }, 60000);
 })();
