@@ -232,6 +232,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     if (btn.dataset.tab === "portaria") carregarAvisosPortariaEnviados();
     if (btn.dataset.tab === "recebimento-cif") {
       carregarAvisosPortariaPendentes();
+      carregarAvisosLiberadosPendentesConferencia();
       carregarPedidosCifPendentes();
     }
     if (btn.dataset.tab === "historico") {
@@ -460,6 +461,7 @@ document.getElementById("almoxarife-select-cif").addEventListener("change", (e) 
   document.getElementById("almoxarife-select").value = e.target.value;
   // Troca de almoxarife pode mudar o filtro por empresa/setor — reconfere.
   carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
   carregarPedidosCifPendentes();
 });
 
@@ -1962,11 +1964,10 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
 
     document.getElementById("modal-overlay").classList.add("hidden");
     paradaEmEdicao = null;
-    // Fecha o seletor de pedidos CIF (o que acabou de ser conferido já saiu
-    // da lista de pendentes) e atualiza o Histórico/Recebimento CIF, caso a
-    // conferência tenha vindo do fluxo da portaria/almoxarifado, não do motorista.
-    avisoPortariaExpandidoId = null;
-    pedidosCifDoAvisoExpandido = [];
+    // Atualiza o Histórico/Recebimento CIF, caso a conferência tenha vindo do
+    // fluxo da portaria/almoxarifado, não do motorista — o pedido que acabou
+    // de ser conferido some da lista de "liberados aguardando conferência".
+    carregarAvisosLiberadosPendentesConferencia();
     await Promise.all([
       loadRotaAtual(),
       entregaParcial ? loadDisponiveis() : Promise.resolve(),
@@ -2232,6 +2233,14 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
   const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
   const mensagem = document.getElementById("portaria-mensagem").value.trim();
   const pedidoRelacionadoIds = Array.from(document.getElementById("portaria-pedido-relacionado").selectedOptions).map((o) => o.value);
+  if (!empresa) {
+    mostrarAviso("Selecione a empresa antes de avisar a chegada.");
+    return;
+  }
+  if (empresa === "AGRICOLA WEHRMANN LTDA" && !setor) {
+    mostrarAviso("Selecione o setor (Uso e Consumo ou Insumos) antes de avisar a chegada.");
+    return;
+  }
   if (!cnpj && !fornecedor && !pedidoNumero) {
     mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o número do pedido.");
     return;
@@ -2685,13 +2694,15 @@ function renderCardsHistorico(paradas) {
         !p.nota_cnpj &&
         !p.nota_emitente_nome &&
         (!Array.isArray(p.nota_itens) || !p.nota_itens.length);
-      const status = p.entrega_parcial
-        ? "📦 Entrega parcial"
-        : divergente
-          ? "⚠️ Divergência"
-          : notaSemLeitura
-            ? "❓ Nota não lida"
-            : "✅ OK";
+      const status = p.recebido_por_terceiro
+        ? "🤝 Recebido por terceiro"
+        : p.entrega_parcial
+          ? "📦 Entrega parcial"
+          : divergente
+            ? "⚠️ Divergência"
+            : notaSemLeitura
+              ? "❓ Nota não lida"
+              : "✅ OK";
       return `
       <div class="card-pedido historico-parada-card">
         <div class="card-pedido-head">
@@ -2785,8 +2796,6 @@ async function verificarDivergenciasNovas() {
 // ---------- avisos da portaria pendentes (aparecem no topo do Histórico) ----------
 let idsAvisosPortariaConhecidos = null; // null = ainda não verificou nenhuma vez
 let avisosPortariaPendentesCache = [];
-let avisoPortariaExpandidoId = null; // id do aviso com o seletor de pedidos CIF aberto
-let pedidosCifDoAvisoExpandido = [];
 
 // O almoxarife selecionado (aba Recebimento CIF) pode estar amarrado a uma
 // empresa (e, só na Wehrmann, também a um setor: Uso e Consumo/Insumos) —
@@ -2844,7 +2853,6 @@ function renderAvisosPortariaPendentes() {
   }
   el.innerHTML = avisosPortariaPendentesCache
     .map((a) => {
-      const expandido = avisoPortariaExpandidoId === a.id;
       return `
       <div class="aviso-portaria-card">
         <div>
@@ -2858,47 +2866,84 @@ function renderAvisosPortariaPendentes() {
                   a.pedido_ids && a.pedido_ids.length
                     ? ` e já relacionada a ${a.pedido_ids.length > 1 ? `${a.pedido_ids.length} pedidos` : "um pedido"}`
                     : ""
-                } — conferência pronta pra revisar.</div>`
+                } — a conferência libera assim que o acesso for liberado.</div>`
               : ""
           }
           ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
         </div>
         <div style="display:flex; gap:0.5rem; flex-shrink:0;">
-          <button type="button" class="btn secondary small" data-conferir-aviso-portaria="${a.id}">${
-            a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
-          }</button>
           <button type="button" class="btn secondary small" data-dispensar-aviso-portaria="${a.id}">✅ Liberar acesso</button>
         </div>
-      </div>
-      ${expandido ? renderSeletorPedidosCif(a) : ""}`;
+      </div>`;
     })
     .join("");
 }
 
-function renderSeletorPedidosCif(aviso) {
-  if (!pedidosCifDoAvisoExpandido.length) {
-    return `<div class="card-meta">Nenhum pedido CIF pendente encontrado${
-      aviso.fornecedor_nome ? ` pra "${escapeHtml(aviso.fornecedor_nome)}"` : ""
-    }.</div>`;
+// ---------- avisos liberados, aguardando conferência ----------
+// A conferência só fica disponível DEPOIS de liberar o acesso — de propósito
+// (ordem obrigatória: primeiro libera o caminhão, a conferência da nota é
+// feita com calma depois). Some da lista assim que os pedidos relacionados
+// forem conferidos/marcados como recebidos.
+let avisosLiberadosPendentesCache = [];
+
+async function carregarAvisosLiberadosPendentesConferencia() {
+  const el = document.getElementById("avisos-liberados-aguardando-conferencia");
+  if (!el) return;
+  const { data, error } = await comTimeout(
+    db.from("rl_avisos_portaria").select("*").eq("lido", true).not("pedido_ids", "is", null).order("lido_em", { ascending: false }).limit(30)
+  );
+  if (error || !data) return;
+
+  const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
+  const idsPedidos = [...new Set(avisosVisiveis.flatMap((a) => a.pedido_ids || []))];
+  if (!idsPedidos.length) {
+    avisosLiberadosPendentesCache = [];
+    renderAvisosLiberadosPendentesConferencia();
+    return;
   }
-  return `
-    <table class="tabela-itens">
-      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Valor</th><th></th></tr></thead>
-      <tbody>
-        ${pedidosCifDoAvisoExpandido
-          .map(
-            (p) => `<tr>
-              <td>${escapeHtml(p.numero_pedido || "—")}</td>
-              <td>${escapeHtml(p.empresa_nome || "—")}</td>
-              <td>${escapeHtml(p.fornecedor_nome || "—")}</td>
-              <td>${formatarMoeda(p.valor_total)}</td>
-              <td><button type="button" class="btn small" data-conferir-pedido-cif="${p.id}">Conferir este</button></td>
-            </tr>`
-          )
-          .join("")}
-      </tbody>
-    </table>`;
+  const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("id").eq("status", "pendente").in("id", idsPedidos));
+  const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
+
+  avisosLiberadosPendentesCache = avisosVisiveis.filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)));
+  renderAvisosLiberadosPendentesConferencia();
 }
+
+function renderAvisosLiberadosPendentesConferencia() {
+  const el = document.getElementById("avisos-liberados-aguardando-conferencia");
+  if (!el) return;
+  if (!avisosLiberadosPendentesCache.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum acesso liberado aguardando conferência.</p>`;
+    return;
+  }
+  el.innerHTML = avisosLiberadosPendentesCache
+    .map(
+      (a) => `
+      <div class="aviso-portaria-card">
+        <div>
+          ✅ ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
+          · liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(a.lido_por || "—")}
+        </div>
+        <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
+          a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
+        }</button>
+      </div>`
+    )
+    .join("");
+}
+
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-conferir-aviso-liberado]");
+  if (!btn) return;
+  const aviso = avisosLiberadosPendentesCache.find((a) => a.id === btn.dataset.conferirAvisoLiberado);
+  if (!aviso) return;
+  const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids).eq("status", "pendente"));
+  if (error || !pedidos || !pedidos.length) {
+    mostrarAviso("Erro ao buscar o(s) pedido(s): " + (error ? error.message : "já foram conferidos ou não encontrados"));
+    carregarAvisosLiberadosPendentesConferencia();
+    return;
+  }
+  await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+});
 
 // Monta o objeto "notaPreLida" (mesmo formato usado por abrirModalConcluir)
 // a partir de um aviso que já veio com a nota lida pela portaria.
@@ -2917,63 +2962,23 @@ function notaPreLidaDoAviso(aviso) {
   };
 }
 
+// Único botão possível num aviso ainda pendente: liberar o acesso. A
+// conferência (ver mais abaixo) só fica disponível DEPOIS disso, de
+// propósito — ordem obrigatória, não é só uma sugestão.
 document.getElementById("avisos-portaria-pendentes").addEventListener("click", async (e) => {
-  const btnConferir = e.target.closest("button[data-conferir-aviso-portaria]");
-  if (btnConferir) {
-    const avisoId = btnConferir.dataset.conferirAvisoPortaria;
-    const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoId);
-
-    // Portaria já leu a nota E já relacionou pedido(s) — pula direto pra
-    // conferência, sem precisar escolher de novo qual pedido é.
-    if (aviso.nota_arquivo_url && aviso.pedido_ids && aviso.pedido_ids.length) {
-      const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids));
-      if (error || !pedidos || !pedidos.length) {
-        mostrarAviso("Erro ao buscar o(s) pedido(s) relacionado(s): " + (error ? error.message : "não encontrado(s)"));
-        return;
-      }
-      await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
-      return;
-    }
-
-    if (avisoPortariaExpandidoId === avisoId) {
-      avisoPortariaExpandidoId = null;
-      renderAvisosPortariaPendentes();
-      return;
-    }
-    let query = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
-    if (aviso.fornecedor_nome) query = query.ilike("fornecedor_nome", `%${aviso.fornecedor_nome}%`);
-    const { data, error } = await comTimeout(query.order("criado_em"));
-    if (error) {
-      mostrarAviso("Erro ao buscar pedidos: " + error.message);
-      return;
-    }
-    pedidosCifDoAvisoExpandido = data || [];
-    avisoPortariaExpandidoId = avisoId;
-    renderAvisosPortariaPendentes();
-    return;
-  }
-
   const btnDispensar = e.target.closest("button[data-dispensar-aviso-portaria]");
-  if (btnDispensar) {
-    const almoxarife = document.getElementById("almoxarife-select-cif").value || null;
-    const { error } = await db
-      .from("rl_avisos_portaria")
-      .update({ lido: true, lido_por: almoxarife, lido_em: new Date().toISOString() })
-      .eq("id", btnDispensar.dataset.dispensarAvisoPortaria);
-    if (error) {
-      mostrarAviso("Erro ao dispensar aviso: " + error.message);
-      return;
-    }
-    carregarAvisosPortariaPendentes();
+  if (!btnDispensar) return;
+  const almoxarife = document.getElementById("almoxarife-select-cif").value || null;
+  const { error } = await db
+    .from("rl_avisos_portaria")
+    .update({ lido: true, lido_por: almoxarife, lido_em: new Date().toISOString() })
+    .eq("id", btnDispensar.dataset.dispensarAvisoPortaria);
+  if (error) {
+    mostrarAviso("Erro ao dispensar aviso: " + error.message);
     return;
   }
-
-  const btnConferirPedido = e.target.closest("button[data-conferir-pedido-cif]");
-  if (btnConferirPedido) {
-    const pedido = pedidosCifDoAvisoExpandido.find((p) => p.id === btnConferirPedido.dataset.conferirPedidoCif);
-    const aviso = avisosPortariaPendentesCache.find((a) => a.id === avisoPortariaExpandidoId);
-    if (pedido) await iniciarConferenciaCif([pedido], aviso ? notaPreLidaDoAviso(aviso) : null);
-  }
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
 });
 
 // Cria uma "rota" mínima (só pra essa entrega) e abre o MESMO modal de
@@ -3064,7 +3069,7 @@ function renderPedidosCifPendentes() {
   }
   el.innerHTML = `
     <table class="tabela-itens">
-      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Comprador</th><th>Valor</th><th></th></tr></thead>
+      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Comprador</th><th>Valor</th><th colspan="2"></th></tr></thead>
       <tbody>
         ${pedidosCifPendentesCache
           .map(
@@ -3075,19 +3080,78 @@ function renderPedidosCifPendentes() {
               <td>${escapeHtml(p.comprador_nome || "—")}</td>
               <td>${formatarMoeda(p.valor_total)}</td>
               <td><button type="button" class="btn small" data-conferir-pedido-cif-geral="${p.id}">🔍 Conferir</button></td>
+              <td><button type="button" class="btn secondary small" data-recebido-terceiro="${p.id}">🤝 Recebido por terceiro</button></td>
             </tr>`
           )
           .join("")}
       </tbody>
-    </table>`;
+    </table>
+    <p class="hint">"Recebido por terceiro" é pra quando a entrega foi recebida fora do almoxarifado (sem nota fiscal pra conferir aqui) — marca o pedido como recebido sem passar pela comparação de divergência.</p>`;
 }
 
 document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click", async (e) => {
-  const btn = e.target.closest("button[data-conferir-pedido-cif-geral]");
-  if (!btn) return;
-  const pedido = pedidosCifPendentesCache.find((p) => p.id === btn.dataset.conferirPedidoCifGeral);
-  if (pedido) await iniciarConferenciaCif([pedido]);
+  const btnConferir = e.target.closest("button[data-conferir-pedido-cif-geral]");
+  if (btnConferir) {
+    const pedido = pedidosCifPendentesCache.find((p) => p.id === btnConferir.dataset.conferirPedidoCifGeral);
+    if (pedido) await iniciarConferenciaCif([pedido]);
+    return;
+  }
+
+  const btnTerceiro = e.target.closest("button[data-recebido-terceiro]");
+  if (btnTerceiro) {
+    // Mesmo padrão de confirmação em dois cliques já usado no resto do app
+    // (ex: "Excluir" no Histórico) — marcar como recebido sem conferência
+    // não tem volta fácil, então evita clique acidental.
+    if (!btnTerceiro.dataset.confirmando) {
+      btnTerceiro.dataset.confirmando = "1";
+      btnTerceiro.textContent = "Confirma? Clique de novo";
+      setTimeout(() => {
+        delete btnTerceiro.dataset.confirmando;
+        btnTerceiro.textContent = "🤝 Recebido por terceiro";
+      }, 4000);
+      return;
+    }
+    await marcarRecebidoPorTerceiro(btnTerceiro.dataset.recebidoTerceiro);
+  }
 });
+
+// Registra o recebimento sem nenhuma conferência de nota — cria a mesma rota
+// "virtual" usada na conferência normal (só pra manter um registro no
+// Histórico), mas já marca concluído na hora, sem divergência nenhuma (não
+// há nota pra comparar).
+async function marcarRecebidoPorTerceiro(pedidoId) {
+  const pedido = pedidosCifPendentesCache.find((p) => p.id === pedidoId);
+  if (!pedido) return;
+  const almoxarife = document.getElementById("almoxarife-select-cif").value;
+  try {
+    const { data: rota, error: errRota } = await db
+      .from("rl_rotas")
+      .insert({ motorista_nome: `${almoxarife || "Almoxarifado"} (recebimento CIF)`, status: "concluida" })
+      .select()
+      .single();
+    if (errRota) throw errRota;
+
+    const { error: errParada } = await db.from("rl_rota_paradas").insert({
+      rota_id: rota.id,
+      pedido_id: pedido.id,
+      ordem: 0,
+      status: "concluida",
+      recebido_por_terceiro: true,
+      recebido_por: almoxarife || null,
+      recebido_em: new Date().toISOString(),
+      concluido_em: new Date().toISOString(),
+    });
+    if (errParada) throw errParada;
+
+    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedido.id);
+    if (errPedido) throw errPedido;
+
+    mostrarAviso("Pedido marcado como recebido por terceiro.");
+    carregarPedidosCifPendentes();
+  } catch (err) {
+    mostrarAviso("Erro ao marcar recebimento: " + err.message);
+  }
+}
 
 document.getElementById("filtro-numero-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
 document.getElementById("filtro-fornecedor-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
@@ -3098,6 +3162,7 @@ document.getElementById("btn-limpar-filtros-cif").addEventListener("click", () =
 });
 document.getElementById("btn-atualizar-recebimento-cif").addEventListener("click", () => {
   carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
   carregarPedidosCifPendentes();
 });
 
@@ -3359,6 +3424,7 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
   // aparecer DEPOIS disso (ver avisarDivergenciasNovas/carregarAvisosPortariaPendentes).
   verificarDivergenciasNovas();
   carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
 
   // Atualização automática a cada 1 min — pensado pro app ficar aberto o dia
   // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência ou
@@ -3367,6 +3433,7 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
   setInterval(() => {
     verificarDivergenciasNovas();
     carregarAvisosPortariaPendentes();
+    carregarAvisosLiberadosPendentesConferencia();
     loadHistorico();
   }, 60000);
 })();
