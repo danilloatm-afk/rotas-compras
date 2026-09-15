@@ -113,7 +113,20 @@ create table rl_avisos_portaria (
   criado_em timestamptz not null default now(),
   lido boolean not null default false,
   lido_por text,
-  lido_em timestamptz
+  lido_em timestamptz,
+  -- Preenchidos quando a portaria já anexa e lê a nota com IA na hora do
+  -- aviso — o almoxarifado reaproveita esses dados na conferência CIF, sem
+  -- precisar fotografar/ler de novo o mesmo documento.
+  pedido_id uuid references rl_pedidos(id),
+  nota_arquivo_url text,
+  nota_numero text,
+  nota_valor_total numeric,
+  nota_cnpj text,
+  nota_itens jsonb,
+  nota_tipo_documento text,
+  nota_emitente_nome text,
+  nota_data_emissao date,
+  nota_parcelas jsonb
 );
 
 create index on rl_pedidos (status);
