@@ -2050,22 +2050,25 @@ document.getElementById("tab-config").addEventListener(
 // ---------- portaria (avisa o almoxarifado que uma entrega chegou) ----------
 document.getElementById("btn-avisar-portaria").addEventListener("click", async () => {
   const btn = document.getElementById("btn-avisar-portaria");
+  const cnpj = document.getElementById("portaria-cnpj").value.trim();
   const fornecedor = document.getElementById("portaria-fornecedor").value.trim();
   const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
   const mensagem = document.getElementById("portaria-mensagem").value.trim();
-  if (!fornecedor && !pedidoNumero) {
-    mostrarAviso("Informe pelo menos o fornecedor ou o número do pedido.");
+  if (!cnpj && !fornecedor && !pedidoNumero) {
+    mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o número do pedido.");
     return;
   }
   btn.disabled = true;
   btn.textContent = "Enviando...";
   try {
     const { error } = await db.from("rl_avisos_portaria").insert({
+      fornecedor_cnpj: cnpj || null,
       fornecedor_nome: fornecedor || null,
       pedido_numero: pedidoNumero || null,
       mensagem: mensagem || null,
     });
     if (error) throw error;
+    document.getElementById("portaria-cnpj").value = "";
     document.getElementById("portaria-fornecedor").value = "";
     document.getElementById("portaria-pedido-numero").value = "";
     document.getElementById("portaria-mensagem").value = "";
@@ -2099,6 +2102,7 @@ async function carregarAvisosPortariaEnviados() {
       (a) => `
     <div class="aviso-portaria-enviado">
       ${a.fornecedor_nome ? `<strong>${escapeHtml(a.fornecedor_nome)}</strong>` : "<strong>Fornecedor não informado</strong>"}
+      ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
       ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
       · ${formatarDataHora(a.criado_em)}
       ${a.lido ? ` · ✅ acesso liberado por ${escapeHtml(a.lido_por || "—")}` : " · ⏳ aguardando liberação"}
@@ -2620,7 +2624,7 @@ function renderAvisosPortariaPendentes() {
   const el = document.getElementById("avisos-portaria-pendentes");
   if (!el) return;
   if (!avisosPortariaPendentesCache.length) {
-    el.innerHTML = "";
+    el.innerHTML = `<p class="empty-state">Nenhum aviso pendente no momento.</p>`;
     return;
   }
   el.innerHTML = avisosPortariaPendentesCache
@@ -2630,6 +2634,7 @@ function renderAvisosPortariaPendentes() {
       <div class="aviso-portaria-card">
         <div>
           🚪 <strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
+          ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
           ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
           · ${formatarDataHora(a.criado_em)}
           ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
