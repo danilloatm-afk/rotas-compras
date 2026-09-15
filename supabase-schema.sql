@@ -118,6 +118,9 @@ create table rl_avisos_portaria (
   -- aviso — o almoxarifado reaproveita esses dados na conferência CIF, sem
   -- precisar fotografar/ler de novo o mesmo documento.
   pedido_id uuid references rl_pedidos(id),
+  -- Vários pedidos juntos numa nota só (fornecedor manda tudo de uma vez) —
+  -- substitui pedido_id quando for mais de um.
+  pedido_ids uuid[],
   nota_arquivo_url text,
   nota_numero text,
   nota_valor_total numeric,
