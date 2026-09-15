@@ -204,6 +204,19 @@
     <p class="hint">Pra entregas que o fornecedor traz até aqui (frete CIF) — avisa o almoxarifado na hora, com som, sem precisar ligar ou ir até lá.</p>
     <div class="card-pedido">
       <label>
+        Nota fiscal (opcional — só se tiver o arquivo no computador)
+        <input type="file" id="portaria-nota-arquivo" accept="image/*,application/pdf">
+      </label>
+      <p class="hint">Se anexar e ler agora, o almoxarifado recebe a conferência pronta — não precisa fotografar de novo nem gastar outra leitura de IA.</p>
+      <button type="button" id="btn-portaria-ler-nota" class="btn secondary">🤖 Ler nota com IA</button>
+      <p id="portaria-nota-ia-feedback" class="feedback"></p>
+
+      <label id="label-portaria-pedido-relacionado" class="hidden">
+        Qual pedido é esse?
+        <select id="portaria-pedido-relacionado"></select>
+      </label>
+
+      <label>
         CNPJ do fornecedor (o que está na nota que chegou)
         <input type="text" id="portaria-cnpj" placeholder="Ex: 12.345.678/0001-90" inputmode="numeric">
       </label>
@@ -326,13 +339,19 @@
       <button id="btn-modal-fechar" type="button" class="link-btn">Fechar ✕</button>
     </div>
     <form id="form-modal-nota" class="form-card modal-form">
-      <label>
-        Foto da nota fiscal
-        <input type="file" id="nota-arquivo" accept="image/*,application/pdf" capture="environment" required>
-      </label>
-      <p class="hint">📸 Dica: boa luz, sem reflexo, foto reta (não torta) e aproxime até o texto ficar nítido — isso ajuda demais a leitura automática.</p>
-      <button type="button" id="btn-ler-nota" class="btn secondary">🤖 Ler nota com IA</button>
-      <p id="nota-ia-feedback" class="feedback"></p>
+      <div id="bloco-nota-pre-lida" class="conferencia-box ok hidden">
+        📎 Nota já lida pela portaria — <a id="link-nota-pre-lida" href="#" target="_blank" rel="noopener">ver arquivo</a>.
+        <button type="button" id="btn-reler-nota" class="link-btn">Anexar outra foto e ler de novo</button>
+      </div>
+      <div id="bloco-upload-nota">
+        <label>
+          Foto da nota fiscal
+          <input type="file" id="nota-arquivo" accept="image/*,application/pdf" capture="environment" required>
+        </label>
+        <p class="hint">📸 Dica: boa luz, sem reflexo, foto reta (não torta) e aproxime até o texto ficar nítido — isso ajuda demais a leitura automática.</p>
+        <button type="button" id="btn-ler-nota" class="btn secondary">🤖 Ler nota com IA</button>
+        <p id="nota-ia-feedback" class="feedback"></p>
+      </div>
 
       <label>
         Valor total da nota (R$)
