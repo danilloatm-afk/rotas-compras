@@ -98,6 +98,12 @@ create table rl_almoxarifes (
   id uuid primary key default gen_random_uuid(),
   nome text not null unique,
   ativo boolean not null default true,
+  -- Opcional — em branco, esse almoxarife vê entregas de todas as empresas.
+  -- Preenchida, o Recebimento CIF só mostra entregas dessa empresa.
+  empresa_nome text,
+  -- Só relevante hoje pra AGRICOLA WEHRMANN LTDA, que tem dois almoxarifados
+  -- (Uso e Consumo / Insumos) — em branco pra quem não precisa da distinção.
+  setor text,
   criado_em timestamptz not null default now()
 );
 
@@ -105,6 +111,8 @@ create table rl_almoxarifes (
 -- de rota/motorista, pensado pra entregas CIF (fornecedor traz até aqui).
 create table rl_avisos_portaria (
   id uuid primary key default gen_random_uuid(),
+  empresa_nome text,
+  setor text,
   fornecedor_nome text,
   fornecedor_cnpj text,
   pedido_numero text,
