@@ -26,7 +26,8 @@
     <button class="tab-btn" data-tab="motorista">🚚 Motorista</button>
     <button class="tab-btn" data-tab="indicadores">📊 Indicadores</button>
     <button class="tab-btn" data-tab="portaria">🚪 Portaria</button>
-    <button class="tab-btn" data-tab="historico">🗂️ Histórico<span id="badge-avisos-portaria" class="badge-contador" hidden></span></button>
+    <button class="tab-btn" data-tab="recebimento-cif">📦 Recebimento CIF<span id="badge-avisos-portaria" class="badge-contador" hidden></span></button>
+    <button class="tab-btn" data-tab="historico">🗂️ Histórico</button>
     <button class="tab-btn" data-tab="config">Configurações</button>
   </nav>
 </header>
@@ -221,6 +222,33 @@
     <div id="lista-avisos-portaria-enviados"><p class="empty-state">Nenhum aviso enviado ainda hoje.</p></div>
   </section>
 
+  <!-- RECEBIMENTO CIF -->
+  <section id="tab-recebimento-cif" class="tab-content">
+    <div class="section-head">
+      <h2>Recebimento CIF</h2>
+      <button id="btn-atualizar-recebimento-cif" type="button" class="btn secondary small">🔄 Atualizar</button>
+    </div>
+    <p class="hint">Entregas que o fornecedor traz até aqui — confira a nota e libere o acesso da portaria por aqui.</p>
+
+    <div class="quem-sou-eu">
+      <label>
+        Meu nome (almoxarifado)
+        <select id="almoxarife-select-cif"></select>
+      </label>
+    </div>
+
+    <h3 class="mt">🚪 Avisos da portaria aguardando</h3>
+    <div id="avisos-portaria-pendentes"><p class="empty-state">Nenhum aviso pendente no momento.</p></div>
+
+    <h3 class="mt">📦 Todos os pedidos CIF pendentes</h3>
+    <div class="filtro-e-botao mb">
+      <input type="text" id="filtro-numero-cif" placeholder="Buscar por Nº do pedido">
+      <input type="text" id="filtro-fornecedor-cif" placeholder="Buscar por fornecedor">
+      <button id="btn-limpar-filtros-cif" type="button" class="link-btn">Limpar filtros</button>
+    </div>
+    <div id="lista-pedidos-cif-pendentes"></div>
+  </section>
+
   <!-- HISTÓRICO -->
   <section id="tab-historico" class="tab-content">
     <div class="section-head">
@@ -228,8 +256,6 @@
       <button id="btn-atualizar-historico" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
     <p class="hint">Cada parada aparece aqui assim que é concluída, com o detalhe de qualquer divergência (valor, CNPJ ou itens) ou aviso de entrega parcial. O almoxarifado confere e confirma o recebimento de cada uma.</p>
-
-    <div id="avisos-portaria-pendentes"></div>
 
     <div class="quem-sou-eu">
       <label>
