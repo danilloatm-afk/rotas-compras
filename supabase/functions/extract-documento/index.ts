@@ -332,19 +332,20 @@ Deno.serve(async (req: Request) => {
     // descontos) já se mostrou pouco confiável (ela às vezes ignora o
     // desconto). O modelo só extrai os números crus; a conta é determinística.
     if (tipo === "pedido") {
+      // "|| (...)" (não "?? (...)") de propósito, nos dois níveis abaixo —
+      // alguns documentos não têm coluna de total por linha nem um "Total das
+      // Mercadorias" de verdade, e a IA às vezes copia um "0,00" literal do
+      // documento em vez de omitir o campo nesse caso. Nem uma linha de item
+      // nem um pedido inteiro têm valor 0 de verdade, então tratamos 0 igual
+      // a "não veio" e caímos pro fallback (quantidade×valor unitário, depois
+      // soma dos itens) — sem isso, o pedido salvava com valor zerado (ou até
+      // negativo, se tinha desconto).
       const somaItens = Array.isArray(extraido.itens)
         ? extraido.itens.reduce((soma: number, item: { valor_total?: number; quantidade?: number; valor_unitario?: number }) => {
-            const linha = item.valor_total ?? (item.quantidade != null && item.valor_unitario != null ? item.quantidade * item.valor_unitario : 0);
+            const linha = item.valor_total || (item.quantidade != null && item.valor_unitario != null ? item.quantidade * item.valor_unitario : 0);
             return soma + (linha || 0);
           }, 0)
         : null;
-      // "|| somaItens" (não "?? somaItens") de propósito — alguns modelos de
-      // pedido não têm coluna de total por linha nem um "Total das
-      // Mercadorias" de verdade, e a IA às vezes copia um "0,00" literal do
-      // documento (não omite o campo) nesse caso. Um pedido de verdade nunca
-      // tem valor 0 nas mercadorias, então trata 0 igual a "não veio" e cai
-      // pro fallback (soma dos itens) — sem isso, o pedido inteiro salvava
-      // com valor zerado (ou até negativo, se tinha desconto).
       const mercadorias = extraido.total_mercadorias || somaItens;
       if (mercadorias != null) {
         extraido.valor_total = mercadorias + (extraido.frete || 0) + (extraido.despesas || 0) - (extraido.descontos || 0);
