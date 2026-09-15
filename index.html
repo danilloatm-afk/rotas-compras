@@ -204,11 +204,11 @@
     <p class="hint">Pra entregas que o fornecedor traz até aqui (frete CIF) — avisa o almoxarifado na hora, com som, sem precisar ligar ou ir até lá.</p>
     <div class="card-pedido">
       <label>
-        Empresa (pra qual empresa é a entrega)
-        <select id="portaria-empresa"><option value="">— selecione —</option></select>
+        Empresa (pra qual empresa é a entrega) *
+        <select id="portaria-empresa" required><option value="">— selecione —</option></select>
       </label>
       <label id="label-portaria-setor" class="hidden">
-        Almoxarifado (setor)
+        Almoxarifado (setor) *
         <select id="portaria-setor">
           <option value="">— selecione —</option>
           <option value="Uso e Consumo">Uso e Consumo</option>
@@ -267,7 +267,11 @@
     </div>
 
     <h3 class="mt">🚪 Avisos da portaria aguardando</h3>
+    <p class="hint">Libere o acesso primeiro — a conferência da nota só fica disponível depois disso (ver seção abaixo).</p>
     <div id="avisos-portaria-pendentes"><p class="empty-state">Nenhum aviso pendente no momento.</p></div>
+
+    <h3 class="mt">✅ Liberados, aguardando conferência</h3>
+    <div id="avisos-liberados-aguardando-conferencia"><p class="empty-state">Nenhum acesso liberado aguardando conferência.</p></div>
 
     <h3 class="mt">📦 Todos os pedidos CIF pendentes</h3>
     <div class="filtro-e-botao mb">
