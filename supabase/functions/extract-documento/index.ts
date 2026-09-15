@@ -290,6 +290,22 @@ Deno.serve(async (req: Request) => {
     const schema = tipo === "pedido" ? SCHEMA_PEDIDO : SCHEMA_NOTA;
     const prompt = tipo === "pedido" ? PROMPT_PEDIDO : PROMPT_NOTA;
 
+    // Cache de prompt: a instrução + o schema são IDÊNTICOS em toda leitura
+    // do mesmo tipo (pedido ou nota) — só o arquivo muda a cada chamada. Sem
+    // cache, esse texto é recobrado a preço cheio toda vez; com cache, só a
+    // primeira chamada de uma leva paga cheio, as próximas (dentro de ~5min,
+    // ex: o robô processando vários pedidos seguidos) pagam 10% dessa parte.
+    // Reforça o schema como TEXTO aqui (além de já ir estruturado no
+    // output_config, que continua garantindo o formato da resposta) só pra
+    // esse bloco ficar grande o bastante pra valer cache — texto curto demais
+    // não ativa. Importante: o texto cacheável (estável) precisa vir ANTES
+    // do arquivo (que muda sempre) pra fazer parte do "prefixo" cacheado.
+    const instrucoesCacheaveis =
+      `${prompt}\n\n` +
+      "Formato esperado da resposta (sua resposta final é validada contra este schema — isso aqui é só contexto extra " +
+      "antes de ler o documento):\n" +
+      JSON.stringify(schema);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -304,7 +320,10 @@ Deno.serve(async (req: Request) => {
         messages: [
           {
             role: "user",
-            content: [fileBlock, { type: "text", text: prompt }],
+            content: [
+              { type: "text", text: instrucoesCacheaveis, cache_control: { type: "ephemeral" } },
+              fileBlock,
+            ],
           },
         ],
       }),
@@ -352,7 +371,10 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return jsonResponse({ data: extraido }, 200);
+    // "usage" vai junto só pra dar pra acompanhar o efeito do cache de prompt
+    // (cache_read_input_tokens/cache_creation_input_tokens) sem precisar
+    // abrir o painel da Anthropic — o app não usa esse campo pra nada.
+    return jsonResponse({ data: extraido, usage: data.usage }, 200);
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : "Erro desconhecido." }, 500);
   }
