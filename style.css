@@ -259,6 +259,11 @@ input, select, textarea {
   margin-bottom: 0.6rem;
 }
 .aviso-portaria-card strong { color: var(--atencao); }
+.aviso-portaria-card.aviso-sem-pedido {
+  flex-direction: column;
+  align-items: stretch;
+}
+.aviso-portaria-card.aviso-sem-pedido .select-pedido-aviso-liberado { width: 100%; }
 .aviso-portaria-enviado {
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
