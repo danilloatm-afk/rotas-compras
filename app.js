@@ -1645,6 +1645,26 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
         : undefined,
     };
   });
+
+  // Item que sobrou na NOTA sem casar com nenhum item do pedido — sem isso,
+  // ele simplesmente desaparecia da comparação (nem aparecia na tabela, nem
+  // contava como divergência), mesmo sendo um item a mais que ninguém pediu.
+  restantes
+    .filter((n) => !n.usado)
+    .forEach((n) => {
+      divergente = true;
+      linhas.push({
+        produto: n.produto_nome,
+        qtdP: null,
+        qtdN: n.quantidade,
+        vuP: null,
+        vuN: n.valor_unitario,
+        match: true,
+        divergente: true,
+        obs: "item não estava no pedido",
+      });
+    });
+
   return { temDados: true, divergente, linhas };
 }
 
