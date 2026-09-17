@@ -2328,6 +2328,7 @@ function chaveAnoMes(data) {
 
 async function loadIndicadores() {
   const container = document.getElementById("grafico-coletados");
+  const containerLojas = document.getElementById("grafico-lojas-diferentes");
   const containerDivergencias = document.getElementById("grafico-divergencias");
   const containerSemResposta = document.getElementById("tabela-divergencias-sem-resposta");
   const containerFornecedor = document.getElementById("tabela-divergencias-fornecedor");
@@ -2336,13 +2337,14 @@ async function loadIndicadores() {
     db
       .from("rl_rota_paradas")
       .select(
-        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, resolucao_em, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome)"
+        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, resolucao_em, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome, frete_fob)"
       )
       .eq("status", "concluida")
       .not("concluido_em", "is", null)
   );
   if (error) {
     container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerLojas.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerDivergencias.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerSemResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerFornecedor.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
@@ -2353,11 +2355,16 @@ async function loadIndicadores() {
   // últimos 6 meses, incluindo os que tiverem zero coletas
   const hoje = new Date();
   const meses = [];
+  const mesesLojas = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    meses.push({ chave: chaveAnoMes(d), label: `${MESES_ABREV[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`, total: 0 });
+    const chave = chaveAnoMes(d);
+    const label = `${MESES_ABREV[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+    meses.push({ chave, label, total: 0 });
+    mesesLojas.push({ chave, label, lojas: new Set() });
   }
   const porChave = Object.fromEntries(meses.map((m) => [m.chave, m]));
+  const porChaveLojas = Object.fromEntries(mesesLojas.map((m) => [m.chave, m]));
 
   // Um indicador por tipo de divergência — entregas parciais não contam
   // como divergência (o pedido simplesmente não veio todo de uma vez).
@@ -2379,6 +2386,18 @@ async function loadIndicadores() {
   (data || []).forEach((p) => {
     const chave = chaveAnoMes(new Date(p.concluido_em));
     if (porChave[chave]) porChave[chave].total++;
+
+    // Só FOB conta como "loja que o motorista passou" — CIF é o fornecedor
+    // que traz até o almoxarifado, não o motorista que vai até a loja.
+    // Normaliza o nome (mesma função usada pra comparar fornecedor na
+    // conferência) pra não contar a mesma loja duas vezes por causa de
+    // LTDA/ME/etc ou variação de maiúscula no nome.
+    const pedidoDaParada = p.rl_pedidos || {};
+    if (porChaveLojas[chave] && pedidoDaParada.frete_fob !== false) {
+      const nomeLoja = normalizarEmpresa(pedidoDaParada.fornecedor_nome || "") || (pedidoDaParada.fornecedor_nome || "").trim();
+      if (nomeLoja) porChaveLojas[chave].lojas.add(nomeLoja);
+    }
+
     if (!p.entrega_parcial) {
       tiposDivergencia.forEach((t) => {
         if (p[t.chave]) t.total++;
@@ -2411,6 +2430,10 @@ async function loadIndicadores() {
   });
 
   renderGraficoBarras(container, meses, "var(--primary)", (m) => `${m.label}: ${m.total} pedido(s) coletado(s)`);
+
+  const lojasPorMes = mesesLojas.map((m) => ({ chave: m.chave, label: m.label, total: m.lojas.size }));
+  renderGraficoBarras(containerLojas, lojasPorMes, "var(--ok)", (m) => `${m.label}: ${m.total} loja(s) diferente(s) visitada(s)`);
+
   renderGraficoBarras(containerDivergencias, tiposDivergencia, "var(--atrasado)", (t) => `${t.label}: ${t.total} divergência(s)`);
 
   const listaSemResposta = Array.from(semRespostaPorComprador.values()).sort((a, b) => b.diasMax - a.diasMax);
