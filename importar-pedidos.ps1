@@ -45,9 +45,12 @@ $Fontes = @(
     @{
         # Pasta de embalagens/insumos agrícolas: só os CIF (sem "FOB" no
         # nome) são importados — arquivos com "FOB" ficam parados aqui,
-        # ninguém mexe neles.
+        # ninguém mexe neles. Sem data de corte (2026-09-18: importado todo
+        # o histórico já acumulado nela, a pedido do Danilo) — depois disso
+        # só sobra arquivo novo na raiz mesmo, já que o processado é movido
+        # pra fora, então não precisa de corte pra frente.
         Pasta     = "W:\COMPRAS\ORDENS DE COMPRA EMBALAGENS INSUMOS AGÍCOLAS"
-        DataCorte = Get-Date "2026-09-18"
+        DataCorte = Get-Date "2000-01-01"
         SoCif     = $true
     }
 )
