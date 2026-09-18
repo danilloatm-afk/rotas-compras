@@ -88,6 +88,9 @@ create table rl_rota_paradas (
   resolucao_divergencia text,
   resolucao_por text,
   resolucao_em timestamptz,
+  -- Recebido fora do almoxarifado (por terceiro) — sem nota fiscal pra
+  -- conferir, então nunca passa pela comparação de divergência.
+  recebido_por_terceiro boolean not null default false,
   concluido_em timestamptz,
   criado_em timestamptz not null default now()
 );
@@ -101,8 +104,9 @@ create table rl_almoxarifes (
   -- Opcional — em branco, esse almoxarife vê entregas de todas as empresas.
   -- Preenchida, o Recebimento CIF só mostra entregas dessa empresa.
   empresa_nome text,
-  -- Só relevante hoje pra AGRICOLA WEHRMANN LTDA, que tem dois almoxarifados
-  -- (Uso e Consumo / Insumos) — em branco pra quem não precisa da distinção.
+  -- Só relevante hoje pra AGRICOLA WEHRMANN LTDA, que tem mais de um
+  -- almoxarifado (Uso e Consumo / Insumos / Cantina) — em branco pra quem
+  -- não precisa da distinção.
   setor text,
   criado_em timestamptz not null default now()
 );
