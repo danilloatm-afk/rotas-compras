@@ -2074,6 +2074,7 @@ function renderCadastros() {
           <option value="">Todos os setores</option>
           <option value="Uso e Consumo" ${a.setor === "Uso e Consumo" ? "selected" : ""}>Uso e Consumo</option>
           <option value="Insumos" ${a.setor === "Insumos" ? "selected" : ""}>Insumos</option>
+          <option value="Cantina" ${a.setor === "Cantina" ? "selected" : ""}>Cantina</option>
         </select>
         <button class="link-btn" data-toggle-almoxarife="${a.id}" data-ativo="${a.ativo}" type="button">${a.ativo ? "Desativar" : "Ativar"}</button>
       </li>`;
@@ -2162,8 +2163,8 @@ let portariaNotaArquivo = null;
 let portariaNotaExtraida = null; // { itens, tipo_documento, emitente_nome, data_emissao, parcelas, valor_total, cnpj, numero }
 let portariaPedidosCandidatos = [];
 
-// Só a AGRICOLA WEHRMANN LTDA tem dois almoxarifados (Uso e Consumo /
-// Insumos) — o campo "Setor" só aparece quando essa empresa é escolhida.
+// Só a AGRICOLA WEHRMANN LTDA tem mais de um almoxarifado (Uso e Consumo /
+// Insumos / Cantina) — o campo "Setor" só aparece quando essa empresa é escolhida.
 document.getElementById("portaria-empresa").addEventListener("change", (e) => {
   const ehWehrmann = e.target.value === "AGRICOLA WEHRMANN LTDA";
   document.getElementById("label-portaria-setor").classList.toggle("hidden", !ehWehrmann);
@@ -2258,7 +2259,7 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
     return;
   }
   if (empresa === "AGRICOLA WEHRMANN LTDA" && !setor) {
-    mostrarAviso("Selecione o setor (Uso e Consumo ou Insumos) antes de avisar a chegada.");
+    mostrarAviso("Selecione o setor (Uso e Consumo, Insumos ou Cantina) antes de avisar a chegada.");
     return;
   }
   if (!cnpj && !fornecedor && !pedidoNumero) {
@@ -2841,7 +2842,7 @@ let idsAvisosPortariaConhecidos = null; // null = ainda não verificou nenhuma v
 let avisosPortariaPendentesCache = [];
 
 // O almoxarife selecionado (aba Recebimento CIF) pode estar amarrado a uma
-// empresa (e, só na Wehrmann, também a um setor: Uso e Consumo/Insumos) —
+// empresa (e, só na Wehrmann, também a um setor: Uso e Consumo/Insumos/Cantina) —
 // nesse caso só vê os avisos daquela empresa/setor. Sem empresa definida no
 // cadastro dele, continua vendo tudo (comportamento de antes).
 function filtrarAvisosPorAlmoxarifeAtual(avisos) {
