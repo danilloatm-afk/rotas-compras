@@ -1755,6 +1755,38 @@ function normalizarEmpresa(nome) {
     .trim();
 }
 
+// Palavras comuns demais pra usar como "assinatura" de fornecedor — duas
+// empresas diferentes que só têm ISSO em comum não devem ser consideradas a
+// mesma (ex: duas distribuidoras quaisquer não são a mesma loja).
+const PALAVRAS_GENERICAS_FORNECEDOR = new Set([
+  "comercio", "comercial", "distribuidora", "distribuicao", "industria", "industrial",
+  "solucoes", "produtos", "materiais", "material", "agricola", "agricolas", "brasil",
+  "nacional", "regional", "importacao", "exportacao", "representacao", "logistica",
+  "servicos", "tecnologia", "tecnologias", "alimentos", "atacadista", "atacado",
+  "construcao", "construtora", "transportes", "participacoes", "holding", "grupo",
+  "quimica", "quimicos", "equipamentos", "maquinas", "pecas", "acessorios",
+]);
+
+function palavrasSignificativas(nome) {
+  return normalizarEmpresa(nome)
+    .split(" ")
+    .filter((p) => p.length >= 4 && !PALAVRAS_GENERICAS_FORNECEDOR.has(p));
+}
+
+// Nem sempre o nome bate inteiro de um documento pro outro (ex: a nota vem
+// no nome da fábrica/matriz — "SUINOCOP SUINOCULTURA COPACABANA LTDA" — e o
+// pedido no nome comercial — "SUINOCOP ALIMENTOS LTDA"): além de "um nome
+// conter o outro", considera parecido também quando os dois compartilham
+// alguma palavra realmente distintiva (não genérica) em comum.
+function fornecedoresParecidos(nomeA, nomeB) {
+  const a = normalizarEmpresa(nomeA || "");
+  const b = normalizarEmpresa(nomeB || "");
+  if (!a || !b) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  const palavrasA = new Set(palavrasSignificativas(nomeA));
+  return palavrasSignificativas(nomeB).some((p) => palavrasA.has(p));
+}
+
 // Nota de serviço (NFS-e) não tem tabela de itens de verdade pra comparar —
 // em vez disso, confere se a empresa prestadora bate com o fornecedor
 // registrado no pedido (comparação de nome, não tem CNPJ do fornecedor
@@ -2223,15 +2255,11 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
     // se a portaria já tiver escolhido uma — ajuda a desambiguar quando mais
     // de uma empresa do grupo compra do mesmo fornecedor.
     const empresaAlvo = document.getElementById("portaria-empresa").value;
-    const nomeAlvo = normalizarEmpresa(extraido.emitente_nome || "");
     let queryCandidatos = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
     if (empresaAlvo) queryCandidatos = queryCandidatos.eq("empresa_nome", empresaAlvo);
     const { data } = await comTimeout(queryCandidatos);
-    portariaPedidosCandidatos = nomeAlvo
-      ? (data || []).filter((p) => {
-          const nomeP = normalizarEmpresa(p.fornecedor_nome || "");
-          return nomeP && (nomeP.includes(nomeAlvo) || nomeAlvo.includes(nomeP));
-        })
+    portariaPedidosCandidatos = extraido.emitente_nome
+      ? (data || []).filter((p) => fornecedoresParecidos(extraido.emitente_nome, p.fornecedor_nome))
       : [];
 
     const selPedido = document.getElementById("portaria-pedido-relacionado");
@@ -2974,14 +3002,10 @@ async function carregarAvisosLiberadosPendentesConferencia() {
   if (semPedidos.length) {
     const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
     semPedidosComCandidatos = semPedidos.map((a) => {
-      const nomeAlvo = normalizarEmpresa(a.fornecedor_nome || "");
       let candidatos = pendentesGeral || [];
       if (a.empresa_nome) candidatos = candidatos.filter((p) => p.empresa_nome === a.empresa_nome);
-      if (nomeAlvo) {
-        const filtrados = candidatos.filter((p) => {
-          const nomeP = normalizarEmpresa(p.fornecedor_nome || "");
-          return nomeP && (nomeP.includes(nomeAlvo) || nomeAlvo.includes(nomeP));
-        });
+      if (a.fornecedor_nome) {
+        const filtrados = candidatos.filter((p) => fornecedoresParecidos(a.fornecedor_nome, p.fornecedor_nome));
         if (filtrados.length) candidatos = filtrados;
       }
       return { ...a, _candidatos: candidatos };
