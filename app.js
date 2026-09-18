@@ -3006,7 +3006,19 @@ async function carregarAvisosLiberadosPendentesConferencia() {
   if (idsPedidos.length) {
     const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("id").eq("status", "pendente").in("id", idsPedidos));
     const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
-    comPedidosPendentes = comPedidos.filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)));
+
+    // Se algum dos pedidos ainda pendentes já teve uma entrega PARCIAL
+    // registrada antes (voltou pra fila de propósito, esperando o resto),
+    // sinaliza isso no card — senão o aviso continua aparecendo aqui igual
+    // a um que ninguém tocou ainda, e parece que "não saiu do lugar".
+    const { data: paradasParciais } = await comTimeout(
+      db.from("rl_rota_paradas").select("pedido_id").eq("entrega_parcial", true).in("pedido_id", [...idsPendentes])
+    );
+    const idsComParcial = new Set((paradasParciais || []).map((p) => p.pedido_id));
+
+    comPedidosPendentes = comPedidos
+      .filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)))
+      .map((a) => ({ ...a, _temParcial: (a.pedido_ids || []).some((id) => idsComParcial.has(id)) }));
   }
 
   let semPedidosComCandidatos = [];
@@ -3067,9 +3079,13 @@ function renderAvisosLiberadosPendentesConferencia() {
 
       return `
       <div class="aviso-portaria-card">
-        <div>${cabecalho}</div>
+        <div>${cabecalho}${
+        a._temParcial
+          ? `<br><span class="hint">📦 Já teve uma entrega parcial registrada aqui — confira o restante quando chegar (anexe a nota nova, não reaproveite a antiga).</span>`
+          : ""
+      }</div>
         <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
-        a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
+        a._temParcial ? "📦 Conferir o restante" : a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
       }</button>
       </div>`;
     })
