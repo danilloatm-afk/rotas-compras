@@ -1453,7 +1453,15 @@ document.getElementById("nota-arquivo").addEventListener("change", lerNotaComIA)
 // um item "conter" o outro (nomes costumam variar um pouco entre pedido e
 // nota do mesmo produto).
 function normalizarProduto(nome) {
-  return String(nome || "").toLowerCase().trim().replace(/\s+/g, " ");
+  // Sem tirar acento, "Química" (como a portaria/nota às vezes escreve) não
+  // batia com "QUIMICA" (como a IA às vezes lê do pedido) — nem em produto
+  // nem em nome de fornecedor (normalizarEmpresa usa esta função por baixo).
+  return String(nome || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 // O mesmo produto às vezes aparece em mais de uma linha num dos dois
