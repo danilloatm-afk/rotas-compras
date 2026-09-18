@@ -1,4 +1,4 @@
-# importar-pedidos.ps1
+﻿# importar-pedidos.ps1
 #
 # Varre a pasta "Processados" do robô do Avanço para Contratos (que já
 # processa os pedidos de compra pra rastrear spot x contrato) e, pra cada
@@ -7,35 +7,53 @@
 # abrir nenhum site. O nome do comprador, a empresa, o valor e o local são
 # lidos do próprio documento.
 #
+# Também varre uma SEGUNDA pasta ("EMBALAGENS INSUMOS AGÍCOLAS"), que não
+# passa pelo robô do Avanço para Contratos — os pedidos ficam soltos direto
+# na raiz dela. Nessa segunda pasta só os CIF são importados (pedido do
+# Danilo, 2026-09-18): arquivos com "FOB" no nome ficam parados lá, sem
+# mexer, pra alguém decidir manualmente depois.
+#
 # FRETE CIF x FOB: decidido pelo NOME DO ARQUIVO (mesma lógica que o robô do
 # Avanço para Contratos usa pra decidir spot x contrato). Se o nome do
 # arquivo contiver a palavra "FOB" (sem diferenciar maiúsculas/minúsculas), o
 # pedido precisa de coleta pelo motorista. Sem "FOB" no nome, é considerado
-# CIF (fornecedor entrega) — AMBOS são importados (campo frete_fob marca
-# qual é qual); só os FOB aparecem pro motorista montar rota, os CIF ficam
-# disponíveis pro almoxarifado conferir quando a entrega chegar na portaria.
+# CIF (fornecedor entrega).
 #
 # Depois de processado, o arquivo é movido para uma subpasta (dentro da
-# própria pasta "Processados" monitorada):
+# própria pasta de origem):
 #   Roteirizados\            -> importado como FOB (nome tem "FOB", precisa de rota)
 #   Roteirizados-CIF\        -> importado como CIF (nome sem "FOB", fornecedor entrega)
 #   Roteirizados-Duplicados\ -> pulado porque o número do pedido já tinha sido importado
 #   Roteirizados-Erros\      -> deu algum problema (confira o log)
 #
-# CONFIGURAÇÃO: ajuste $PastaMonitorada se o caminho mudar, e $DataCorte na
-# primeira vez que for rodar (evita importar de uma vez todo o histórico
-# antigo já acumulado na pasta Processados). Depois, agende esse script no
-# Agendador de Tarefas do Windows pra rodar a cada 5-15 minutos.
+# CONFIGURAÇÃO: ajuste os caminhos/datas de corte em $Fontes abaixo se
+# mudarem. Ao adicionar uma pasta nova, use a data de HOJE como DataCorte
+# (evita importar de uma vez todo o histórico antigo já acumulado nela).
+# Depois, agende esse script no Agendador de Tarefas do Windows pra rodar a
+# cada 5-15 minutos.
 
 $ErrorActionPreference = "Stop"
 
 # ---------- CONFIGURAÇÃO — ajuste aqui ----------
-$PastaMonitorada = "W:\COMPRAS\ORDENS DE COMPRA\Processados"
+$Fontes = @(
+    @{
+        # Pasta principal: FOB e CIF, os dois são importados.
+        Pasta     = "W:\COMPRAS\ORDENS DE COMPRA\Processados"
+        DataCorte = Get-Date "2026-08-26"
+        SoCif     = $false
+    },
+    @{
+        # Pasta de embalagens/insumos agrícolas: só os CIF (sem "FOB" no
+        # nome) são importados — arquivos com "FOB" ficam parados aqui,
+        # ninguém mexe neles.
+        Pasta     = "W:\COMPRAS\ORDENS DE COMPRA EMBALAGENS INSUMOS AGÍCOLAS"
+        DataCorte = Get-Date "2026-09-18"
+        SoCif     = $true
+    }
+)
 
-# Só processa arquivos modificados a partir desta data — evita reimportar de
-# uma vez todo o histórico antigo que já está na pasta Processados. Ajuste
-# pra data de hoje a cada nova instalação (não precisa mexer depois disso).
-$DataCorte = Get-Date "2026-08-26"
+# Log central (fica na pasta principal, compartilhado entre as fontes).
+$LogFile = Join-Path $Fontes[0].Pasta "importacao_rotas_log.txt"
 # --------------------------------------------------
 
 $SUPABASE_URL = "https://jvfyqvefznkpcvjaerta.supabase.co"
@@ -43,16 +61,6 @@ $SUPABASE_KEY = "sb_publishable_4fZ0DlFJq1ec5xTXurwGSQ_Ke3JELGZ"
 # Nome real no Supabase é "rapid-service" (o campo de nome não pegou
 # "extract-documento" ao publicar pela primeira vez).
 $EXTRACT_URL = "$SUPABASE_URL/functions/v1/rapid-service"
-
-$PastaRoteirizados = Join-Path $PastaMonitorada "Roteirizados"
-$PastaCIF = Join-Path $PastaMonitorada "Roteirizados-CIF"
-$PastaDuplicados = Join-Path $PastaMonitorada "Roteirizados-Duplicados"
-$PastaErros = Join-Path $PastaMonitorada "Roteirizados-Erros"
-$LogFile = Join-Path $PastaMonitorada "importacao_rotas_log.txt"
-
-foreach ($p in @($PastaRoteirizados, $PastaCIF, $PastaDuplicados, $PastaErros)) {
-    if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null }
-}
 
 function Write-Log($mensagem) {
     $linha = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $mensagem"
@@ -168,104 +176,134 @@ function Upload-Arquivo($caminhoArquivo, $nomeDestino, $contentType) {
     return "$SUPABASE_URL/storage/v1/object/public/rl_pedidos/$nomeDestino"
 }
 
-# ---------- processa os arquivos novos ----------
-# Nota: -Include só funciona corretamente com -Path terminando em "\*"
-# (sem isso, o PowerShell silenciosamente retorna 0 arquivos mesmo
-# havendo arquivos que baterim com o filtro).
-$arquivos = Get-ChildItem -Path (Join-Path $PastaMonitorada "*") -Include *.pdf, *.jpg, *.jpeg, *.png -File |
-    Sort-Object FullName -Unique |
-    Where-Object { $_.LastWriteTime -ge $DataCorte }
+# ---------- processa uma fonte (pasta) ----------
+function Processar-Fonte($fonte) {
+    $pastaMonitorada = $fonte.Pasta
+    if (-not (Test-Path $pastaMonitorada)) {
+        Write-Log "AVISO: pasta não encontrada, pulando: $pastaMonitorada"
+        return
+    }
 
-if ($arquivos.Count -eq 0) {
-    Write-Log "Nenhum arquivo novo encontrado."
-    exit 0
-}
+    $pastaRoteirizados = Join-Path $pastaMonitorada "Roteirizados"
+    $pastaCif = Join-Path $pastaMonitorada "Roteirizados-CIF"
+    $pastaDuplicados = Join-Path $pastaMonitorada "Roteirizados-Duplicados"
+    $pastaErros = Join-Path $pastaMonitorada "Roteirizados-Erros"
 
-foreach ($arquivo in $arquivos) {
-    Write-Log "Processando: $($arquivo.Name)"
-    try {
-        $extensao = $arquivo.Extension.TrimStart(".")
-        $mediaType = MediaTypePorExtensao $extensao
+    $pastasNecessarias = if ($fonte.SoCif) { @($pastaCif, $pastaDuplicados, $pastaErros) } else { @($pastaRoteirizados, $pastaCif, $pastaDuplicados, $pastaErros) }
+    foreach ($p in $pastasNecessarias) {
+        if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null }
+    }
 
-        $bytes = [System.IO.File]::ReadAllBytes($arquivo.FullName)
-        $base64 = [System.Convert]::ToBase64String($bytes)
-        $payload = @{ tipo = "pedido"; file_base64 = $base64; media_type = $mediaType } | ConvertTo-Json
+    # Nota: -Include só funciona corretamente com -Path terminando em "\*"
+    # (sem isso, o PowerShell silenciosamente retorna 0 arquivos mesmo
+    # havendo arquivos que baterim com o filtro).
+    $arquivos = Get-ChildItem -Path (Join-Path $pastaMonitorada "*") -Include *.pdf, *.jpg, *.jpeg, *.png -File |
+        Sort-Object FullName -Unique |
+        Where-Object { $_.LastWriteTime -ge $fonte.DataCorte }
 
-        # Tenta até 3 vezes — erros passageiros do servidor não devem jogar
-        # o arquivo pra pasta de Erros de primeira.
-        $resposta = $null
-        $ultimoErro = $null
-        for ($tentativa = 1; $tentativa -le 3; $tentativa++) {
-            try {
-                $resposta = Invoke-RestMethod -Uri $EXTRACT_URL -Headers $HeadersJson -Method Post -Body $payload -TimeoutSec 120
-                $ultimoErro = $null
-                break
-            } catch {
-                $ultimoErro = $_
-                Write-Log "  Tentativa $tentativa falhou ($(Detalhe-Erro $_))$(if ($tentativa -lt 3) { ', tentando de novo em 10s...' })"
-                if ($tentativa -lt 3) { Start-Sleep -Seconds 10 }
-            }
-        }
-        if ($ultimoErro) { throw $ultimoErro }
-        if ($resposta.error) { throw "Extração falhou: $($resposta.error)" }
-        $dados = $resposta.data
+    if ($arquivos.Count -eq 0) {
+        Write-Log "Nenhum arquivo novo encontrado em '$pastaMonitorada'."
+        return
+    }
 
-        # Frete CIF x FOB é decidido pelo NOME DO ARQUIVO (mesmo padrão do robô
-        # do Avanço para Contratos, que decide spot x contrato do mesmo jeito).
+    foreach ($arquivo in $arquivos) {
+        # Frete CIF x FOB é decidido pelo NOME DO ARQUIVO (mesmo padrão do
+        # robô do Avanço para Contratos, que decide spot x contrato do mesmo
+        # jeito).
         $ehFob = $arquivo.Name -imatch "FOB"
 
-        # Pedidos que o fornecedor despacha pra uma transportadora (o motorista
-        # retira lá, não no próprio fornecedor) também são identificados pelo
-        # nome do arquivo — vão pra uma tela separada, já que o motorista passa
-        # na transportadora todo dia sem saber de antemão o que já chegou.
-        $retirarTransportadora = $arquivo.Name -imatch "transportadora"
-
-        if (Test-PedidoJaImportado $dados.numero_pedido) {
-            Write-Log "  Pedido Nº $($dados.numero_pedido) já importado antes — pulando (movido para Roteirizados-Duplicados)."
-            Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaDuplicados $arquivo.Name) -Force
+        if ($fonte.SoCif -and $ehFob) {
+            Write-Log "Pulando '$($arquivo.Name)' (tem FOB no nome - essa pasta so importa CIF; arquivo nao foi movido)."
             continue
         }
 
-        $empresa = Get-OrCreate-Empresa $dados.empresa_compradora_nome $dados.empresa_compradora_cnpj
-        $compradorNome = Get-OrCreate-Comprador $dados.solicitante_nome
+        Write-Log "Processando: $($arquivo.Name)"
+        try {
+            $extensao = $arquivo.Extension.TrimStart(".")
+            $mediaType = MediaTypePorExtensao $extensao
 
-        $nomeArquivoStorage = "$([guid]::NewGuid().ToString()).$extensao"
-        $arquivoUrl = Upload-Arquivo $arquivo.FullName $nomeArquivoStorage $mediaType
+            $bytes = [System.IO.File]::ReadAllBytes($arquivo.FullName)
+            $base64 = [System.Convert]::ToBase64String($bytes)
+            $payload = @{ tipo = "pedido"; file_base64 = $base64; media_type = $mediaType } | ConvertTo-Json
 
-        $pedido = @{
-            comprador_nome  = $compradorNome
-            empresa_id      = if ($empresa) { $empresa.id } else { $null }
-            empresa_nome    = if ($empresa) { $empresa.nome } else { $dados.empresa_compradora_nome }
-            # Prefere o CNPJ REALMENTE lido no pedido — a Wehrmann tem mais de
-            # uma filial (CNPJs diferentes) sob o mesmo nome no cadastro; usar
-            # o CNPJ genérico do cadastro em vez do lido causava divergência
-            # falsa na conferência com a nota (que vem da filial certa).
-            empresa_cnpj    = if ($dados.empresa_compradora_cnpj) { $dados.empresa_compradora_cnpj } elseif ($empresa) { $empresa.cnpj } else { $null }
-            fornecedor_nome = if ($dados.fornecedor_nome) { $dados.fornecedor_nome } else { $null }
-            condicao_pagamento_codigo = if ($dados.condicao_pagamento_codigo) { $dados.condicao_pagamento_codigo } else { $null }
-            numero_pedido   = if ($dados.numero_pedido) { $dados.numero_pedido } else { $null }
-            local_retirada  = if ($dados.local_retirada) { $dados.local_retirada } else { $null }
-            arquivo_url     = $arquivoUrl
-            arquivo_nome    = $arquivo.Name
-            valor_total     = if ($null -ne $dados.valor_total) { $dados.valor_total } else { $null }
-            itens           = if ($dados.itens) { $dados.itens } else { $null }
-            urgente         = $false
-            retirar_transportadora = $retirarTransportadora
-            frete_fob       = $ehFob
-            status          = "pendente"
-        } | ConvertTo-Json -Depth 6
-        Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_pedidos" $HeadersJson $pedido | Out-Null
+            # Tenta até 3 vezes — erros passageiros do servidor não devem
+            # jogar o arquivo pra pasta de Erros de primeira.
+            $resposta = $null
+            $ultimoErro = $null
+            for ($tentativa = 1; $tentativa -le 3; $tentativa++) {
+                try {
+                    $resposta = Invoke-RestMethod -Uri $EXTRACT_URL -Headers $HeadersJson -Method Post -Body $payload -TimeoutSec 120
+                    $ultimoErro = $null
+                    break
+                } catch {
+                    $ultimoErro = $_
+                    Write-Log "  Tentativa $tentativa falhou ($(Detalhe-Erro $_))$(if ($tentativa -lt 3) { ', tentando de novo em 10s...' })"
+                    if ($tentativa -lt 3) { Start-Sleep -Seconds 10 }
+                }
+            }
+            if ($ultimoErro) { throw $ultimoErro }
+            if ($resposta.error) { throw "Extração falhou: $($resposta.error)" }
+            $dados = $resposta.data
 
-        $pastaDestino = if ($ehFob) { $PastaRoteirizados } else { $PastaCIF }
-        Write-Log "  OK ($(if ($ehFob) { 'FOB' } else { 'CIF' })$(if ($retirarTransportadora) { ', transportadora' })): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
-        Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDestino $arquivo.Name) -Force
-    }
-    catch {
-        Write-Log "  ERRO: $(Detalhe-Erro $_)"
-        if (Test-Path $arquivo.FullName) {
-            Move-Item -Path $arquivo.FullName -Destination (Join-Path $PastaErros $arquivo.Name) -Force -ErrorAction SilentlyContinue
+            # Pedidos que o fornecedor despacha pra uma transportadora (o
+            # motorista retira lá, não no próprio fornecedor) também são
+            # identificados pelo nome do arquivo — vão pra uma tela
+            # separada, já que o motorista passa na transportadora todo dia
+            # sem saber de antemão o que já chegou.
+            $retirarTransportadora = $arquivo.Name -imatch "transportadora"
+
+            if (Test-PedidoJaImportado $dados.numero_pedido) {
+                Write-Log "  Pedido Nº $($dados.numero_pedido) já importado antes — pulando (movido para Roteirizados-Duplicados)."
+                Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDuplicados $arquivo.Name) -Force
+                continue
+            }
+
+            $empresa = Get-OrCreate-Empresa $dados.empresa_compradora_nome $dados.empresa_compradora_cnpj
+            $compradorNome = Get-OrCreate-Comprador $dados.solicitante_nome
+
+            $nomeArquivoStorage = "$([guid]::NewGuid().ToString()).$extensao"
+            $arquivoUrl = Upload-Arquivo $arquivo.FullName $nomeArquivoStorage $mediaType
+
+            $pedido = @{
+                comprador_nome  = $compradorNome
+                empresa_id      = if ($empresa) { $empresa.id } else { $null }
+                empresa_nome    = if ($empresa) { $empresa.nome } else { $dados.empresa_compradora_nome }
+                # Prefere o CNPJ REALMENTE lido no pedido — a Wehrmann tem
+                # mais de uma filial (CNPJs diferentes) sob o mesmo nome no
+                # cadastro; usar o CNPJ genérico do cadastro em vez do lido
+                # causava divergência falsa na conferência com a nota (que
+                # vem da filial certa).
+                empresa_cnpj    = if ($dados.empresa_compradora_cnpj) { $dados.empresa_compradora_cnpj } elseif ($empresa) { $empresa.cnpj } else { $null }
+                fornecedor_nome = if ($dados.fornecedor_nome) { $dados.fornecedor_nome } else { $null }
+                condicao_pagamento_codigo = if ($dados.condicao_pagamento_codigo) { $dados.condicao_pagamento_codigo } else { $null }
+                numero_pedido   = if ($dados.numero_pedido) { $dados.numero_pedido } else { $null }
+                local_retirada  = if ($dados.local_retirada) { $dados.local_retirada } else { $null }
+                arquivo_url     = $arquivoUrl
+                arquivo_nome    = $arquivo.Name
+                valor_total     = if ($null -ne $dados.valor_total) { $dados.valor_total } else { $null }
+                itens           = if ($dados.itens) { $dados.itens } else { $null }
+                urgente         = $false
+                retirar_transportadora = $retirarTransportadora
+                frete_fob       = $ehFob
+                status          = "pendente"
+            } | ConvertTo-Json -Depth 6
+            Invoke-JsonPost "$SUPABASE_URL/rest/v1/rl_pedidos" $HeadersJson $pedido | Out-Null
+
+            $pastaDestino = if ($ehFob) { $pastaRoteirizados } else { $pastaCif }
+            Write-Log "  OK ($(if ($ehFob) { 'FOB' } else { 'CIF' })$(if ($retirarTransportadora) { ', transportadora' })): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
+            Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDestino $arquivo.Name) -Force
+        }
+        catch {
+            Write-Log "  ERRO: $(Detalhe-Erro $_)"
+            if (Test-Path $arquivo.FullName) {
+                Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaErros $arquivo.Name) -Force -ErrorAction SilentlyContinue
+            }
         }
     }
+}
+
+foreach ($fonte in $Fontes) {
+    Processar-Fonte $fonte
 }
 
 Write-Log "Execução concluída."
