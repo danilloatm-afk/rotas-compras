@@ -1358,6 +1358,17 @@ function abrirModalConcluir(parada, notaPreLida) {
   document.getElementById("modal-feedback").textContent = "";
   document.getElementById("conferencia-resultado").classList.add("hidden");
 
+  // Link pro anexo original do pedido de compra — útil pra conferir o
+  // documento fonte sem precisar sair do modal (ex: dúvida sobre um item).
+  const arquivoPedido = (paradaEmEdicao.rl_pedidos || {}).arquivo_url;
+  const blocoPedidoAnexo = document.getElementById("bloco-pedido-anexo");
+  if (arquivoPedido) {
+    document.getElementById("link-pedido-anexo").href = arquivoPedido;
+    blocoPedidoAnexo.classList.remove("hidden");
+  } else {
+    blocoPedidoAnexo.classList.add("hidden");
+  }
+
   const inputNota = document.getElementById("nota-arquivo");
   if (notaPreLida) {
     document.getElementById("nota-valor").value = notaPreLida.valor_total ?? "";
