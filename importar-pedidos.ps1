@@ -26,11 +26,27 @@
 #   Roteirizados-Duplicados\ -> pulado porque o número do pedido já tinha sido importado
 #   Roteirizados-Erros\      -> deu algum problema (confira o log)
 #
+# RODANDO EM MAIS DE UM COMPUTADOR (redundância, 2026-09-21): este script
+# pode ser instalado em várias máquinas ao mesmo tempo, todas apontando pra
+# mesma pasta de rede — se uma estiver desligada, a outra continua
+# importando. Pra isso não duplicar nem conflitar quando as duas rodam ao
+# mesmo tempo, cada arquivo é "reivindicado" primeiro (movido pra uma
+# subpasta "Roteirizados-Processando" — um Move-Item é uma operação atômica
+# do Windows, então só UMA máquina consegue mover cada arquivo; a outra
+# recebe erro e simplesmente pula esse arquivo, sem pisar no trabalho da
+# primeira). Cada máquina também grava seu PRÓPRIO arquivo de log
+# (identificado pelo nome do computador), pra não haver conflito de escrita
+# nem confusão sobre qual máquina processou o quê.
+#
+# Pra instalar numa segunda máquina: copie esta pasta (rotas-compras-web)
+# pra ela, garanta que ela também enxerga as mesmas pastas de rede em
+# $Fontes abaixo, e crie a mesma Tarefa Agendada (Agendador de Tarefas do
+# Windows, repetir a cada 15 min) apontando pra este arquivo nessa máquina.
+# Não precisa mexer em nada do código.
+#
 # CONFIGURAÇÃO: ajuste os caminhos/datas de corte em $Fontes abaixo se
 # mudarem. Ao adicionar uma pasta nova, use a data de HOJE como DataCorte
 # (evita importar de uma vez todo o histórico antigo já acumulado nela).
-# Depois, agende esse script no Agendador de Tarefas do Windows pra rodar a
-# cada 5-15 minutos.
 
 $ErrorActionPreference = "Stop"
 
@@ -55,8 +71,10 @@ $Fontes = @(
     }
 )
 
-# Log central (fica na pasta principal, compartilhado entre as fontes).
-$LogFile = Join-Path $Fontes[0].Pasta "importacao_rotas_log.txt"
+# Log por máquina (fica na pasta principal, mas cada computador grava o
+# seu — ver nota de redundância acima) — assim dá pra rodar em mais de um
+# computador sem os logs colidirem ou ficarem misturados.
+$LogFile = Join-Path $Fontes[0].Pasta "importacao_rotas_log_$($env:COMPUTERNAME).txt"
 # --------------------------------------------------
 
 $SUPABASE_URL = "https://jvfyqvefznkpcvjaerta.supabase.co"
@@ -67,7 +85,17 @@ $EXTRACT_URL = "$SUPABASE_URL/functions/v1/rapid-service"
 
 function Write-Log($mensagem) {
     $linha = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $mensagem"
-    Add-Content -Path $LogFile -Value $linha -Encoding utf8
+    # Pequeno retry — mesmo com log por máquina, um antivírus ou outro
+    # processo local pode segurar o arquivo por uma fração de segundo.
+    for ($tentativa = 1; $tentativa -le 3; $tentativa++) {
+        try {
+            Add-Content -Path $LogFile -Value $linha -Encoding utf8 -ErrorAction Stop
+            break
+        } catch {
+            if ($tentativa -eq 3) { Write-Output "(falha ao gravar log) $linha" }
+            else { Start-Sleep -Milliseconds 300 }
+        }
+    }
     Write-Output $linha
 }
 
@@ -191,8 +219,10 @@ function Processar-Fonte($fonte) {
     $pastaCif = Join-Path $pastaMonitorada "Roteirizados-CIF"
     $pastaDuplicados = Join-Path $pastaMonitorada "Roteirizados-Duplicados"
     $pastaErros = Join-Path $pastaMonitorada "Roteirizados-Erros"
+    # Área de "reivindicação" — ver nota de redundância no topo do arquivo.
+    $pastaProcessando = Join-Path $pastaMonitorada "Roteirizados-Processando"
 
-    $pastasNecessarias = if ($fonte.SoCif) { @($pastaCif, $pastaDuplicados, $pastaErros) } else { @($pastaRoteirizados, $pastaCif, $pastaDuplicados, $pastaErros) }
+    $pastasNecessarias = if ($fonte.SoCif) { @($pastaCif, $pastaDuplicados, $pastaErros, $pastaProcessando) } else { @($pastaRoteirizados, $pastaCif, $pastaDuplicados, $pastaErros, $pastaProcessando) }
     foreach ($p in $pastasNecessarias) {
         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null }
     }
@@ -209,16 +239,30 @@ function Processar-Fonte($fonte) {
         return
     }
 
-    foreach ($arquivo in $arquivos) {
+    foreach ($arquivoOriginal in $arquivos) {
         # Frete CIF x FOB é decidido pelo NOME DO ARQUIVO (mesmo padrão do
         # robô do Avanço para Contratos, que decide spot x contrato do mesmo
         # jeito).
-        $ehFob = $arquivo.Name -imatch "FOB"
+        $ehFob = $arquivoOriginal.Name -imatch "FOB"
 
         if ($fonte.SoCif -and $ehFob) {
-            Write-Log "Pulando '$($arquivo.Name)' (tem FOB no nome - essa pasta so importa CIF; arquivo nao foi movido)."
+            Write-Log "Pulando '$($arquivoOriginal.Name)' (tem FOB no nome - essa pasta so importa CIF; arquivo nao foi movido)."
             continue
         }
+
+        # Reivindica o arquivo movendo pra pasta "Processando" ANTES de
+        # gastar tempo/dinheiro com IA — um Move-Item é atômico no Windows,
+        # então se outra máquina já pegou esse arquivo no mesmo instante,
+        # este Move-Item falha aqui e a gente simplesmente pula ele (sem
+        # log de erro — é o funcionamento normal esperado da redundância,
+        # não uma falha).
+        $caminhoReivindicado = Join-Path $pastaProcessando $arquivoOriginal.Name
+        try {
+            Move-Item -Path $arquivoOriginal.FullName -Destination $caminhoReivindicado -ErrorAction Stop
+        } catch {
+            continue
+        }
+        $arquivo = Get-Item $caminhoReivindicado
 
         Write-Log "Processando: $($arquivo.Name)"
         try {
@@ -255,6 +299,9 @@ function Processar-Fonte($fonte) {
             # sem saber de antemão o que já chegou.
             $retirarTransportadora = $arquivo.Name -imatch "transportadora"
 
+            # Segunda camada de segurança contra duplicata (além da
+            # reivindicação por Move-Item acima) — cobre o caso raro de o
+            # MESMO pedido vir em dois arquivos/pastas diferentes.
             if (Test-PedidoJaImportado $dados.numero_pedido) {
                 Write-Log "  Pedido Nº $($dados.numero_pedido) já importado antes — pulando (movido para Roteirizados-Duplicados)."
                 Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDuplicados $arquivo.Name) -Force
