@@ -1625,8 +1625,24 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     restantes[idxNota].usado = true;
   });
 
+  // 4ª tentativa: sobrou exatamente 1 item sem casar de cada lado (pedido e
+  // nota têm a mesma quantidade de itens, os outros N-1 já bateram) — só
+  // pode ser o mesmo item descrito diferente (nome mudou, embalagem mudou,
+  // preço divergiu mais que a tolerância aceita nas tentativas acima). Como
+  // não sobra mais nenhum outro candidato pra confundir, casa por
+  // eliminação e deixa a comparação de qtd/valor apontar a divergência real
+  // — em vez de aparecer como "não encontrado" de um lado e "item não
+  // estava no pedido" do outro, o que esconde que é o mesmo item.
+  const semMatchFinal = pedidoComMatch.filter((pc) => !pc.match);
+  const notaSemUsoFinal = restantes.filter((n) => !n.usado);
+  if (semMatchFinal.length === 1 && notaSemUsoFinal.length === 1) {
+    semMatchFinal[0].match = notaSemUsoFinal[0];
+    semMatchFinal[0].casadoPorEliminacao = true;
+    notaSemUsoFinal[0].usado = true;
+  }
+
   let divergente = false;
-  const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal }) => {
+  const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal, casadoPorEliminacao }) => {
     // Casado só pelo valor total (embalagem diferente) — quantidade e valor
     // unitário não vão bater mesmo, e tudo bem; o que importa é o total.
     if (matchPorTotal) {
@@ -1661,7 +1677,9 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
       divergente: linhaDivergente,
       obs: embalagem
         ? `nota: ${embalagem.quantidade} ${embalagem.unidade} (1 ${embalagem.unidade} = ${embalagem.fator} un)`
-        : undefined,
+        : casadoPorEliminacao
+          ? `nota: "${match.produto_nome}" — nome/embalagem diferente, casado por eliminação (único item que sobrou dos dois lados)`
+          : undefined,
     };
   });
 
