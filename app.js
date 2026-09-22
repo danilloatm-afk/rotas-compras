@@ -3096,6 +3096,15 @@ function renderAvisosLiberadosPendentesConferencia() {
           <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="🔎 Buscar por número, fornecedor ou produto...">
           <div class="resultado-busca-pedido" data-aviso-id="${a.id}"></div>
           <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>
+          <details class="anexar-pedido-novo">
+            <summary class="link-btn">📎 Não achou o pedido? Anexe o arquivo (foto ou PDF) dele aqui</summary>
+            <label>
+              Arquivo do pedido de compra
+              <input type="file" class="anexo-pedido-novo" data-aviso-id="${a.id}" accept="image/*,application/pdf" capture="environment">
+            </label>
+            <button type="button" class="btn secondary small" data-ler-pedido-novo="${a.id}">🤖 Ler pedido com IA e vincular</button>
+            <p class="feedback" data-feedback-pedido-novo="${a.id}"></p>
+          </details>
           <button type="button" class="link-btn" data-dispensar-sem-pedido="${a.id}">Não tem pedido pra conferir aqui</button>
         </div>`;
       }
@@ -3188,6 +3197,114 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
       return;
     }
     await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+    return;
+  }
+
+  const btnLerPedidoNovo = e.target.closest("button[data-ler-pedido-novo]");
+  if (btnLerPedidoNovo) {
+    const avisoId = btnLerPedidoNovo.dataset.lerPedidoNovo;
+    const inputArquivo = document.querySelector(`.anexo-pedido-novo[data-aviso-id="${avisoId}"]`);
+    const feedback = document.querySelector(`[data-feedback-pedido-novo="${avisoId}"]`);
+    const file = inputArquivo && inputArquivo.files[0];
+    if (!file) {
+      feedback.textContent = "Anexe o arquivo do pedido primeiro.";
+      feedback.className = "feedback error";
+      return;
+    }
+    const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
+    if (!aviso) return;
+
+    btnLerPedidoNovo.disabled = true;
+    feedback.textContent = "Lendo pedido com IA (pode levar alguns segundos)...";
+    feedback.className = "feedback";
+    try {
+      const extraido = await lerComIA(file, "pedido");
+
+      if (extraido.numero_pedido) {
+        const { data: existente } = await comTimeout(
+          db.from("rl_pedidos").select("id").eq("numero_pedido", extraido.numero_pedido).limit(1)
+        );
+        if (existente && existente.length) {
+          throw new Error(
+            `Pedido Nº ${extraido.numero_pedido} já existe no sistema — busque por ele no campo de busca acima em vez de anexar de novo.`
+          );
+        }
+      }
+
+      // Acha a empresa pelo CNPJ/nome lido no documento; se a IA não achar,
+      // cai pra empresa já registrada no próprio aviso (a portaria já
+      // informou qual é na hora de avisar a chegada).
+      const cnpjLido = apenasDigitos(extraido.empresa_compradora_cnpj);
+      let empresa = cnpjLido ? empresasCache.find((e) => apenasDigitos(e.cnpj) === cnpjLido) : null;
+      if (!empresa && extraido.empresa_compradora_nome) {
+        const nomeAlvo = extraido.empresa_compradora_nome.trim().toLowerCase();
+        empresa = empresasCache.find((e) => e.nome.trim().toLowerCase() === nomeAlvo);
+      }
+      if (!empresa && aviso.empresa_nome) {
+        empresa = empresasCache.find((e) => e.nome === aviso.empresa_nome);
+      }
+
+      // Acha ou cria o comprador pelo nome lido — mesmo padrão do robô/import
+      // automático, sem pedir pra digitar de novo um nome que já veio no
+      // próprio documento.
+      const nomeSolicitante = (extraido.solicitante_nome || "").trim();
+      let compradorNome = "Importação automática";
+      if (nomeSolicitante) {
+        const existenteComprador = compradoresCache.find((c) => c.nome.trim().toLowerCase() === nomeSolicitante.toLowerCase());
+        if (existenteComprador) {
+          compradorNome = existenteComprador.nome;
+        } else {
+          const { data: novoComprador, error: errComprador } = await db
+            .from("rl_compradores")
+            .insert({ nome: nomeSolicitante })
+            .select()
+            .single();
+          if (!errComprador && novoComprador) {
+            compradoresCache.push(novoComprador);
+            compradorNome = novoComprador.nome;
+          }
+        }
+      }
+
+      const { url } = await uploadArquivo(file, "rl_pedidos");
+
+      const { data: novoPedido, error: errPedido } = await db
+        .from("rl_pedidos")
+        .insert({
+          comprador_nome: compradorNome,
+          empresa_id: empresa ? empresa.id : null,
+          empresa_nome: empresa ? empresa.nome : extraido.empresa_compradora_nome || aviso.empresa_nome || null,
+          empresa_cnpj: extraido.empresa_compradora_cnpj || (empresa ? empresa.cnpj : null),
+          numero_pedido: extraido.numero_pedido || null,
+          local_retirada: extraido.local_retirada || null,
+          arquivo_url: url,
+          arquivo_nome: file.name,
+          valor_total: extraido.valor_total != null ? extraido.valor_total : null,
+          itens: Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null,
+          fornecedor_nome: extraido.fornecedor_nome || aviso.fornecedor_nome || null,
+          condicao_pagamento_codigo: extraido.condicao_pagamento_codigo || null,
+          urgente: false,
+          retirar_transportadora: false,
+          // Chegou por aqui (conferência CIF, aviso da portaria) — por
+          // definição é entrega do fornecedor, não precisa de coleta.
+          frete_fob: false,
+          status: "pendente",
+        })
+        .select()
+        .single();
+      if (errPedido) throw errPedido;
+
+      const { error: errAviso } = await db.from("rl_avisos_portaria").update({ pedido_ids: [novoPedido.id] }).eq("id", avisoId);
+      if (errAviso) throw errAviso;
+
+      mostrarAviso(`Pedido Nº ${novoPedido.numero_pedido || "sem número"} cadastrado e vinculado a este aviso.`);
+      await iniciarConferenciaCif([novoPedido], notaPreLidaDoAviso(aviso));
+    } catch (err) {
+      feedback.textContent = "Erro: " + err.message;
+      feedback.className = "feedback error";
+    } finally {
+      btnLerPedidoNovo.disabled = false;
+    }
     return;
   }
 
