@@ -142,9 +142,25 @@ const SCHEMA_NOTA = {
     valor_total: {
       type: "number",
       description:
-        "Valor total da nota — campo 'VALOR TOTAL DA NOTA'/'VALOR TOTAL DA NF-e' numa nota de produto (DANFE), ou 'VALOR TOTAL " +
-        "DA NFS-e'/'Valor da Operação/Serviço' numa nota de SERVIÇO (NFS-e/DANFSe). Apenas números, sem 'R$' e sem separador " +
-        "de milhar (ex: 45390.00). Omita se não conseguir ler com confiança.",
+        "Só preencha este campo numa nota de SERVIÇO (NFS-e/DANFSe): 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço'. " +
+        "Numa nota de PRODUTO (DANFE), NÃO preencha este campo — use valor_produtos e desconto em vez dele (o total líquido " +
+        "é calculado depois, não pela IA). Apenas números, sem 'R$' e sem separador de milhar. Omita se não conseguir ler " +
+        "com confiança.",
+    },
+    valor_produtos: {
+      type: "number",
+      description:
+        "Nota de PRODUTO (DANFE) apenas: valor do campo 'VALOR TOTAL DOS PRODUTOS' (seção 'Cálculo do Imposto') — cópia " +
+        "literal do número impresso, sem fazer conta. CUIDADO: não confunda com 'VALOR TOTAL DA NOTA', um campo PARECIDO " +
+        "mas DIFERENTE que fica ao lado (esse aqui é o valor bruto, sem descontar nada — o valor líquido é calculado " +
+        "depois, a partir deste campo menos o desconto). Omita numa nota de SERVIÇO.",
+    },
+    desconto: {
+      type: "number",
+      description:
+        "Nota de PRODUTO (DANFE) apenas: valor do campo 'DESCONTO' (seção 'Cálculo do Imposto', perto de 'VALOR TOTAL DOS " +
+        "PRODUTOS') — cópia literal do número impresso, sem fazer conta. Omita se o campo não existir ou estiver zerado/em " +
+        "branco.",
     },
     destinatario_nome: {
       type: "string",
@@ -255,6 +271,13 @@ const PROMPT_NOTA =
   "TOMADOR/ADQUIRENTE (quem contratou o serviço, equivale ao destinatário); não tem tabela de itens — em vez disso tem " +
   "um campo 'Descrição do Serviço' (texto corrido) e um 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço'. Nesse caso, " +
   "monte um único item em itens[] usando essa descrição como produto_nome, quantidade 1 e valor_total = valor total da nota.\n\n" +
+  "VALOR TOTAL — cuidado especial aqui, é a maior fonte de erro: numa nota de PRODUTO (DANFE) NÃO preencha o campo " +
+  "valor_total — em vez disso extraia valor_produtos ('VALOR TOTAL DOS PRODUTOS') e desconto ('DESCONTO'), ambos da seção " +
+  "'Cálculo do Imposto', como cópia literal dos números impressos (o valor líquido final é calculado depois, não por " +
+  "você). Esses dois campos ficam um do lado do outro na nota e são fáceis de confundir com 'VALOR TOTAL DA NOTA' (que é " +
+  "o valor DEPOIS de descontado, sempre MENOR que 'VALOR TOTAL DOS PRODUTOS' quando há desconto) — não copie o valor de " +
+  "'VALOR TOTAL DA NOTA' pra nenhum desses dois campos. Numa nota de SERVIÇO (sem essa seção), aí sim preencha valor_total " +
+  "diretamente com 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço', e omita valor_produtos/desconto.\n\n" +
   "Em qualquer um dos dois casos: o CNPJ e nome de quem RECEBE (destinatário/tomador) são os mais importantes de extrair " +
   "corretamente, não confunda com o de quem emitiu/prestou. A foto pode ter qualidade ruim, reflexo ou estar levemente " +
   "torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em vez de arriscar um valor errado.\n\n" +
@@ -369,6 +392,28 @@ Deno.serve(async (req: Request) => {
       if (mercadorias != null) {
         extraido.valor_total = mercadorias + (extraido.frete || 0) + (extraido.despesas || 0) - (extraido.descontos || 0);
       }
+    }
+
+    // Mesma lógica pro lado da nota: "VALOR TOTAL DOS PRODUTOS" (bruto) e
+    // "VALOR TOTAL DA NOTA" (líquido, já com desconto) ficam um do lado do
+    // outro na DANFE e a IA às vezes copia o valor errado pro campo errado
+    // (caso real: pedido S51373, nota leu R$3.989,76 — o bruto — quando o
+    // valor de fato cobrado, com desconto de R$917,64, era R$3.072,12).
+    // Calculando aqui em vez de confiar na leitura direta, o resultado é
+    // determinístico: sempre produtos - desconto quando esses campos vêm.
+    if (tipo === "nota") {
+      const somaItensNota = Array.isArray(extraido.itens)
+        ? extraido.itens.reduce((soma: number, item: { valor_total?: number; quantidade?: number; valor_unitario?: number }) => {
+            const linha = item.valor_total || (item.quantidade != null && item.valor_unitario != null ? item.quantidade * item.valor_unitario : 0);
+            return soma + (linha || 0);
+          }, 0)
+        : null;
+      const produtos = extraido.valor_produtos || somaItensNota;
+      if (produtos != null) {
+        extraido.valor_total = produtos - (extraido.desconto || 0);
+      }
+      // Sem valor_produtos nem itens (ex: nota de serviço) — mantém o
+      // valor_total que a IA já leu direto do documento.
     }
 
     // "usage" vai junto só pra dar pra acompanhar o efeito do cache de prompt
