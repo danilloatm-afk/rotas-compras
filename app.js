@@ -298,6 +298,14 @@ async function loadAlmoxarifes() {
 // planilha "cond pag.xlsx" do ERP) — reaproveitada aqui só de leitura, sem
 // duplicar o cadastro.
 let condicoesPagamentoCache = new Map();
+// A tabela sempre guarda o código com 3 dígitos (ex: "035"), mas o pedido às
+// vezes vem sem o zero à esquerda (ex: "35", quando o ERP imprime assim no
+// documento) — sem normalizar os dois lados, a busca falhava e toda
+// condição "curta" aparecia como "não encontrada na tabela", mesmo existindo.
+function normalizarCodigoCondicao(codigo) {
+  const digitos = String(codigo ?? "").trim().replace(/^0+(?=\d)/, "");
+  return digitos;
+}
 // Tenta algumas vezes com espera entre elas — sem isso, uma conexão ruim no
 // exato momento em que o app abre (comum pro motorista no campo) fazia essa
 // tabela ficar vazia pro resto da sessão inteira, mesmo a internet
@@ -307,7 +315,7 @@ async function loadCondicoesPagamento(tentativas = 3) {
   for (let i = 0; i < tentativas; i++) {
     const { data, error } = await comTimeout(db.from("cs_condicoes_pagamento").select("codigo, dias"));
     if (!error && data && data.length) {
-      condicoesPagamentoCache = new Map(data.map((c) => [c.codigo, c.dias]));
+      condicoesPagamentoCache = new Map(data.map((c) => [normalizarCodigoCondicao(c.codigo), c.dias]));
       return;
     }
     if (i < tentativas - 1) await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -1848,7 +1856,7 @@ function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
   // abriu), tenta buscar de novo em segundo plano — assim a PRÓXIMA
   // conferência já vem certa, sem precisar recarregar a página inteira.
   if (condicoesPagamentoCache.size === 0) loadCondicoesPagamento();
-  const diasEsperados = condicoesPagamentoCache.get(codigo);
+  const diasEsperados = condicoesPagamentoCache.get(normalizarCodigoCondicao(codigo));
   if (diasEsperados == null) {
     return { msgCondicao: `Condição de pagamento ${escapeHtml(codigo)} não encontrada na tabela — não é possível conferir.`, divergCondicao: false };
   }
