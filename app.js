@@ -3052,13 +3052,16 @@ async function carregarAvisosLiberadosPendentesConferencia() {
 
   let semPedidosComCandidatos = [];
   if (semPedidos.length) {
-    // Não sugere mais automaticamente (a lista de "parecidos" ficava grande
-    // e poluía o card) — o almoxarife busca e vincula manualmente. Só
-    // restringe pela empresa, o resto é filtrado ao digitar.
+    // Não sugere mais uma LISTA automática (ficava grande e poluía o card) —
+    // o almoxarife busca e vincula manualmente. Mas continua valendo dar uma
+    // dica discreta (no máximo 2 pedidos) quando o fornecedor bate — sem
+    // isso, um pedido que já está no sistema mas com nome de fornecedor um
+    // pouco diferente na nota parecia "não vinculável" à toa.
     const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
     semPedidosComCandidatos = semPedidos.map((a) => {
       const candidatos = a.empresa_nome ? (pendentesGeral || []).filter((p) => p.empresa_nome === a.empresa_nome) : pendentesGeral || [];
-      return { ...a, _candidatos: candidatos };
+      const sugestoes = a.fornecedor_nome ? candidatos.filter((p) => fornecedoresParecidos(a.fornecedor_nome, p.fornecedor_nome)).slice(0, 2) : [];
+      return { ...a, _candidatos: candidatos, _sugestoes: sugestoes };
     });
   }
 
@@ -3097,9 +3100,21 @@ function renderAvisosLiberadosPendentesConferencia() {
             _busca: normalizarProduto(`${p.numero_pedido || ""} ${p.fornecedor_nome || ""} ${resumoItens}`),
           };
         });
+        const sugestoesHtml = (a._sugestoes || [])
+          .map(
+            (p) => `
+            <div class="sugestao-pedido-aviso">
+              💡 Pode ser o pedido Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(
+              p.valor_total
+            )}
+              <button type="button" class="link-btn" data-usar-sugestao="${a.id}" data-pedido-sugerido="${p.id}">é esse, conferir</button>
+            </div>`
+          )
+          .join("");
         return `
         <div class="aviso-portaria-card aviso-sem-pedido">
           <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda.</span></div>
+          ${sugestoesHtml}
           <label class="form-label">Vincular pedido manualmente</label>
           <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="🔎 Buscar por número, fornecedor ou produto...">
           <div class="resultado-busca-pedido" data-aviso-id="${a.id}"></div>
@@ -3168,6 +3183,26 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
     .join("");
 });
 
+// Grava o vínculo aviso -> pedido(s) e já abre a conferência — usado tanto
+// pela busca manual (um ou mais pedidos marcados) quanto pelo atalho de
+// sugestão "é esse, conferir" (um só, direto).
+async function vincularPedidosEConferir(avisoId, ids) {
+  const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
+  if (!aviso) return;
+  const { error: errUpdate } = await db.from("rl_avisos_portaria").update({ pedido_ids: ids }).eq("id", avisoId);
+  if (errUpdate) {
+    mostrarAviso("Erro ao vincular pedido: " + errUpdate.message);
+    return;
+  }
+  const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", ids).eq("status", "pendente"));
+  if (error || !pedidos || !pedidos.length) {
+    mostrarAviso("Erro ao buscar o(s) pedido(s) selecionado(s).");
+    carregarAvisosLiberadosPendentesConferencia();
+    return;
+  }
+  await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+}
+
 document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-conferir-aviso-liberado]");
   if (btn) {
@@ -3192,19 +3227,13 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
       mostrarAviso("Selecione ao menos um pedido pra vincular a este aviso.");
       return;
     }
-    const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
-    const { error: errUpdate } = await db.from("rl_avisos_portaria").update({ pedido_ids: ids }).eq("id", avisoId);
-    if (errUpdate) {
-      mostrarAviso("Erro ao vincular pedido: " + errUpdate.message);
-      return;
-    }
-    const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", ids).eq("status", "pendente"));
-    if (error || !pedidos || !pedidos.length) {
-      mostrarAviso("Erro ao buscar o(s) pedido(s) selecionado(s).");
-      carregarAvisosLiberadosPendentesConferencia();
-      return;
-    }
-    await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+    await vincularPedidosEConferir(avisoId, ids);
+    return;
+  }
+
+  const btnSugestao = e.target.closest("button[data-usar-sugestao]");
+  if (btnSugestao) {
+    await vincularPedidosEConferir(btnSugestao.dataset.usarSugestao, [btnSugestao.dataset.pedidoSugerido]);
     return;
   }
 
