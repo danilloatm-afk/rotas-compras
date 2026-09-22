@@ -263,7 +263,8 @@ input, select, textarea {
   flex-direction: column;
   align-items: stretch;
 }
-.aviso-portaria-card.aviso-sem-pedido .select-pedido-aviso-liberado { width: 100%; }
+.aviso-portaria-card.aviso-sem-pedido .select-pedido-aviso-liberado,
+.aviso-portaria-card.aviso-sem-pedido .filtro-candidatos-aviso { width: 100%; }
 .aviso-portaria-enviado {
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
