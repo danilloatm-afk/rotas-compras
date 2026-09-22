@@ -3078,14 +3078,23 @@ function renderAvisosLiberadosPendentesConferencia() {
           <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda — selecione o pedido certo abaixo antes de conferir.</span></div>
           ${
             a._candidatos.length
-              ? `<select multiple size="3" class="select-pedido-aviso-liberado" data-aviso-id="${a.id}">
+              ? `<input type="text" class="filtro-candidatos-aviso" data-aviso-id="${a.id}" placeholder="🔎 Digite o fornecedor, o número do pedido ou um produto pra filtrar a lista abaixo...">
+                <select multiple size="4" class="select-pedido-aviso-liberado" data-aviso-id="${a.id}">
                   ${a._candidatos
-                    .map(
-                      (p) =>
-                        `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(
-                          p.fornecedor_nome || ""
-                        )} — ${formatarMoeda(p.valor_total)}</option>`
-                    )
+                    .map((p) => {
+                      const itensArr = Array.isArray(p.itens) ? p.itens : p.itens ? [p.itens] : [];
+                      const resumoItens = itensArr
+                        .map((it) => it.produto_nome)
+                        .filter(Boolean)
+                        .join(", ");
+                      const busca = normalizarProduto(`${p.numero_pedido || ""} ${p.fornecedor_nome || ""} ${resumoItens}`);
+                      const resumoCurto = resumoItens.length > 60 ? `${resumoItens.slice(0, 60)}…` : resumoItens;
+                      return `<option value="${p.id}" data-busca="${escapeHtml(busca)}">Nº ${escapeHtml(
+                        p.numero_pedido || "sem número"
+                      )} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
+                        resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
+                      }</option>`;
+                    })
                     .join("")}
                 </select>
                 <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>`
@@ -3109,6 +3118,21 @@ function renderAvisosLiberadosPendentesConferencia() {
     })
     .join("");
 }
+
+// Filtra as opções do <select> de candidatos conforme a pessoa digita — sem
+// isso, quando não há um fornecedor parecido pra sugerir, a lista mostra
+// TODOS os pedidos CIF pendentes (podem ser dezenas), o que fica poluído e
+// difícil de rolar procurando o certo.
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("input", (e) => {
+  const input = e.target.closest("input.filtro-candidatos-aviso");
+  if (!input) return;
+  const termo = normalizarProduto(input.value);
+  const select = document.querySelector(`select.select-pedido-aviso-liberado[data-aviso-id="${input.dataset.avisoId}"]`);
+  if (!select) return;
+  Array.from(select.options).forEach((opt) => {
+    opt.hidden = !!termo && !opt.dataset.busca.includes(termo);
+  });
+});
 
 document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-conferir-aviso-liberado]");
@@ -3173,6 +3197,42 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
     }
     carregarAvisosLiberadosPendentesConferencia();
   }
+});
+
+// Arquiva de uma vez os avisos "sem pedido vinculado" mais antigos que 7
+// dias — pedido do Danilo (2026-09-22): a tela ficou poluída de avisos de
+// uma época em que o pedido ainda não era anexado no sistema, então nunca
+// vão achar um pedido pra vincular. Em vez de dispensar um por um, arquiva
+// todos de uma vez (mesmo efeito do botão individual: pedido_ids vira []).
+document.getElementById("btn-arquivar-sem-pedido-antigos").addEventListener("click", async (e) => {
+  const btn = e.target;
+  const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const antigos = avisosLiberadosPendentesCache.filter((a) => a._candidatos && new Date(a.lido_em || a.criado_em) < seteDiasAtras);
+  if (!antigos.length) {
+    mostrarAviso("Nenhum aviso sem pedido vinculado com mais de 7 dias pra arquivar.");
+    return;
+  }
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = `Confirma arquivar ${antigos.length}? Clique de novo`;
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "🗄️ Arquivar antigos sem pedido (+7 dias)";
+    }, 4000);
+    return;
+  }
+  delete btn.dataset.confirmando;
+  btn.textContent = "🗄️ Arquivar antigos sem pedido (+7 dias)";
+  const { error } = await db
+    .from("rl_avisos_portaria")
+    .update({ pedido_ids: [] })
+    .in("id", antigos.map((a) => a.id));
+  if (error) {
+    mostrarAviso("Erro ao arquivar: " + error.message);
+    return;
+  }
+  mostrarAviso(`${antigos.length} aviso(s) arquivado(s).`);
+  carregarAvisosLiberadosPendentesConferencia();
 });
 
 // Monta o objeto "notaPreLida" (mesmo formato usado por abrirModalConcluir)
