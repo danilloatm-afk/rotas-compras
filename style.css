@@ -279,6 +279,16 @@ input, select, textarea {
   font-size: 0.85rem;
 }
 .resultado-busca-item:not(:last-child) { border-bottom: 1px solid var(--border); }
+.anexar-pedido-novo {
+  margin-top: 0.4rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+.anexar-pedido-novo summary { cursor: pointer; }
+.anexar-pedido-novo label { display: block; margin-top: 0.5rem; }
+.anexar-pedido-novo input[type="file"] { display: block; margin-top: 0.3rem; width: 100%; }
+.anexar-pedido-novo button { margin-top: 0.5rem; }
 .aviso-portaria-enviado {
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
