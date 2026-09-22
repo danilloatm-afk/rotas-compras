@@ -275,6 +275,15 @@ input, select, textarea {
   align-items: stretch;
 }
 .aviso-portaria-card.aviso-sem-pedido .busca-pedido-manual { width: 100%; }
+.sugestao-pedido-aviso {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
 .resultado-busca-pedido:not(:empty) {
   background: var(--bg);
   border: 1px solid var(--border);
