@@ -2999,6 +2999,9 @@ function renderAvisosPortariaPendentes() {
 // feita com calma depois). Some da lista assim que os pedidos relacionados
 // forem conferidos/marcados como recebidos.
 let avisosLiberadosPendentesCache = [];
+// aviso.id -> lista de pedidos candidatos (com texto de busca já pronto),
+// usado pra filtrar sem precisar reconsultar o banco a cada tecla digitada.
+let candidatosPorAvisoSemPedido = {};
 
 async function carregarAvisosLiberadosPendentesConferencia() {
   const el = document.getElementById("avisos-liberados-aguardando-conferencia");
@@ -3041,14 +3044,12 @@ async function carregarAvisosLiberadosPendentesConferencia() {
 
   let semPedidosComCandidatos = [];
   if (semPedidos.length) {
+    // Não sugere mais automaticamente (a lista de "parecidos" ficava grande
+    // e poluía o card) — o almoxarife busca e vincula manualmente. Só
+    // restringe pela empresa, o resto é filtrado ao digitar.
     const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
     semPedidosComCandidatos = semPedidos.map((a) => {
-      let candidatos = pendentesGeral || [];
-      if (a.empresa_nome) candidatos = candidatos.filter((p) => p.empresa_nome === a.empresa_nome);
-      if (a.fornecedor_nome) {
-        const filtrados = candidatos.filter((p) => fornecedoresParecidos(a.fornecedor_nome, p.fornecedor_nome));
-        if (filtrados.length) candidatos = filtrados;
-      }
+      const candidatos = a.empresa_nome ? (pendentesGeral || []).filter((p) => p.empresa_nome === a.empresa_nome) : pendentesGeral || [];
       return { ...a, _candidatos: candidatos };
     });
   }
@@ -3073,33 +3074,28 @@ function renderAvisosLiberadosPendentesConferencia() {
       )}`;
 
       if (a._candidatos) {
+        // Guarda os candidatos (com o texto de busca já calculado) num mapa à
+        // parte — não renderiza nenhum de cara (sem "sugestão" pré-carregada
+        // poluindo o card); só aparece o que a pessoa efetivamente procurar.
+        candidatosPorAvisoSemPedido[a.id] = a._candidatos.map((p) => {
+          const itensArr = Array.isArray(p.itens) ? p.itens : p.itens ? [p.itens] : [];
+          const resumoItens = itensArr
+            .map((it) => it.produto_nome)
+            .filter(Boolean)
+            .join(", ");
+          return {
+            ...p,
+            _resumoItens: resumoItens,
+            _busca: normalizarProduto(`${p.numero_pedido || ""} ${p.fornecedor_nome || ""} ${resumoItens}`),
+          };
+        });
         return `
         <div class="aviso-portaria-card aviso-sem-pedido">
-          <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda — selecione o pedido certo abaixo antes de conferir.</span></div>
-          ${
-            a._candidatos.length
-              ? `<input type="text" class="filtro-candidatos-aviso" data-aviso-id="${a.id}" placeholder="🔎 Digite o fornecedor, o número do pedido ou um produto pra filtrar a lista abaixo...">
-                <select multiple size="4" class="select-pedido-aviso-liberado" data-aviso-id="${a.id}">
-                  ${a._candidatos
-                    .map((p) => {
-                      const itensArr = Array.isArray(p.itens) ? p.itens : p.itens ? [p.itens] : [];
-                      const resumoItens = itensArr
-                        .map((it) => it.produto_nome)
-                        .filter(Boolean)
-                        .join(", ");
-                      const busca = normalizarProduto(`${p.numero_pedido || ""} ${p.fornecedor_nome || ""} ${resumoItens}`);
-                      const resumoCurto = resumoItens.length > 60 ? `${resumoItens.slice(0, 60)}…` : resumoItens;
-                      return `<option value="${p.id}" data-busca="${escapeHtml(busca)}">Nº ${escapeHtml(
-                        p.numero_pedido || "sem número"
-                      )} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
-                        resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
-                      }</option>`;
-                    })
-                    .join("")}
-                </select>
-                <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>`
-              : `<p class="hint">Nenhum pedido CIF pendente encontrado pra vincular ainda.</p>`
-          }
+          <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda.</span></div>
+          <label class="form-label">Vincular pedido manualmente</label>
+          <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="🔎 Buscar por número, fornecedor ou produto...">
+          <div class="resultado-busca-pedido" data-aviso-id="${a.id}"></div>
+          <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>
           <button type="button" class="link-btn" data-dispensar-sem-pedido="${a.id}">Não tem pedido pra conferir aqui</button>
         </div>`;
       }
@@ -3119,19 +3115,40 @@ function renderAvisosLiberadosPendentesConferencia() {
     .join("");
 }
 
-// Filtra as opções do <select> de candidatos conforme a pessoa digita — sem
-// isso, quando não há um fornecedor parecido pra sugerir, a lista mostra
-// TODOS os pedidos CIF pendentes (podem ser dezenas), o que fica poluído e
-// difícil de rolar procurando o certo.
+// Busca manual do pedido pra vincular — não mostra nenhuma sugestão de cara
+// (só depois que a pessoa digita algo com 2+ caracteres), pra não poluir o
+// card com uma lista grande de candidatos que talvez nem sejam o certo.
+const MAX_RESULTADOS_BUSCA_PEDIDO = 8;
 document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("input", (e) => {
-  const input = e.target.closest("input.filtro-candidatos-aviso");
+  const input = e.target.closest("input.busca-pedido-manual");
   if (!input) return;
-  const termo = normalizarProduto(input.value);
-  const select = document.querySelector(`select.select-pedido-aviso-liberado[data-aviso-id="${input.dataset.avisoId}"]`);
-  if (!select) return;
-  Array.from(select.options).forEach((opt) => {
-    opt.hidden = !!termo && !opt.dataset.busca.includes(termo);
-  });
+  const avisoId = input.dataset.avisoId;
+  const resultadoEl = document.querySelector(`.resultado-busca-pedido[data-aviso-id="${avisoId}"]`);
+  if (!resultadoEl) return;
+
+  const termo = normalizarProduto(input.value.trim());
+  if (termo.length < 2) {
+    resultadoEl.innerHTML = "";
+    return;
+  }
+  const candidatos = candidatosPorAvisoSemPedido[avisoId] || [];
+  const encontrados = candidatos.filter((p) => p._busca.includes(termo)).slice(0, MAX_RESULTADOS_BUSCA_PEDIDO);
+  if (!encontrados.length) {
+    resultadoEl.innerHTML = `<p class="hint">Nenhum pedido encontrado com "${escapeHtml(input.value.trim())}".</p>`;
+    return;
+  }
+  resultadoEl.innerHTML = encontrados
+    .map((p) => {
+      const resumoCurto = p._resumoItens.length > 60 ? `${p._resumoItens.slice(0, 60)}…` : p._resumoItens;
+      return `
+      <label class="checkbox-line resultado-busca-item">
+        <input type="checkbox" value="${p.id}">
+        Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
+        resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
+      }
+      </label>`;
+    })
+    .join("");
 });
 
 document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
@@ -3152,8 +3169,8 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
   const btnVincular = e.target.closest("button[data-conferir-vinculando]");
   if (btnVincular) {
     const avisoId = btnVincular.dataset.conferirVinculando;
-    const select = document.querySelector(`select.select-pedido-aviso-liberado[data-aviso-id="${avisoId}"]`);
-    const ids = select ? Array.from(select.selectedOptions).map((o) => o.value) : [];
+    const resultadoEl = document.querySelector(`.resultado-busca-pedido[data-aviso-id="${avisoId}"]`);
+    const ids = resultadoEl ? Array.from(resultadoEl.querySelectorAll("input[type=checkbox]:checked")).map((cb) => cb.value) : [];
     if (!ids.length) {
       mostrarAviso("Selecione ao menos um pedido pra vincular a este aviso.");
       return;
