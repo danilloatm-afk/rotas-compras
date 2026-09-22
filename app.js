@@ -2980,7 +2980,7 @@ function renderAvisosPortariaPendentes() {
                   a.pedido_ids && a.pedido_ids.length
                     ? ` e já relacionada a ${a.pedido_ids.length > 1 ? `${a.pedido_ids.length} pedidos` : "um pedido"}`
                     : ""
-                } — a conferência libera assim que o acesso for liberado.</div>`
+                } — <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a> — a conferência libera assim que o acesso for liberado.</div>`
               : ""
           }
           ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
