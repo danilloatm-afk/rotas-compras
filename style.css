@@ -263,8 +263,22 @@ input, select, textarea {
   flex-direction: column;
   align-items: stretch;
 }
-.aviso-portaria-card.aviso-sem-pedido .select-pedido-aviso-liberado,
-.aviso-portaria-card.aviso-sem-pedido .filtro-candidatos-aviso { width: 100%; }
+.aviso-portaria-card.aviso-sem-pedido .busca-pedido-manual { width: 100%; }
+.resultado-busca-pedido:not(:empty) {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  margin-top: 0.3rem;
+}
+.resultado-busca-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: 0.85rem;
+}
+.resultado-busca-item:not(:last-child) { border-bottom: 1px solid var(--border); }
 .aviso-portaria-enviado {
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
