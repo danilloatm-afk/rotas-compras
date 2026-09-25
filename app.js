@@ -2146,6 +2146,27 @@ document.getElementById("form-empresa").addEventListener("submit", async (e) => 
   renderCadastros();
 });
 
+// Cadastro direto de almoxarife pela aba Configurações — antes só dava pra
+// criar um novo clicando em "+ Novo" ao lado do seletor "Meu nome" (em
+// Recebimento CIF/Comprador), o que não é um lugar óbvio pra administrar
+// usuários. Empresa/setor continuam se ajustando depois, pelos seletores já
+// existentes na própria lista abaixo.
+document.getElementById("form-almoxarife").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById("almoxarife-nome-novo").value.trim();
+  if (!nome) return;
+  const existente = almoxarifesCache.find((a) => a.nome.toLowerCase() === nome.toLowerCase());
+  if (existente) {
+    mostrarAviso(`"${nome}" já está cadastrado.`);
+    return;
+  }
+  const { error } = await db.from("rl_almoxarifes").insert({ nome });
+  if (error) return mostrarAviso("Erro ao cadastrar: " + error.message);
+  document.getElementById("form-almoxarife").reset();
+  await loadAlmoxarifes();
+  renderCadastros();
+});
+
 function renderCadastros() {
   const listaEmpresas = document.getElementById("lista-empresas");
   listaEmpresas.innerHTML = empresasCache.length
