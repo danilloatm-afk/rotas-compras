@@ -1671,8 +1671,34 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     notaSemUsoFinal[0].usado = true;
   }
 
+  // 5ª tentativa: o pedido pede uma quantidade fechada de um produto (ex: 12
+  // marcadores) e a nota detalha por variação (cor/modelo) em várias linhas
+  // — cada uma com o MESMO valor unitário, mas nome diferente (ex: "PINCEL
+  // P/RETROPROJETOR 1.0 AZ/PT/VD/VM", 3 de cada). O casamento por preço (2ª
+  // tentativa) já pareou o pedido com UMA dessas linhas; sem agrupar as
+  // demais, elas sobram como "item não estava no pedido" — quando na
+  // verdade é tudo a mesma compra, só detalhada. Só agrupa quando a soma das
+  // quantidades bate exato com o que o pedido pedia (senão pode ser mesmo
+  // produto diferente, tipo reposição parcial futura), e exige preço igual
+  // (não só parecido) pra não juntar itens que só coincidem por acaso.
+  pedidoComMatch.forEach((pc) => {
+    if (!pc.match || pc.matchPorTotal || pc.casadoPorEliminacao) return;
+    const vuPedido = pc.pItem.valor_unitario;
+    const qtdPedido = pc.pItem.quantidade;
+    if (vuPedido == null || qtdPedido == null) return;
+    const qtdJaCasada = pc.match.quantidade || 0;
+    if (Math.abs(qtdJaCasada - qtdPedido) < 0.01) return; // já bate, nada a fazer
+    const variacoes = restantes.filter((n) => !n.usado && n.valor_unitario != null && Math.abs(n.valor_unitario - vuPedido) <= TOLERANCIA_VALOR);
+    if (!variacoes.length) return;
+    const qtdVariacoes = variacoes.reduce((soma, n) => soma + (n.quantidade || 0), 0);
+    if (Math.abs(qtdJaCasada + qtdVariacoes - qtdPedido) < 0.01) {
+      pc.variacoes = variacoes;
+      variacoes.forEach((n) => (n.usado = true));
+    }
+  });
+
   let divergente = false;
-  const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal, casadoPorEliminacao }) => {
+  const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal, casadoPorEliminacao, variacoes }) => {
     // Casado só pelo valor total (embalagem diferente) — quantidade e valor
     // unitário não vão bater mesmo, e tudo bem; o que importa é o total.
     if (matchPorTotal) {
@@ -1687,7 +1713,8 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
         obs: "embalagem diferente, mesmo valor total",
       };
     }
-    const qtdOk = match && pItem.quantidade != null && match.quantidade != null ? Math.abs(pItem.quantidade - match.quantidade) < 0.01 : null;
+    const qtdNEfetiva = variacoes ? (match.quantidade || 0) + variacoes.reduce((soma, n) => soma + (n.quantidade || 0), 0) : match ? match.quantidade : null;
+    const qtdOk = match && pItem.quantidade != null && qtdNEfetiva != null ? Math.abs(pItem.quantidade - qtdNEfetiva) < 0.01 : null;
     const vuOk =
       match && pItem.valor_unitario != null && match.valor_unitario != null
         ? Math.abs(pItem.valor_unitario - match.valor_unitario) <= TOLERANCIA_VALOR
@@ -1700,7 +1727,7 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     return {
       produto: pItem.produto_nome,
       qtdP: pItem.quantidade,
-      qtdN: match ? match.quantidade : null,
+      qtdN: qtdNEfetiva,
       vuP: pItem.valor_unitario,
       vuN: match ? match.valor_unitario : null,
       match: !!match,
@@ -1709,7 +1736,9 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
         ? `nota: ${embalagem.quantidade} ${embalagem.unidade} (1 ${embalagem.unidade} = ${embalagem.fator} un)`
         : casadoPorEliminacao
           ? `nota: "${match.produto_nome}" — nome/embalagem diferente, casado por eliminação (único item que sobrou dos dois lados)`
-          : undefined,
+          : variacoes
+            ? `nota dividiu em variações do mesmo preço: ${[match, ...variacoes].map((n) => `"${n.produto_nome}" (${n.quantidade})`).join(", ")}`
+            : undefined,
     };
   });
 
