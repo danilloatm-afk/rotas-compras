@@ -3108,13 +3108,18 @@ function renderAvisosLiberadosPendentesConferencia() {
         a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""
       }<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong> · liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(
         a.lido_por || "—"
-      )}`;
+      )}${
+        a.nota_arquivo_url
+          ? ` · <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a>`
+          : ` · <span class="hint">nota não anexada pela portaria</span>`
+      }`;
 
       if (a._candidatos) {
-        // Guarda os candidatos (com o texto de busca já calculado) num mapa à
-        // parte — não renderiza nenhum de cara (sem "sugestão" pré-carregada
-        // poluindo o card); só aparece o que a pessoa efetivamente procurar.
-        candidatosPorAvisoSemPedido[a.id] = a._candidatos.map((p) => {
+        // Guarda os candidatos (com o resumo dos produtos e o texto de busca
+        // já calculados) num mapa à parte — não renderiza a lista inteira de
+        // cara (sem "sugestão" pré-carregada poluindo o card); só aparece o
+        // que a pessoa efetivamente procurar (ou o que bater como sugestão).
+        const candidatosComResumo = a._candidatos.map((p) => {
           const itensArr = Array.isArray(p.itens) ? p.itens : p.itens ? [p.itens] : [];
           const resumoItens = itensArr
             .map((it) => it.produto_nome)
@@ -3126,16 +3131,22 @@ function renderAvisosLiberadosPendentesConferencia() {
             _busca: normalizarProduto(`${p.numero_pedido || ""} ${p.fornecedor_nome || ""} ${resumoItens}`),
           };
         });
+        candidatosPorAvisoSemPedido[a.id] = candidatosComResumo;
+
+        const idsResumo = new Map(candidatosComResumo.map((p) => [p.id, p]));
         const sugestoesHtml = (a._sugestoes || [])
-          .map(
-            (p) => `
+          .map((pSemResumo) => {
+            const p = idsResumo.get(pSemResumo.id) || pSemResumo;
+            const resumoCurto = p._resumoItens && p._resumoItens.length > 80 ? `${p._resumoItens.slice(0, 80)}…` : p._resumoItens;
+            return `
             <div class="sugestao-pedido-aviso">
               💡 Pode ser o pedido Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(
               p.valor_total
-            )}
+            )}${resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""}
+              <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
               <button type="button" class="link-btn" data-usar-sugestao="${a.id}" data-pedido-sugerido="${p.id}">é esse, conferir</button>
-            </div>`
-          )
+            </div>`;
+          })
           .join("");
         return `
         <div class="aviso-portaria-card aviso-sem-pedido">
@@ -3199,12 +3210,15 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
     .map((p) => {
       const resumoCurto = p._resumoItens.length > 60 ? `${p._resumoItens.slice(0, 60)}…` : p._resumoItens;
       return `
-      <label class="checkbox-line resultado-busca-item">
-        <input type="checkbox" value="${p.id}">
-        Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
+      <div class="resultado-busca-item">
+        <label class="checkbox-line">
+          <input type="checkbox" value="${p.id}">
+          Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
         resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
       }
-      </label>`;
+        </label>
+        <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
+      </div>`;
     })
     .join("");
 });
