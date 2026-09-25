@@ -171,10 +171,14 @@ const SCHEMA_NOTA = {
     destinatario_cnpj: {
       type: "string",
       description:
-        "CNPJ de quem RECEBE a mercadoria/serviço — o 'Destinatário' numa nota de produto (DANFE), ou o 'Tomador'/'Adquirente' " +
-        "numa nota de SERVIÇO (NFS-e/DANFSe). NUNCA o CNPJ de quem emitiu a nota (o fornecedor/emitente/prestador). A nota tem " +
-        "dois CNPJs; confirme pelo rótulo ao redor de cada um antes de escolher. Se a foto estiver ruim e não der pra ter " +
-        "certeza, omita em vez de arriscar o CNPJ errado.",
+        "CNPJ de quem RECEBE a mercadoria/serviço. Vá direto no quadro rotulado 'DESTINATÁRIO' ou 'DESTINATÁRIO/REMETENTE' " +
+        "(numa nota de produto/DANFE) ou 'TOMADOR'/'ADQUIRENTE' (numa nota de SERVIÇO) — o CNPJ certo é o que está DENTRO " +
+        "desse quadro, do lado do nome/razão social de quem recebe. NUNCA o CNPJ de quem emitiu a nota (o " +
+        "fornecedor/emitente/prestador) — e cuidado: o CNPJ do EMITENTE às vezes aparece IMPRESSO DE NOVO longe do quadro " +
+        "'Emitente' original, perto do código de barras/chave de acesso/protocolo de autorização (rodapé ou lateral da " +
+        "nota) — não confunda esse com o do destinatário só por estar fisicamente perto de outros números da nota. Se tiver " +
+        "mais de um CNPJ candidato e não der pra confirmar com certeza qual está dentro do quadro do destinatário, omita em " +
+        "vez de arriscar o CNPJ errado.",
     },
     emitente_nome: {
       type: "string",
