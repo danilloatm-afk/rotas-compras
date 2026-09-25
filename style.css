@@ -259,7 +259,7 @@ input, select, textarea {
   margin-bottom: 0.6rem;
 }
 .aviso-portaria-card strong { color: var(--atencao); }
-.aviso-portaria-card .card-meta a {
+.aviso-portaria-card a {
   display: inline-block;
   color: #fff;
   background: var(--primary);
@@ -269,7 +269,7 @@ input, select, textarea {
   font-weight: 600;
   white-space: nowrap;
 }
-.aviso-portaria-card .card-meta a:hover { filter: brightness(1.15); }
+.aviso-portaria-card a:hover { filter: brightness(1.15); }
 .aviso-portaria-card.aviso-sem-pedido {
   flex-direction: column;
   align-items: stretch;
