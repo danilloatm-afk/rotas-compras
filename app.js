@@ -306,6 +306,28 @@ function normalizarCodigoCondicao(codigo) {
   const digitos = String(codigo ?? "").trim().replace(/^0+(?=\d)/, "");
   return digitos;
 }
+
+// Muita gente do pedido não imprime um código de tabela — imprime o prazo
+// já por extenso (ex: "28 DIAS", "30 60 DIAS" pra duas parcelas, "30 60 90
+// DIAS" pra três). Quando o código não bate com nenhuma linha da tabela,
+// tenta ler os dias direto do texto em vez de desistir — só aceita quando o
+// que sobra depois de tirar a palavra "DIAS" é só números e espaço (evita
+// interpretar algo tipo "PROX 30-04", que é uma data, não uma lista de
+// prazos, como se fosse 30 e 4 dias).
+function diasEsperadosDeTexto(codigo) {
+  const semPalavraDias = String(codigo ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\bDIAS?\b/g, "")
+    .trim();
+  if (!semPalavraDias || !/^[\d\s]+$/.test(semPalavraDias)) return null;
+  const numeros = semPalavraDias
+    .split(/\s+/)
+    .map(Number)
+    .filter((n) => !isNaN(n) && n >= 0);
+  if (!numeros.length) return null;
+  return numeros.reduce((soma, n) => soma + n, 0) / numeros.length;
+}
 // Tenta algumas vezes com espera entre elas — sem isso, uma conexão ruim no
 // exato momento em que o app abre (comum pro motorista no campo) fazia essa
 // tabela ficar vazia pro resto da sessão inteira, mesmo a internet
@@ -1856,9 +1878,13 @@ function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
   // abriu), tenta buscar de novo em segundo plano — assim a PRÓXIMA
   // conferência já vem certa, sem precisar recarregar a página inteira.
   if (condicoesPagamentoCache.size === 0) loadCondicoesPagamento();
-  const diasEsperados = condicoesPagamentoCache.get(normalizarCodigoCondicao(codigo));
+  let diasEsperados = condicoesPagamentoCache.get(normalizarCodigoCondicao(codigo));
+  if (diasEsperados == null) diasEsperados = diasEsperadosDeTexto(codigo);
   if (diasEsperados == null) {
-    return { msgCondicao: `Condição de pagamento ${escapeHtml(codigo)} não encontrada na tabela — não é possível conferir.`, divergCondicao: false };
+    return {
+      msgCondicao: `Condição de pagamento "${escapeHtml(codigo)}" não reconhecida (não está na tabela de códigos nem parece uma lista de dias) — não é possível conferir.`,
+      divergCondicao: false,
+    };
   }
   if (!dataEmissao || !Array.isArray(parcelas) || !parcelas.length) {
     return { msgCondicao: "Não foi possível ler as datas de pagamento da nota — não é possível conferir o prazo.", divergCondicao: false };
