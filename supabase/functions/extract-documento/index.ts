@@ -178,9 +178,17 @@ const SCHEMA_NOTA = {
     parcelas_pagamento: {
       type: "array",
       description:
-        "Cada parcela/duplicata de pagamento, uma string por parcela no formato 'AAAA-MM-DD|valor' (ex: '2026-10-02|104.00'). " +
-        "Se nÃ£o souber o valor, use sÃ³ a data. Se a nota for Ã  vista ou nÃ£o tiver essa seÃ§Ã£o, omita o campo inteiro.",
-      items: { type: "string" },
+        "Cada parcela/duplicata da seÃ§Ã£o 'Fatura/Duplicata' (ou equivalente). Omita o campo inteiro se a nota for Ã  vista " +
+        "ou nÃ£o tiver essa seÃ§Ã£o.",
+      items: {
+        type: "object",
+        properties: {
+          data_vencimento: { type: "string", description: "Data de vencimento desta parcela, formato AAAA-MM-DD." },
+          valor: { type: "number", description: "Valor desta parcela em R$." },
+        },
+        required: ["data_vencimento"],
+        additionalProperties: false,
+      },
     },
     itens: {
       type: "array",
@@ -195,15 +203,11 @@ const SCHEMA_NOTA = {
           quantidade: { type: "number", description: "Quantidade numÃ©rica do item (coluna QTDE ou similar)." },
           unidade: {
             type: "string",
-            description: "Sigla da unidade (KG, UN, FD, CX...). Se vier 'FD/0020/UN' (ver instruÃ§Ãµes), copie sÃ³ 'FD' aqui.",
-          },
-          fator_conversao: {
-            type: "number",
-            description: "Se a unidade vier como 'FD/0020/UN' (ver instruÃ§Ãµes), copie o nÃºmero do meio (ex: 20). SenÃ£o, omita.",
+            description: "Sigla/texto da unidade exatamente como impresso na coluna 'UND' (ex: 'KG', 'UN', ou 'FD/0020/UN').",
           },
           valor_unitario: {
             type: "number",
-            description: "Valor unitÃ¡rio impresso, cÃ³pia literal, sem dividir por fator_conversao. Omita se nÃ£o houver.",
+            description: "Valor unitÃ¡rio impresso, cÃ³pia literal. Omita se nÃ£o houver.",
           },
           valor_total: {
             type: "number",
@@ -267,16 +271,14 @@ const PROMPT_NOTA =
   "Em qualquer um dos dois casos: o CNPJ e nome de quem RECEBE (destinatÃ¡rio/tomador) sÃ£o os mais importantes de extrair " +
   "corretamente, nÃ£o confunda com o de quem emitiu/prestou. A foto pode ter qualidade ruim, reflexo ou estar levemente " +
   "torta â€” leia com cuidado; se algum campo nÃ£o estiver legÃ­vel com confianÃ§a, omita-o em vez de arriscar um valor errado.\n\n" +
-  "Extraia tambÃ©m a DATA DE EMISSÃƒO da nota, e cada parcela/duplicata de pagamento da seÃ§Ã£o 'Fatura/Duplicata' ou " +
-  "equivalente â€” usadas depois pra conferir se o prazo de pagamento bate com a condiÃ§Ã£o combinada no pedido. Cada parcela " +
-  "vira uma string 'AAAA-MM-DD|valor' em parcelas_pagamento (ex: 'A PRAZO 30 DIAS --> 1: 02/10/2026 - R$ 104,00' vira " +
-  "'2026-10-02|104.00'). Se a nota for Ã  vista ou nÃ£o tiver essa seÃ§Ã£o, nÃ£o invente uma parcela.\n\n" +
+  "Extraia tambÃ©m a DATA DE EMISSÃƒO da nota, e cada parcela/duplicata de pagamento (data de vencimento e valor) da seÃ§Ã£o " +
+  "'Fatura/Duplicata' ou equivalente â€” usadas depois pra conferir se o prazo de pagamento bate com a condiÃ§Ã£o combinada no " +
+  "pedido. Se a nota for Ã  vista ou nÃ£o tiver essa seÃ§Ã£o, nÃ£o invente uma parcela.\n\n" +
   "COLUNA 'UND' DA TABELA DE ITENS â€” preste atenÃ§Ã£o especial aqui: Ã s vezes vem num formato com barras, tipo 'FD/0020/UN' " +
-  "ou 'CX/0012/UN' (sigla da embalagem / quantidade-base / sigla da unidade menor). Isso quer dizer que a quantidade da " +
-  "linha estÃ¡ contada em FARDOS/CAIXAS, nÃ£o nas unidades menores â€” ex: '7' na coluna QTD com 'FD/0020/UN' significa 7 " +
-  "fardos de 20 unidades cada (140 unidades no total), nÃ£o 7 unidades. Copie a sigla da embalagem (ex: 'FD') no campo " +
-  "unidade e o nÃºmero do meio (ex: 20) no campo fator_conversao de cada item â€” sem isso, uma entrega de 140kg pode parecer " +
-  "sÃ³ 7kg na comparaÃ§Ã£o com o pedido.";
+  "ou 'CX/0012/UN' (sigla da embalagem / quantidade-base / sigla da unidade menor, significando que a quantidade da linha " +
+  "estÃ¡ contada em FARDOS/CAIXAS, nÃ£o nas unidades menores). Nesse caso, copie a coluna 'UND' INTEIRA, com as barras e " +
+  "tudo, exatamente como impressa (ex: 'FD/0020/UN'), no campo unidade â€” nÃ£o separe nem resuma. Se a coluna mostrar sÃ³ uma " +
+  "sigla simples sem barra (ex: 'UN' ou 'KG'), copie sÃ³ essa sigla normalmente.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -361,22 +363,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const extraido = JSON.parse(textBlock.text);
-
-    // O schema pede parcelas_pagamento como array de STRINGS ("AAAA-MM-DD|valor")
-    // em vez de array de objetos â€” ter dois campos com array-de-objeto no mesmo
-    // schema (itens + parcelas_pagamento) parece ter sido o que estourou o limite
-    // de complexidade da IA ("Schema is too complex"). ReconstrÃ³i o formato de
-    // objeto aqui, depois da extraÃ§Ã£o, pra nÃ£o precisar mexer no resto do app.
-    if (Array.isArray(extraido.parcelas_pagamento)) {
-      extraido.parcelas_pagamento = extraido.parcelas_pagamento
-        .map((linha: string) => {
-          const [data, valorStr] = String(linha).split("|");
-          if (!data || !data.trim()) return null;
-          const valor = valorStr != null ? Number(valorStr) : NaN;
-          return { data_vencimento: data.trim(), ...(Number.isFinite(valor) ? { valor } : {}) };
-        })
-        .filter((p: unknown) => p !== null);
-    }
 
     // O total Ã© calculado aqui, nÃ£o pelo modelo â€” pedir pra IA somar/subtrair
     // campos espalhados no documento (mercadorias + frete + despesas -
