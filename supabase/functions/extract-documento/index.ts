@@ -227,12 +227,28 @@ const SCHEMA_NOTA = {
         properties: {
           produto_nome: { type: "string", description: "Nome/descrição do produto ou item." },
           quantidade: { type: "number", description: "Quantidade numérica do item (coluna QTDE ou similar)." },
-          unidade: { type: "string", description: "Unidade de medida (ex: KG, UN, SC, L), se houver." },
+          unidade: {
+            type: "string",
+            description:
+              "Sigla da unidade de medida (ex: KG, UN, SC, L, FD, CX), se houver. Se a coluna 'UND' mostrar um formato com " +
+              "barras tipo 'FD/0020/UN' ou 'CX/0012/UN', copie só a PRIMEIRA sigla (antes da primeira barra) aqui — o " +
+              "número do meio vai no campo fator_conversao, não aqui.",
+          },
+          fator_conversao: {
+            type: "number",
+            description:
+              "Só quando a coluna 'UND' mostrar um formato com barras tipo 'FD/0020/UN' ou 'CX/0012/UN' (sigla da " +
+              "embalagem / quantidade-base / sigla da unidade menor): copie o NÚMERO DO MEIO como número puro (ex: 20 pra " +
+              "'FD/0020/UN') — é quantas unidades menores cabem em cada 'fardo'/'caixa' vendido. Isso é IMPORTANTE: sem " +
+              "esse fator, a quantidade da linha fica sub-contada (7 fardos vira só '7' em vez das 140 unidades reais que " +
+              "isso representa). Se a coluna 'UND' mostrar só uma sigla simples sem essa barra (ex: só 'UN' ou só 'KG'), " +
+              "omita este campo.",
+          },
           valor_unitario: {
             type: "number",
             description:
-              "Valor unitário em R$ desta linha (coluna 'VALOR UNIT' ou similar). Apenas números, sem 'R$' e sem separador " +
-              "de milhar. Omita se não houver essa coluna.",
+              "Valor unitário em R$ desta linha (coluna 'VALOR UNIT' ou similar) — cópia literal do número impresso, SEM " +
+              "dividir pelo fator_conversao (a conta é feita depois, não por você). Omita se não houver essa coluna.",
           },
           valor_total: {
             type: "number",
@@ -298,7 +314,13 @@ const PROMPT_NOTA =
   "torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em vez de arriscar um valor errado.\n\n" +
   "Extraia também a DATA DE EMISSÃO da nota, e cada parcela/duplicata de pagamento (data de vencimento e valor) da seção " +
   "'Fatura/Duplicata' ou equivalente — usadas depois pra conferir se o prazo de pagamento bate com a condição combinada no " +
-  "pedido. Se a nota for à vista ou não tiver essa seção, não invente uma parcela.";
+  "pedido. Se a nota for à vista ou não tiver essa seção, não invente uma parcela.\n\n" +
+  "COLUNA 'UND' DA TABELA DE ITENS — preste atenção especial aqui: às vezes vem num formato com barras, tipo 'FD/0020/UN' " +
+  "ou 'CX/0012/UN' (sigla da embalagem / quantidade-base / sigla da unidade menor). Isso quer dizer que a quantidade da " +
+  "linha está contada em FARDOS/CAIXAS, não nas unidades menores — ex: '7' na coluna QTD com 'FD/0020/UN' significa 7 " +
+  "fardos de 20 unidades cada (140 unidades no total), não 7 unidades. Copie a sigla da embalagem (ex: 'FD') no campo " +
+  "unidade e o número do meio (ex: 20) no campo fator_conversao de cada item — sem isso, uma entrega de 140kg pode parecer " +
+  "só 7kg na comparação com o pedido.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
