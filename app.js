@@ -2,12 +2,12 @@ const SUPABASE_URL = "https://jvfyqvefznkpcvjaerta.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2ZnlxdmVmem5rcGN2amFlcnRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMTQ4NjgsImV4cCI6MjEwMTc5MDg2OH0.2Ef6LpZ61WM8myHBYeQGo3TuGqk5C3x36ER_sWRNPS4";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Chave publicável do mesmo projeto Supabase, usada só pra chamar a Edge
-// Function (mesma chave já usada no app Avanço para Contratos).
+// Chave publicÃ¡vel do mesmo projeto Supabase, usada sÃ³ pra chamar a Edge
+// Function (mesma chave jÃ¡ usada no app AvanÃ§o para Contratos).
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_4fZ0DlFJq1ec5xTXurwGSQ_Ke3JELGZ";
-// Nome real no Supabase é "rapid-service" (o campo de nome não pegou
-// "extract-documento" ao publicar pela primeira vez — mesma situação da
-// function "rapid-action" do Avanço para Contratos).
+// Nome real no Supabase Ã© "rapid-service" (o campo de nome nÃ£o pegou
+// "extract-documento" ao publicar pela primeira vez â€” mesma situaÃ§Ã£o da
+// function "rapid-action" do AvanÃ§o para Contratos).
 const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 
 const TOLERANCIA_VALOR = 0.05;
@@ -27,7 +27,7 @@ function aplicarTema(tema) {
   } else {
     document.documentElement.removeAttribute("data-theme");
   }
-  document.getElementById("btn-theme-toggle").textContent = temaEfetivoEscuro(tema) ? "☀️" : "🌙";
+  document.getElementById("btn-theme-toggle").textContent = temaEfetivoEscuro(tema) ? "â˜€ï¸" : "ðŸŒ™";
 }
 
 let temaAtual = localStorage.getItem(LS_TEMA) || "auto";
@@ -39,33 +39,33 @@ document.getElementById("btn-theme-toggle").addEventListener("click", () => {
   aplicarTema(temaAtual);
 });
 
-// Toque manual pra "destravar" o som nesta aba — importante numa TV que fica
-// ligada o dia todo sem ninguém tocar na tela (ver falarAlerta mais abaixo).
-// Dá retorno visual IMEDIATO ao apertar (mesmo antes de saber se o som vai
-// funcionar) porque em navegadores de TV (ex: o "Browser" da própria Samsung)
-// às vezes o speak() simplesmente não faz nada — nem toca, nem dá erro — daí
-// sem esse retorno a pessoa acha que o botão "não fez nada" ao apertar.
+// Toque manual pra "destravar" o som nesta aba â€” importante numa TV que fica
+// ligada o dia todo sem ninguÃ©m tocar na tela (ver falarAlerta mais abaixo).
+// DÃ¡ retorno visual IMEDIATO ao apertar (mesmo antes de saber se o som vai
+// funcionar) porque em navegadores de TV (ex: o "Browser" da prÃ³pria Samsung)
+// Ã s vezes o speak() simplesmente nÃ£o faz nada â€” nem toca, nem dÃ¡ erro â€” daÃ­
+// sem esse retorno a pessoa acha que o botÃ£o "nÃ£o fez nada" ao apertar.
 document.getElementById("btn-ativar-som").addEventListener("click", () => {
   const btn = document.getElementById("btn-ativar-som");
   if (somAlertaDesbloqueado) return;
   if (!("speechSynthesis" in window)) {
-    btn.textContent = "⚠️ Som não suportado aqui";
+    btn.textContent = "âš ï¸ Som nÃ£o suportado aqui";
     btn.classList.add("som-indisponivel");
     return;
   }
-  btn.textContent = "🔄 Testando som...";
+  btn.textContent = "ðŸ”„ Testando som...";
   falarAlerta("Som ativado", 1);
   setTimeout(() => {
     if (!somAlertaDesbloqueado) {
-      btn.textContent = "⚠️ Som não funcionou aqui";
+      btn.textContent = "âš ï¸ Som nÃ£o funcionou aqui";
       btn.classList.add("som-indisponivel");
     }
   }, 2500);
 });
 
 // ---------- helpers ----------
-// alert()/prompt() nativos não são confiáveis em vários navegadores/webviews
-// (já vimos prompt() falhar em produção) — este toast substitui os avisos.
+// alert()/prompt() nativos nÃ£o sÃ£o confiÃ¡veis em vÃ¡rios navegadores/webviews
+// (jÃ¡ vimos prompt() falhar em produÃ§Ã£o) â€” este toast substitui os avisos.
 function mostrarAviso(mensagem) {
   const toast = document.createElement("div");
   toast.className = "toast-aviso";
@@ -74,19 +74,19 @@ function mostrarAviso(mensagem) {
   setTimeout(() => toast.remove(), 5000);
 }
 
-// O Chrome só toca som (inclusive voz sintetizada) numa aba depois de um
-// toque/clique real do usuário nela — antes disso, speak() falha em
-// silêncio com erro "not-allowed". Numa TV que fica ligada o dia todo sem
-// ninguém tocar na tela, isso significa que NENHUM alerta toca depois de
-// uma recarga de página. Por isso avisamos visualmente quando isso acontece,
-// pra alguém saber que precisa tocar no botão "🔊 Ativar som" uma vez.
+// O Chrome sÃ³ toca som (inclusive voz sintetizada) numa aba depois de um
+// toque/clique real do usuÃ¡rio nela â€” antes disso, speak() falha em
+// silÃªncio com erro "not-allowed". Numa TV que fica ligada o dia todo sem
+// ninguÃ©m tocar na tela, isso significa que NENHUM alerta toca depois de
+// uma recarga de pÃ¡gina. Por isso avisamos visualmente quando isso acontece,
+// pra alguÃ©m saber que precisa tocar no botÃ£o "ðŸ”Š Ativar som" uma vez.
 let somAlertaDesbloqueado = false;
 
 function marcarSomDesbloqueado() {
   somAlertaDesbloqueado = true;
   const btn = document.getElementById("btn-ativar-som");
   if (btn && !btn.classList.contains("som-ativo")) {
-    btn.textContent = "🔊 Som ativo";
+    btn.textContent = "ðŸ”Š Som ativo";
     btn.classList.remove("som-indisponivel");
     btn.classList.add("som-ativo");
   }
@@ -99,14 +99,14 @@ function mostrarAvisoSomBloqueado() {
   if (aviso) aviso.hidden = false;
 }
 
-// Fala em voz alta usando a síntese de voz do próprio navegador — sem custo,
-// sem chave de API. Nem todo navegador/dispositivo suporta, então falha em
-// silêncio se não tiver (o alerta visual normal continua funcionando igual).
+// Fala em voz alta usando a sÃ­ntese de voz do prÃ³prio navegador â€” sem custo,
+// sem chave de API. Nem todo navegador/dispositivo suporta, entÃ£o falha em
+// silÃªncio se nÃ£o tiver (o alerta visual normal continua funcionando igual).
 function falarAlerta(texto, vezes = 2) {
   if (!("speechSynthesis" in window)) return;
   try {
-    // Fala mais de uma vez de propósito — num ambiente barulhento (pátio,
-    // oficina) um aviso só, uma vez, passa despercebido fácil. As falas
+    // Fala mais de uma vez de propÃ³sito â€” num ambiente barulhento (pÃ¡tio,
+    // oficina) um aviso sÃ³, uma vez, passa despercebido fÃ¡cil. As falas
     // entram na fila do navegador e tocam uma depois da outra sozinhas.
     for (let i = 0; i < vezes; i++) {
       const utterance = new SpeechSynthesisUtterance(texto);
@@ -118,7 +118,7 @@ function falarAlerta(texto, vezes = 2) {
       window.speechSynthesis.speak(utterance);
     }
   } catch (e) {
-    // silencioso de propósito — alerta sonoro é um extra, nunca deve travar o fluxo
+    // silencioso de propÃ³sito â€” alerta sonoro Ã© um extra, nunca deve travar o fluxo
   }
 }
 
@@ -133,7 +133,7 @@ function comTimeout(promise, ms = 8000) {
   ]);
 }
 
-// Espera a pessoa parar de digitar antes de buscar de novo — sem isso, um
+// Espera a pessoa parar de digitar antes de buscar de novo â€” sem isso, um
 // campo de busca (ex: filtro por fornecedor) dispararia uma consulta ao
 // banco a cada letra digitada.
 function debounce(fn, ms) {
@@ -149,12 +149,12 @@ function apenasDigitos(str) {
 }
 
 function formatarMoeda(v) {
-  if (v == null || v === "") return "—";
+  if (v == null || v === "") return "â€”";
   return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function formatarDataHora(iso) {
-  if (!iso) return "—";
+  if (!iso) return "â€”";
   const d = new Date(iso);
   return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
@@ -162,7 +162,7 @@ function formatarDataHora(iso) {
 function arquivoParaBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo"));
+    reader.onerror = () => reject(new Error("NÃ£o foi possÃ­vel ler o arquivo"));
     reader.onload = () => resolve(String(reader.result).split(",")[1]);
     reader.readAsDataURL(file);
   });
@@ -207,7 +207,7 @@ async function checarPedidoDuplicado(numeroPedido) {
   }
   const { data } = await comTimeout(db.from("rl_pedidos").select("criado_em").eq("numero_pedido", numeroPedido).limit(1));
   if (data && data.length) {
-    aviso.textContent = `⚠️ O pedido Nº ${numeroPedido} já foi importado antes (em ${formatarDataHora(data[0].criado_em)}). Confira se não é duplicado antes de enviar.`;
+    aviso.textContent = `âš ï¸ O pedido NÂº ${numeroPedido} jÃ¡ foi importado antes (em ${formatarDataHora(data[0].criado_em)}). Confira se nÃ£o Ã© duplicado antes de enviar.`;
     aviso.classList.remove("hidden");
   } else {
     aviso.classList.add("hidden");
@@ -255,7 +255,7 @@ async function loadCompradores() {
   const sel = document.getElementById("comprador-select");
   const atual = localStorage.getItem("rl_comprador_atual") || sel.value;
   sel.innerHTML =
-    `<option value="">— selecione —</option>` +
+    `<option value="">â€” selecione â€”</option>` +
     compradoresCache.filter((c) => c.ativo).map((c) => `<option value="${escapeHtml(c.nome)}">${escapeHtml(c.nome)}</option>`).join("");
   if (atual) sel.value = atual;
 }
@@ -266,7 +266,7 @@ async function loadMotoristas() {
   const sel = document.getElementById("motorista-select");
   const atual = localStorage.getItem("rl_motorista_atual") || sel.value;
   sel.innerHTML =
-    `<option value="">— selecione —</option>` +
+    `<option value="">â€” selecione â€”</option>` +
     motoristasCache.filter((m) => m.ativo).map((m) => `<option value="${escapeHtml(m.nome)}">${escapeHtml(m.nome)}</option>`).join("");
   if (atual) sel.value = atual;
 }
@@ -275,13 +275,13 @@ async function loadAlmoxarifes() {
   const { data, error } = await comTimeout(db.from("rl_almoxarifes").select("*").order("ativo", { ascending: false }).order("nome"));
   almoxarifesCache = error ? almoxarifesCache : data || [];
   const opcoes =
-    `<option value="">— selecione —</option>` +
+    `<option value="">â€” selecione â€”</option>` +
     almoxarifesCache.filter((a) => a.ativo).map((a) => `<option value="${escapeHtml(a.nome)}">${escapeHtml(a.nome)}</option>`).join("");
   const atual = localStorage.getItem("rl_almoxarife_atual");
 
-  // Dois seletores independentes (Histórico e Recebimento CIF), sincronizados
-  // pelo mesmo nome guardado no localStorage — a pessoa escolhe o nome uma
-  // vez em qualquer um dos dois e ele já aparece certo no outro também.
+  // Dois seletores independentes (HistÃ³rico e Recebimento CIF), sincronizados
+  // pelo mesmo nome guardado no localStorage â€” a pessoa escolhe o nome uma
+  // vez em qualquer um dos dois e ele jÃ¡ aparece certo no outro tambÃ©m.
   const sel = document.getElementById("almoxarife-select");
   sel.innerHTML = opcoes;
   if (atual || sel.value) sel.value = atual || sel.value;
@@ -293,26 +293,26 @@ async function loadAlmoxarifes() {
   }
 }
 
-// Tabela cs_condicoes_pagamento já existe no mesmo Supabase, criada pelo
-// app "Avanço para Contratos" (de-para código -> dias médios, baseado na
-// planilha "cond pag.xlsx" do ERP) — reaproveitada aqui só de leitura, sem
+// Tabela cs_condicoes_pagamento jÃ¡ existe no mesmo Supabase, criada pelo
+// app "AvanÃ§o para Contratos" (de-para cÃ³digo -> dias mÃ©dios, baseado na
+// planilha "cond pag.xlsx" do ERP) â€” reaproveitada aqui sÃ³ de leitura, sem
 // duplicar o cadastro.
 let condicoesPagamentoCache = new Map();
-// A tabela sempre guarda o código com 3 dígitos (ex: "035"), mas o pedido às
-// vezes vem sem o zero à esquerda (ex: "35", quando o ERP imprime assim no
-// documento) — sem normalizar os dois lados, a busca falhava e toda
-// condição "curta" aparecia como "não encontrada na tabela", mesmo existindo.
+// A tabela sempre guarda o cÃ³digo com 3 dÃ­gitos (ex: "035"), mas o pedido Ã s
+// vezes vem sem o zero Ã  esquerda (ex: "35", quando o ERP imprime assim no
+// documento) â€” sem normalizar os dois lados, a busca falhava e toda
+// condiÃ§Ã£o "curta" aparecia como "nÃ£o encontrada na tabela", mesmo existindo.
 function normalizarCodigoCondicao(codigo) {
   const digitos = String(codigo ?? "").trim().replace(/^0+(?=\d)/, "");
   return digitos;
 }
 
-// Muita gente do pedido não imprime um código de tabela — imprime o prazo
-// já por extenso (ex: "28 DIAS", "30 60 DIAS" pra duas parcelas, "30 60 90
-// DIAS" pra três). Quando o código não bate com nenhuma linha da tabela,
-// tenta ler os dias direto do texto em vez de desistir — só aceita quando o
-// que sobra depois de tirar a palavra "DIAS" é só números e espaço (evita
-// interpretar algo tipo "PROX 30-04", que é uma data, não uma lista de
+// Muita gente do pedido nÃ£o imprime um cÃ³digo de tabela â€” imprime o prazo
+// jÃ¡ por extenso (ex: "28 DIAS", "30 60 DIAS" pra duas parcelas, "30 60 90
+// DIAS" pra trÃªs). Quando o cÃ³digo nÃ£o bate com nenhuma linha da tabela,
+// tenta ler os dias direto do texto em vez de desistir â€” sÃ³ aceita quando o
+// que sobra depois de tirar a palavra "DIAS" Ã© sÃ³ nÃºmeros e espaÃ§o (evita
+// interpretar algo tipo "PROX 30-04", que Ã© uma data, nÃ£o uma lista de
 // prazos, como se fosse 30 e 4 dias).
 function diasEsperadosDeTexto(codigo) {
   const semPalavraDias = String(codigo ?? "")
@@ -328,11 +328,11 @@ function diasEsperadosDeTexto(codigo) {
   if (!numeros.length) return null;
   return numeros.reduce((soma, n) => soma + n, 0) / numeros.length;
 }
-// Tenta algumas vezes com espera entre elas — sem isso, uma conexão ruim no
+// Tenta algumas vezes com espera entre elas â€” sem isso, uma conexÃ£o ruim no
 // exato momento em que o app abre (comum pro motorista no campo) fazia essa
-// tabela ficar vazia pro resto da sessão inteira, mesmo a internet
-// melhorando alguns segundos depois, e toda condição de pagamento aparecia
-// como "não encontrada na tabela" sem motivo real.
+// tabela ficar vazia pro resto da sessÃ£o inteira, mesmo a internet
+// melhorando alguns segundos depois, e toda condiÃ§Ã£o de pagamento aparecia
+// como "nÃ£o encontrada na tabela" sem motivo real.
 async function loadCondicoesPagamento(tentativas = 3) {
   for (let i = 0; i < tentativas; i++) {
     const { data, error } = await comTimeout(db.from("cs_condicoes_pagamento").select("codigo, dias"));
@@ -350,17 +350,17 @@ async function loadEmpresas() {
   const sel = document.getElementById("pedido-empresa");
   const atual = sel.value;
   sel.innerHTML =
-    `<option value="">— selecione —</option>` +
+    `<option value="">â€” selecione â€”</option>` +
     empresasCache
       .filter((e) => e.ativo)
-      .map((e) => `<option value="${e.id}">${escapeHtml(e.nome)}${e.cnpj ? ` — ${escapeHtml(e.cnpj)}` : ""}</option>`)
+      .map((e) => `<option value="${e.id}">${escapeHtml(e.nome)}${e.cnpj ? ` â€” ${escapeHtml(e.cnpj)}` : ""}</option>`)
       .join("");
   if (atual) sel.value = atual;
 
   const selPortaria = document.getElementById("portaria-empresa");
   const atualPortaria = selPortaria.value;
   selPortaria.innerHTML =
-    `<option value="">— selecione —</option>` +
+    `<option value="">â€” selecione â€”</option>` +
     empresasCache.filter((e) => e.ativo).map((e) => `<option value="${escapeHtml(e.nome)}">${escapeHtml(e.nome)}</option>`).join("");
   if (atualPortaria) selPortaria.value = atualPortaria;
 }
@@ -376,9 +376,9 @@ document.getElementById("motorista-select").addEventListener("change", (e) => {
   loadRotaAtual();
 });
 
-// window.prompt() não é confiável em vários navegadores/webviews (em
-// especial no celular, onde o motorista vai usar) — por isso usamos um
-// campo de texto normal na tela em vez de uma caixa de diálogo nativa.
+// window.prompt() nÃ£o Ã© confiÃ¡vel em vÃ¡rios navegadores/webviews (em
+// especial no celular, onde o motorista vai usar) â€” por isso usamos um
+// campo de texto normal na tela em vez de uma caixa de diÃ¡logo nativa.
 document.getElementById("btn-novo-comprador").addEventListener("click", () => {
   document.getElementById("form-novo-comprador").classList.remove("hidden");
   const input = document.getElementById("novo-comprador-nome");
@@ -489,16 +489,23 @@ document.getElementById("almoxarife-select").addEventListener("change", (e) => {
 document.getElementById("almoxarife-select-cif").addEventListener("change", (e) => {
   localStorage.setItem("rl_almoxarife_atual", e.target.value);
   document.getElementById("almoxarife-select").value = e.target.value;
-  // Troca de almoxarife pode mudar o filtro por empresa/setor — reconfere.
+  // Troca de almoxarife pode mudar o filtro por empresa/setor â€” reconfere.
   carregarAvisosPortariaPendentes();
   carregarAvisosLiberadosPendentesConferencia();
   carregarPedidosCifPendentes();
 });
 
-// O nome de quem pediu já vem escrito no próprio documento (campo
-// "Comprador:") — não faz sentido pedir de novo pra pessoa que só está
-// anexando o arquivo. Acha o cadastro pelo nome (ignorando maiúscula/
-// espaço) ou cria um novo automaticamente, igual o robô faz.
+// Filtro manual de setor â€” sÃ³ afeta os avisos (que tÃªm setor); a lista geral
+// de pedidos nÃ£o tem esse campo, entÃ£o nÃ£o muda com esse filtro.
+document.getElementById("filtro-setor-cif").addEventListener("change", () => {
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
+});
+
+// O nome de quem pediu jÃ¡ vem escrito no prÃ³prio documento (campo
+// "Comprador:") â€” nÃ£o faz sentido pedir de novo pra pessoa que sÃ³ estÃ¡
+// anexando o arquivo. Acha o cadastro pelo nome (ignorando maiÃºscula/
+// espaÃ§o) ou cria um novo automaticamente, igual o robÃ´ faz.
 async function selecionarOuCriarComprador(nomeLido) {
   const nome = (nomeLido || "").trim();
   if (!nome) return;
@@ -542,10 +549,10 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
     await checarPedidoDuplicado(extraido.numero_pedido);
     await selecionarOuCriarComprador(extraido.solicitante_nome);
 
-    // Guarda o CNPJ REALMENTE impresso neste pedido — a Wehrmann tem mais de
-    // uma filial (CNPJs diferentes) sob o mesmo nome no cadastro, então usar
-    // o CNPJ genérico do cadastro em vez do que foi lido aqui causava
-    // divergência falsa na conferência com a nota (a nota vem da filial
+    // Guarda o CNPJ REALMENTE impresso neste pedido â€” a Wehrmann tem mais de
+    // uma filial (CNPJs diferentes) sob o mesmo nome no cadastro, entÃ£o usar
+    // o CNPJ genÃ©rico do cadastro em vez do que foi lido aqui causava
+    // divergÃªncia falsa na conferÃªncia com a nota (a nota vem da filial
     // certa, mas o pedido ficava salvo com o CNPJ errado da matriz).
     pedidoCnpjExtraido = extraido.empresa_compradora_cnpj || null;
 
@@ -562,22 +569,22 @@ document.getElementById("btn-ler-pedido").addEventListener("click", async () => 
       document.getElementById("pedido-empresa").value = String(empresaEncontrada.id);
       info.textContent =
         cnpjLido && cnpjLido !== apenasDigitos(empresaEncontrada.cnpj)
-          ? `⚠️ CNPJ lido (${extraido.empresa_compradora_cnpj}) é diferente do cadastrado pra "${empresaEncontrada.nome}" — provavelmente outra filial. O CNPJ lido será usado na conferência.`
+          ? `âš ï¸ CNPJ lido (${extraido.empresa_compradora_cnpj}) Ã© diferente do cadastrado pra "${empresaEncontrada.nome}" â€” provavelmente outra filial. O CNPJ lido serÃ¡ usado na conferÃªncia.`
           : "";
     } else {
       info.textContent = `IA leu: "${extraido.empresa_compradora_nome || "?"}"${
         extraido.empresa_compradora_cnpj ? ` (CNPJ ${extraido.empresa_compradora_cnpj})` : ""
-      } — não encontrada no cadastro. Selecione manualmente ou cadastre em Configurações.`;
+      } â€” nÃ£o encontrada no cadastro. Selecione manualmente ou cadastre em ConfiguraÃ§Ãµes.`;
     }
-    // Frete CIF x FOB é decidido pelo nome do arquivo (mesmo padrão do robô e
-    // do Avanço para Contratos, que decide spot x contrato do mesmo jeito).
+    // Frete CIF x FOB Ã© decidido pelo nome do arquivo (mesmo padrÃ£o do robÃ´ e
+    // do AvanÃ§o para Contratos, que decide spot x contrato do mesmo jeito).
     if (/fob/i.test(file.name)) {
-      feedback.textContent = "Documento lido (nome do arquivo indica frete FOB — precisa de coleta). Confira os campos abaixo antes de enviar.";
+      feedback.textContent = "Documento lido (nome do arquivo indica frete FOB â€” precisa de coleta). Confira os campos abaixo antes de enviar.";
       feedback.className = "feedback success";
     } else {
       feedback.textContent =
-        '⚠️ O nome do arquivo não tem "FOB" — parece ser frete CIF (fornecedor entrega), que normalmente não precisa de ' +
-        "coleta. Confira antes de enviar; envie mesmo assim só se tiver certeza que precisa de rota (ou renomeie o arquivo " +
+        'âš ï¸ O nome do arquivo nÃ£o tem "FOB" â€” parece ser frete CIF (fornecedor entrega), que normalmente nÃ£o precisa de ' +
+        "coleta. Confira antes de enviar; envie mesmo assim sÃ³ se tiver certeza que precisa de rota (ou renomeie o arquivo " +
         'incluindo "FOB" antes de anexar).';
       feedback.className = "feedback error";
     }
@@ -616,7 +623,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       empresa_id: empresaId,
       empresa_nome: empresa ? empresa.nome : null,
       // Prefere o CNPJ REALMENTE lido no pedido (pode ser de uma filial
-      // diferente da cadastrada) — só cai pro CNPJ do cadastro se a IA não
+      // diferente da cadastrada) â€” sÃ³ cai pro CNPJ do cadastro se a IA nÃ£o
       // conseguiu ler nenhum.
       empresa_cnpj: pedidoCnpjExtraido || (empresa ? empresa.cnpj : null),
       numero_pedido: document.getElementById("pedido-numero").value.trim() || null,
@@ -624,12 +631,12 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
       arquivo_url: url,
       arquivo_nome: file.name,
       observacao: document.getElementById("pedido-observacao").value.trim() || null,
-      // Mesmo padrão do FOB: decide pelo nome do arquivo, sem exigir campo
-      // manual — a maioria dos pedidos chega pelo robô, não por este formulário.
+      // Mesmo padrÃ£o do FOB: decide pelo nome do arquivo, sem exigir campo
+      // manual â€” a maioria dos pedidos chega pelo robÃ´, nÃ£o por este formulÃ¡rio.
       retirar_transportadora: /transportadora/i.test(file.name),
-      // Sem "FOB" no nome do arquivo, entende-se que o frete é CIF (o
-      // fornecedor entrega) — esse pedido não entra na tela do motorista,
-      // fica disponível pro almoxarifado conferir quando a entrega chegar.
+      // Sem "FOB" no nome do arquivo, entende-se que o frete Ã© CIF (o
+      // fornecedor entrega) â€” esse pedido nÃ£o entra na tela do motorista,
+      // fica disponÃ­vel pro almoxarifado conferir quando a entrega chegar.
       frete_fob: /fob/i.test(file.name),
       valor_total: valor ? Number(valor) : null,
       itens: pedidoItensExtraidos,
@@ -656,7 +663,7 @@ document.getElementById("form-pedido").addEventListener("submit", async (e) => {
 });
 
 function badgeStatus(status) {
-  const label = { pendente: "Pendente", na_rota: "Na rota", concluido: "Concluído", cancelado: "Cancelado" }[status] || status;
+  const label = { pendente: "Pendente", na_rota: "Na rota", concluido: "ConcluÃ­do", cancelado: "Cancelado" }[status] || status;
   return `<span class="badge status-${status}">${label}</span>`;
 }
 
@@ -683,17 +690,17 @@ async function loadMeusPedidos() {
       (p) => `
     <div class="card-pedido">
       <div class="card-pedido-head">
-        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        <strong>${escapeHtml(p.empresa_nome || "Empresa nÃ£o informada")}</strong>
         ${badgeStatus(p.status)}
       </div>
-      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">ðŸ¢ ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
       ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
-      ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
-      <div class="card-meta">${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
-      ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
+      ${p.parcial_esperado ? `<span class="badge parcial">ðŸ“¦ Pode vir parcial</span>` : ""}
+      <div class="card-meta">${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` Â· NÂº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      ${p.local_retirada ? `<div class="card-meta">ðŸ“ ${escapeHtml(p.local_retirada)}</div>` : ""}
       <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
       ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
-      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">ðŸ“Ž ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
       ${
         p.status === "pendente"
           ? `<button class="link-btn danger" data-cancelar="${p.id}" type="button">Cancelar pedido</button>`
@@ -704,8 +711,8 @@ async function loadMeusPedidos() {
     .join("");
 }
 
-// confirm() nativo tem o mesmo problema do prompt() em alguns navegadores —
-// exige clicar duas vezes no próprio botão em vez de abrir um diálogo.
+// confirm() nativo tem o mesmo problema do prompt() em alguns navegadores â€”
+// exige clicar duas vezes no prÃ³prio botÃ£o em vez de abrir um diÃ¡logo.
 document.getElementById("lista-meus-pedidos").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-cancelar]");
   if (!btn) return;
@@ -722,8 +729,8 @@ document.getElementById("lista-meus-pedidos").addEventListener("click", async (e
   loadMeusPedidos();
 });
 
-// ---------- motorista: pedidos disponíveis ----------
-// A cidade não é um campo separado — vem embutida no texto de local_retirada
+// ---------- motorista: pedidos disponÃ­veis ----------
+// A cidade nÃ£o Ã© um campo separado â€” vem embutida no texto de local_retirada
 // (ex: "AV X, BAIRRO Y, GOIANIA, GO, CEP 74463-330"). Extrai o nome da
 // cidade procurando o trecho logo antes da sigla de 2 letras do estado.
 function extrairCidade(local) {
@@ -737,9 +744,9 @@ let cidadesSelecionadas = new Set();
 
 async function loadDisponiveis() {
   const el = document.getElementById("lista-disponiveis");
-  // Só frete FOB precisa de coleta — pedidos CIF (fornecedor entrega) não
-  // entram nessa tela, ficam disponíveis pro almoxarifado conferir na
-  // aba Portaria/Histórico quando a entrega chegar.
+  // SÃ³ frete FOB precisa de coleta â€” pedidos CIF (fornecedor entrega) nÃ£o
+  // entram nessa tela, ficam disponÃ­veis pro almoxarifado conferir na
+  // aba Portaria/HistÃ³rico quando a entrega chegar.
   const { data, error } = await comTimeout(
     db
       .from("rl_pedidos")
@@ -758,7 +765,7 @@ async function loadDisponiveis() {
   const cidades = [
     ...new Set(data.filter((p) => !p.retirar_transportadora).map((p) => extrairCidade(p.local_retirada)).filter(Boolean)),
   ].sort();
-  // Descarta da seleção qualquer cidade que não existe mais na lista atual.
+  // Descarta da seleÃ§Ã£o qualquer cidade que nÃ£o existe mais na lista atual.
   cidadesSelecionadas = new Set([...cidadesSelecionadas].filter((c) => cidades.includes(c)));
   const opcoesCidade = document.getElementById("opcoes-filtro-cidade");
   opcoesCidade.innerHTML = cidades
@@ -795,7 +802,7 @@ function atualizarBotaoFiltroCidade() {
   const btn = document.getElementById("btn-filtro-cidade");
   if (cidadesSelecionadas.size === 0) btn.textContent = "Todas as cidades";
   else if (cidadesSelecionadas.size === 1) btn.textContent = [...cidadesSelecionadas][0];
-  else btn.textContent = `${cidadesSelecionadas.size} cidades ▾`;
+  else btn.textContent = `${cidadesSelecionadas.size} cidades â–¾`;
 }
 
 document.getElementById("btn-filtro-cidade").addEventListener("click", (e) => {
@@ -837,19 +844,19 @@ function renderDisponiveis() {
       (p) => `
     <div class="card-pedido">
       <div class="card-pedido-head">
-        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        <strong>${escapeHtml(p.empresa_nome || "Empresa nÃ£o informada")}</strong>
         ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
-        ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+        ${p.parcial_esperado ? `<span class="badge parcial">ðŸ“¦ Pode vir parcial</span>` : ""}
       </div>
-      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
-      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
-      ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">ðŸ¢ ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} Â· ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` Â· NÂº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      ${p.local_retirada ? `<div class="card-meta">ðŸ“ ${escapeHtml(p.local_retirada)}</div>` : ""}
       <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
       ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
-      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">ðŸ“Ž ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
       <label class="selecionar"><input type="checkbox" class="pedido-check" data-id="${p.id}"> Incluir na rota</label>
       <label class="selecionar"><input type="checkbox" class="toggle-urgente" data-id="${p.id}" ${p.urgente ? "checked" : ""}> Urgente</label>
-      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> 📦 Pode vir parcial</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> ðŸ“¦ Pode vir parcial</label>
       <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
     </div>`
     )
@@ -867,8 +874,8 @@ document.getElementById("btn-limpar-filtros").addEventListener("click", () => {
   renderDisponiveis();
 });
 
-// ---------- motorista: retirada em transportadora (sem rota fixa — o
-// motorista passa lá todo dia sem saber de antemão o que já chegou, então
+// ---------- motorista: retirada em transportadora (sem rota fixa â€” o
+// motorista passa lÃ¡ todo dia sem saber de antemÃ£o o que jÃ¡ chegou, entÃ£o
 // aqui ele conclui direto, sem passar pelo fluxo de "montar rota") ----------
 function renderTransportadora() {
   const el = document.getElementById("lista-transportadora");
@@ -883,18 +890,18 @@ function renderTransportadora() {
       (p) => `
     <div class="card-pedido">
       <div class="card-pedido-head">
-        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        <strong>${escapeHtml(p.empresa_nome || "Empresa nÃ£o informada")}</strong>
         ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
-        ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+        ${p.parcial_esperado ? `<span class="badge parcial">ðŸ“¦ Pode vir parcial</span>` : ""}
       </div>
-      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
-      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">ðŸ¢ ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} Â· ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` Â· NÂº ${escapeHtml(p.numero_pedido)}` : ""}</div>
       <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
       ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
-      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">ðŸ“Ž ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
       <label class="selecionar"><input type="checkbox" class="toggle-urgente" data-id="${p.id}" ${p.urgente ? "checked" : ""}> Urgente</label>
-      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> 📦 Pode vir parcial</label>
-      <button class="btn primary small" type="button" data-concluir-transportadora="${p.id}">📦 Encontrei — concluir</button>
+      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> ðŸ“¦ Pode vir parcial</label>
+      <button class="btn primary small" type="button" data-concluir-transportadora="${p.id}">ðŸ“¦ Encontrei â€” concluir</button>
       <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
     </div>`
     )
@@ -927,8 +934,8 @@ document.getElementById("lista-transportadora").addEventListener("click", async 
 
 document.getElementById("btn-atualizar-transportadora").addEventListener("click", loadDisponiveis);
 
-// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos" —
-// compartilhado entre "Pedidos disponíveis" e "Retirada em transportadora".
+// mesmo padrÃ£o de confirmaÃ§Ã£o por duplo clique usado em "Meus pedidos" â€”
+// compartilhado entre "Pedidos disponÃ­veis" e "Retirada em transportadora".
 async function excluirPedidoDisponivelClick(e) {
   const btn = e.target.closest("button[data-cancelar-disponivel]");
   if (!btn) return;
@@ -947,8 +954,8 @@ async function excluirPedidoDisponivelClick(e) {
 document.getElementById("lista-disponiveis").addEventListener("click", excluirPedidoDisponivelClick);
 document.getElementById("lista-transportadora").addEventListener("click", excluirPedidoDisponivelClick);
 
-// Urgente/parcial marcados aqui (não no formulário de anexar) porque a
-// maioria dos pedidos chega pelo robô, sem ninguém preenchendo formulário.
+// Urgente/parcial marcados aqui (nÃ£o no formulÃ¡rio de anexar) porque a
+// maioria dos pedidos chega pelo robÃ´, sem ninguÃ©m preenchendo formulÃ¡rio.
 async function toggleUrgentePartialChange(e) {
   const chkUrgente = e.target.closest("input.toggle-urgente");
   const chkParcial = e.target.closest("input.toggle-parcial");
@@ -1004,7 +1011,7 @@ function atualizarBotaoFiltroCidadeRota() {
   const btn = document.getElementById("btn-filtro-cidade-rota");
   if (cidadesSelecionadasRota.size === 0) btn.textContent = "Todas as cidades";
   else if (cidadesSelecionadasRota.size === 1) btn.textContent = [...cidadesSelecionadasRota][0];
-  else btn.textContent = `${cidadesSelecionadasRota.size} cidades ▾`;
+  else btn.textContent = `${cidadesSelecionadasRota.size} cidades â–¾`;
 }
 
 document.getElementById("btn-filtro-cidade-rota").addEventListener("click", (e) => {
@@ -1048,10 +1055,10 @@ async function getOrCreateRotaAtiva(motoristaNome) {
   return rotaAtualId;
 }
 
-// paradasCache guarda só as paradas AINDA PENDENTES da rota atual — assim
-// que uma parada é concluída, ela sai daqui e some da tela "Minha rota de
-// hoje" (vai aparecer no Histórico). O contador de progresso usa uma
-// contagem à parte, já que as concluídas não ficam mais no array.
+// paradasCache guarda sÃ³ as paradas AINDA PENDENTES da rota atual â€” assim
+// que uma parada Ã© concluÃ­da, ela sai daqui e some da tela "Minha rota de
+// hoje" (vai aparecer no HistÃ³rico). O contador de progresso usa uma
+// contagem Ã  parte, jÃ¡ que as concluÃ­das nÃ£o ficam mais no array.
 let rotaProgresso = { concluidas: 0, total: 0 };
 
 async function loadRotaAtual() {
@@ -1084,9 +1091,9 @@ async function loadRotaAtual() {
   const { data: todasParadas } = await comTimeout(
     db.from("rl_rota_paradas").select("id, status, rl_pedidos(fornecedor_nome)").eq("rota_id", rotaAtualId)
   );
-  // "Parada" de verdade é por fornecedor (mesmo endereço) — vários pedidos
-  // do mesmo fornecedor contam como uma parada só. Uma parada só conta como
-  // concluída quando TODOS os pedidos daquele fornecedor já foram concluídos.
+  // "Parada" de verdade Ã© por fornecedor (mesmo endereÃ§o) â€” vÃ¡rios pedidos
+  // do mesmo fornecedor contam como uma parada sÃ³. Uma parada sÃ³ conta como
+  // concluÃ­da quando TODOS os pedidos daquele fornecedor jÃ¡ foram concluÃ­dos.
   const gruposPorFornecedor = new Map();
   (todasParadas || []).forEach((p) => {
     const chave = (p.rl_pedidos || {}).fornecedor_nome || `pedido-${p.id}`;
@@ -1139,12 +1146,12 @@ async function loadRotaAtual() {
   renderRota();
 }
 
-// Paradas ainda pendentes voltam pro estoque de "pedidos disponíveis" (o
-// motorista pode ter errado a seleção ou precisa recomeçar). Paradas já
-// concluídas (com nota fiscal já registrada) NÃO são mexidas — a coleta já
-// aconteceu de verdade, apagar isso destruiria a conferência feita e o
-// indicador de "coletados por mês". A rota em si vira "cancelada" (some da
-// tela) em vez de apagada, preservando o histórico.
+// Paradas ainda pendentes voltam pro estoque de "pedidos disponÃ­veis" (o
+// motorista pode ter errado a seleÃ§Ã£o ou precisa recomeÃ§ar). Paradas jÃ¡
+// concluÃ­das (com nota fiscal jÃ¡ registrada) NÃƒO sÃ£o mexidas â€” a coleta jÃ¡
+// aconteceu de verdade, apagar isso destruiria a conferÃªncia feita e o
+// indicador de "coletados por mÃªs". A rota em si vira "cancelada" (some da
+// tela) em vez de apagada, preservando o histÃ³rico.
 document.getElementById("btn-excluir-rota").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   if (!rotaAtualId) return;
@@ -1180,8 +1187,8 @@ document.getElementById("btn-excluir-rota").addEventListener("click", async (e) 
   }
 });
 
-// Remove só as paradas marcadas (o pedido delas volta pra fila de
-// disponíveis) — diferente de "Excluir rota", que mexe em todas de uma vez.
+// Remove sÃ³ as paradas marcadas (o pedido delas volta pra fila de
+// disponÃ­veis) â€” diferente de "Excluir rota", que mexe em todas de uma vez.
 document.getElementById("btn-excluir-selecionadas").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const marcadas = Array.from(document.querySelectorAll(".parada-check:checked")).map((c) => c.dataset.paradaId);
@@ -1220,15 +1227,15 @@ document.getElementById("btn-excluir-selecionadas").addEventListener("click", as
   }
 });
 
-// Deep link do Google Maps — abre direto no app de navegação do celular,
-// sem precisar de nenhuma chave de API. Sem "origin" definido, o próprio
-// Maps usa a localização atual do motorista como ponto de partida.
+// Deep link do Google Maps â€” abre direto no app de navegaÃ§Ã£o do celular,
+// sem precisar de nenhuma chave de API. Sem "origin" definido, o prÃ³prio
+// Maps usa a localizaÃ§Ã£o atual do motorista como ponto de partida.
 //
-// O endereço completo (rua/quadra/lote + bairro + cidade + UF + CEP num
-// texto só) às vezes tem termos que o Maps não reconhece — testamos e
-// confirmamos que usar só o CEP é bem mais confiável (encontra certo até
-// em endereços de quadra/lote de Brasília que o texto completo não achava),
-// então preferimos o CEP quando ele existir no texto.
+// O endereÃ§o completo (rua/quadra/lote + bairro + cidade + UF + CEP num
+// texto sÃ³) Ã s vezes tem termos que o Maps nÃ£o reconhece â€” testamos e
+// confirmamos que usar sÃ³ o CEP Ã© bem mais confiÃ¡vel (encontra certo atÃ©
+// em endereÃ§os de quadra/lote de BrasÃ­lia que o texto completo nÃ£o achava),
+// entÃ£o preferimos o CEP quando ele existir no texto.
 function extrairCEP(local) {
   if (!local) return null;
   const m = local.match(/\d{5}-?\d{3}/);
@@ -1256,11 +1263,11 @@ function linkMapsRota(enderecos) {
 document.getElementById("btn-abrir-maps").addEventListener("click", () => {
   const enderecos = paradasCache.map((p) => (p.rl_pedidos || {}).local_retirada).filter(Boolean);
   if (!enderecos.length) {
-    mostrarAviso("Nenhuma parada pendente com endereço cadastrado.");
+    mostrarAviso("Nenhuma parada pendente com endereÃ§o cadastrado.");
     return;
   }
   if (enderecos.length > 9) {
-    mostrarAviso("O Google Maps só aceita até 9 paradas de uma vez por esse link — abrindo com as 9 primeiras.");
+    mostrarAviso("O Google Maps sÃ³ aceita atÃ© 9 paradas de uma vez por esse link â€” abrindo com as 9 primeiras.");
   }
   window.open(linkMapsRota(enderecos.slice(0, 9)), "_blank", "noopener");
 });
@@ -1278,20 +1285,20 @@ function renderRota() {
     lista.innerHTML = `<li class="empty-state">Nenhuma parada na rota ainda.</li>`;
     return;
   }
-  progresso.textContent = `${rotaProgresso.concluidas} de ${rotaProgresso.total} paradas distintas concluídas.${
-    rotaProgresso.concluidas ? " As já concluídas aparecem na aba Histórico." : ""
+  progresso.textContent = `${rotaProgresso.concluidas} de ${rotaProgresso.total} paradas distintas concluÃ­das.${
+    rotaProgresso.concluidas ? " As jÃ¡ concluÃ­das aparecem na aba HistÃ³rico." : ""
   }`;
 
   if (!paradasCache.length) {
-    lista.innerHTML = `<li class="empty-state">Todas as paradas desta rota já foram concluídas. Veja o detalhe na aba Histórico.</li>`;
+    lista.innerHTML = `<li class="empty-state">Todas as paradas desta rota jÃ¡ foram concluÃ­das. Veja o detalhe na aba HistÃ³rico.</li>`;
     return;
   }
 
   const compradorFiltroRota = document.getElementById("filtro-comprador-rota").value;
   const fornecedorFiltroRota = document.getElementById("filtro-fornecedor-rota").value;
-  // Mantém o índice ORIGINAL em paradasCache (não a posição no filtro) no
+  // MantÃ©m o Ã­ndice ORIGINAL em paradasCache (nÃ£o a posiÃ§Ã£o no filtro) no
   // data-index, pra arrastar/soltar continuar reordenando a rota de verdade
-  // mesmo com o filtro aplicado — só o número mostrado (①②③) é sequencial.
+  // mesmo com o filtro aplicado â€” sÃ³ o nÃºmero mostrado (â‘ â‘¡â‘¢) Ã© sequencial.
   const visiveis = paradasCache
     .map((p, i) => ({ p, i }))
     .filter(({ p }) => {
@@ -1302,12 +1309,12 @@ function renderRota() {
       return true;
     });
 
-  // "Parada" de verdade é por fornecedor (mesmo endereço) — vários pedidos
-  // do mesmo fornecedor viram um só card ainda, então o número de pedidos e
+  // "Parada" de verdade Ã© por fornecedor (mesmo endereÃ§o) â€” vÃ¡rios pedidos
+  // do mesmo fornecedor viram um sÃ³ card ainda, entÃ£o o nÃºmero de pedidos e
   // o de paradas reais (fornecedores distintos) podem ser diferentes.
   const fornecedoresDistintos = new Set(visiveis.map(({ p }) => (p.rl_pedidos || {}).fornecedor_nome || `pedido-${p.id}`)).size;
   document.getElementById("total-rota").textContent =
-    `${visiveis.length} pedido${visiveis.length === 1 ? "" : "s"} · ${fornecedoresDistintos} parada${fornecedoresDistintos === 1 ? "" : "s"} (fornecedores distintos)`;
+    `${visiveis.length} pedido${visiveis.length === 1 ? "" : "s"} Â· ${fornecedoresDistintos} parada${fornecedoresDistintos === 1 ? "" : "s"} (fornecedores distintos)`;
 
   if (!visiveis.length) {
     lista.innerHTML = `<li class="empty-state">Nenhuma parada pendente com esse filtro.</li>`;
@@ -1320,20 +1327,20 @@ function renderRota() {
       return `
       <li class="rota-item" draggable="true" data-index="${i}">
         <input type="checkbox" class="parada-check" data-parada-id="${p.id}">
-        <span class="drag-handle">⠿</span>
+        <span class="drag-handle">â ¿</span>
         <span class="ordem-num">${posicao + 1}</span>
         <div class="rota-item-info">
-          <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+          <strong>${escapeHtml(pedido.empresa_nome || "Empresa nÃ£o informada")}</strong>
           ${pedido.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
-          ${pedido.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
-          ${pedido.fornecedor_nome ? `<span class="card-fornecedor">🏢 ${escapeHtml(pedido.fornecedor_nome)}</span>` : ""}
-          <span>Comprador: ${escapeHtml(pedido.comprador_nome || "—")} · Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
+          ${pedido.parcial_esperado ? `<span class="badge parcial">ðŸ“¦ Pode vir parcial</span>` : ""}
+          ${pedido.fornecedor_nome ? `<span class="card-fornecedor">ðŸ¢ ${escapeHtml(pedido.fornecedor_nome)}</span>` : ""}
+          <span>Comprador: ${escapeHtml(pedido.comprador_nome || "â€”")} Â· Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
           ${
             pedido.local_retirada
-              ? `<span>📍 ${escapeHtml(pedido.local_retirada)} · <a class="arquivo-link" href="${linkMapsDestino(pedido.local_retirada)}" target="_blank" rel="noopener">Navegar</a></span>`
+              ? `<span>ðŸ“ ${escapeHtml(pedido.local_retirada)} Â· <a class="arquivo-link" href="${linkMapsDestino(pedido.local_retirada)}" target="_blank" rel="noopener">Navegar</a></span>`
               : ""
           }
-          ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
+          ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">ðŸ“Ž pedido</a>` : ""}
         </div>
         <button class="btn secondary small" type="button" data-concluir="${p.id}">Concluir</button>
       </li>`;
@@ -1368,9 +1375,9 @@ document.getElementById("lista-rota").addEventListener("drop", async (e) => {
   await Promise.all(paradasCache.map((p, i) => db.from("rl_rota_paradas").update({ ordem: i }).eq("id", p.id)));
 });
 
-// ---------- concluir parada (modal com conferência) ----------
-// "notaPreLida" (opcional) vem preenchido quando a portaria já anexou e leu
-// a nota com IA no aviso — nesse caso pula direto pra conferência, sem pedir
+// ---------- concluir parada (modal com conferÃªncia) ----------
+// "notaPreLida" (opcional) vem preenchido quando a portaria jÃ¡ anexou e leu
+// a nota com IA no aviso â€” nesse caso pula direto pra conferÃªncia, sem pedir
 // pra fotografar/ler de novo o mesmo documento.
 function abrirModalConcluir(parada, notaPreLida) {
   paradaEmEdicao = parada;
@@ -1381,15 +1388,15 @@ function abrirModalConcluir(parada, notaPreLida) {
   notaParcelasExtraidas = notaPreLida ? notaPreLida.parcelas : null;
   notaArquivoUrlPreLido = notaPreLida ? notaPreLida.arquivo_url : null;
   document.getElementById("form-modal-nota").reset();
-  // já vem pré-marcado se o comprador/motorista sinalizou antes, em
-  // "Pedidos disponíveis", que esse pedido costuma vir em partes.
+  // jÃ¡ vem prÃ©-marcado se o comprador/motorista sinalizou antes, em
+  // "Pedidos disponÃ­veis", que esse pedido costuma vir em partes.
   document.getElementById("nota-parcial").checked = !!(paradaEmEdicao.rl_pedidos || {}).parcial_esperado;
   document.getElementById("nota-ia-feedback").textContent = "";
   document.getElementById("modal-feedback").textContent = "";
   document.getElementById("conferencia-resultado").classList.add("hidden");
 
-  // Link pro anexo original do pedido de compra — útil pra conferir o
-  // documento fonte sem precisar sair do modal (ex: dúvida sobre um item).
+  // Link pro anexo original do pedido de compra â€” Ãºtil pra conferir o
+  // documento fonte sem precisar sair do modal (ex: dÃºvida sobre um item).
   const arquivoPedido = (paradaEmEdicao.rl_pedidos || {}).arquivo_url;
   const blocoPedidoAnexo = document.getElementById("bloco-pedido-anexo");
   if (arquivoPedido) {
@@ -1443,8 +1450,8 @@ let notaTipoDocumento = null;
 let notaEmitenteExtraido = null;
 let notaDataEmissaoExtraida = null;
 let notaParcelasExtraidas = null;
-// Preenchido quando a nota já veio lida da portaria (ver iniciarConferenciaCif)
-// — nesse caso não faz sentido pedir upload de novo, só reaproveitar a URL.
+// Preenchido quando a nota jÃ¡ veio lida da portaria (ver iniciarConferenciaCif)
+// â€” nesse caso nÃ£o faz sentido pedir upload de novo, sÃ³ reaproveitar a URL.
 let notaArquivoUrlPreLido = null;
 
 async function lerNotaComIA() {
@@ -1471,7 +1478,7 @@ async function lerNotaComIA() {
       Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null;
     feedback.textContent =
       notaTipoDocumento === "servico"
-        ? "Nota de serviço lida. Confira o tomador, a prestadora e o valor abaixo."
+        ? "Nota de serviÃ§o lida. Confira o tomador, a prestadora e o valor abaixo."
         : "Nota lida. Confira os valores abaixo.";
     feedback.className = "feedback success";
     atualizarConferencia();
@@ -1482,10 +1489,10 @@ async function lerNotaComIA() {
 }
 
 document.getElementById("btn-ler-nota").addEventListener("click", lerNotaComIA);
-// Roda sozinho assim que a foto é escolhida — sem depender do motorista
-// lembrar de clicar em "Ler nota com IA" (na prática, quando ele esquecia,
-// a conferência ficava toda em branco e ele acabava marcando qualquer coisa
-// como "Entrega parcial" só pra conseguir enviar). O botão continua aqui
+// Roda sozinho assim que a foto Ã© escolhida â€” sem depender do motorista
+// lembrar de clicar em "Ler nota com IA" (na prÃ¡tica, quando ele esquecia,
+// a conferÃªncia ficava toda em branco e ele acabava marcando qualquer coisa
+// como "Entrega parcial" sÃ³ pra conseguir enviar). O botÃ£o continua aqui
 // pra reler manualmente se precisar.
 document.getElementById("nota-arquivo").addEventListener("change", lerNotaComIA);
 
@@ -1494,24 +1501,24 @@ document.getElementById("nota-arquivo").addEventListener("change", lerNotaComIA)
 // um item "conter" o outro (nomes costumam variar um pouco entre pedido e
 // nota do mesmo produto).
 function normalizarProduto(nome) {
-  // Sem tirar acento, "Química" (como a portaria/nota às vezes escreve) não
-  // batia com "QUIMICA" (como a IA às vezes lê do pedido) — nem em produto
-  // nem em nome de fornecedor (normalizarEmpresa usa esta função por baixo).
+  // Sem tirar acento, "QuÃ­mica" (como a portaria/nota Ã s vezes escreve) nÃ£o
+  // batia com "QUIMICA" (como a IA Ã s vezes lÃª do pedido) â€” nem em produto
+  // nem em nome de fornecedor (normalizarEmpresa usa esta funÃ§Ã£o por baixo).
   return String(nome || "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[Ì€-Í¯]/g, "")
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ");
 }
 
-// O mesmo produto às vezes aparece em mais de uma linha num dos dois
-// documentos (ex: pedido lista "FILTRO DE ÓLEO" em 2 linhas de 5, cada uma
-// com um centro de custo/data diferente, e a nota junta tudo numa linha só
-// de 10) — sem agrupar antes, a comparação linha-a-linha acusaria
-// divergência de quantidade numa linha e "não encontrado" na outra, mesmo
+// O mesmo produto Ã s vezes aparece em mais de uma linha num dos dois
+// documentos (ex: pedido lista "FILTRO DE Ã“LEO" em 2 linhas de 5, cada uma
+// com um centro de custo/data diferente, e a nota junta tudo numa linha sÃ³
+// de 10) â€” sem agrupar antes, a comparaÃ§Ã£o linha-a-linha acusaria
+// divergÃªncia de quantidade numa linha e "nÃ£o encontrado" na outra, mesmo
 // batendo tudo certo no total. Agrupa por nome antes de comparar, somando
-// quantidade e tirando a média do valor unitário ponderada pela quantidade.
+// quantidade e tirando a mÃ©dia do valor unitÃ¡rio ponderada pela quantidade.
 function agruparPorProduto(itens) {
   const grupos = new Map();
   itens.forEach((item) => {
@@ -1532,29 +1539,34 @@ function agruparPorProduto(itens) {
   });
 }
 
-// Fornecedor às vezes vende por embalagem "fechada" (ex: nota em CENTO/CT =
-// 100 unidades, DÚZIA/DZ = 12) enquanto o pedido conta unidade por unidade —
+// Fornecedor Ã s vezes vende por embalagem "fechada" (ex: nota em CENTO/CT =
+// 100 unidades, DÃšZIA/DZ = 12) enquanto o pedido conta unidade por unidade â€”
 // sem converter ANTES de comparar, tanto a quantidade quanto o valor
-// unitário da nota ficam numa escala totalmente diferente da do pedido (10
-// CT x R$3,50 vs 1000 UN x R$0,09), o que quebra até o casamento por nome
-// parecido/código, porque o preço "não bate nem de longe". Convertendo pra
-// unidade individual antes de tentar casar os itens, o valor unitário passa
-// a ficar bem próximo do esperado e o casamento funciona normal.
+// unitÃ¡rio da nota ficam numa escala totalmente diferente da do pedido (10
+// CT x R$3,50 vs 1000 UN x R$0,09), o que quebra atÃ© o casamento por nome
+// parecido/cÃ³digo, porque o preÃ§o "nÃ£o bate nem de longe". Convertendo pra
+// unidade individual antes de tentar casar os itens, o valor unitÃ¡rio passa
+// a ficar bem prÃ³ximo do esperado e o casamento funciona normal.
 const FATORES_EMBALAGEM = { ct: 100, cento: 100, dz: 12, duzia: 12, milheiro: 1000, mil: 1000 };
 
 function converterEmbalagem(item) {
-  // Prioriza o fator que a própria nota informa (coluna "UND" no formato
-  // "FD/0020/UN", lido pela IA em fator_conversao) — é específico de cada
-  // produto/nota, bem mais confiável que a tabela fixa abaixo (que só cobre
-  // umas poucas unidades padronizadas tipo "cento"/"dúzia", sempre com o
-  // mesmo fator; "fardo" e "caixa" variam de produto pra produto).
-  const fator = item.fator_conversao || FATORES_EMBALAGEM[String(item.unidade || "").toLowerCase().trim()];
+  // Se a coluna "UND" da nota veio no formato "FD/0020/UN" (sigla / fator /
+  // sigla-menor), a IA copia essa string inteira pro campo unidade (sem
+  // separar em campo prÃ³prio â€” um campo a mais no schema da IA estourou o
+  // limite de complexidade da API, "Schema is too complex"). Extrai o fator
+  // aqui, Ã© especÃ­fico de cada produto/nota, bem mais confiÃ¡vel que a tabela
+  // fixa abaixo (que sÃ³ cobre unidades padronizadas tipo "cento"/"dÃºzia",
+  // sempre com o mesmo fator; "fardo" e "caixa" variam de produto pra produto).
+  const unidadeOriginal = String(item.unidade || "").trim();
+  const matchBarras = unidadeOriginal.match(/^([a-z]+)\s*\/\s*0*(\d+)\s*\/\s*[a-z]+$/i);
+  const fator = matchBarras ? Number(matchBarras[2]) : FATORES_EMBALAGEM[unidadeOriginal.toLowerCase()];
   if (!fator) return item;
   return {
     ...item,
+    unidade: matchBarras ? matchBarras[1] : item.unidade,
     quantidade: item.quantidade != null ? item.quantidade * fator : item.quantidade,
     valor_unitario: item.valor_unitario != null ? item.valor_unitario / fator : item.valor_unitario,
-    __embalagemOriginal: { unidade: item.unidade, quantidade: item.quantidade, fator },
+    __embalagemOriginal: { unidade: unidadeOriginal, quantidade: item.quantidade, fator },
   };
 }
 
@@ -1567,7 +1579,7 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
 
   const restantes = notaItens.map((it) => ({ ...it, usado: false }));
 
-  // 1ª tentativa: nome igual ou um contendo o outro.
+  // 1Âª tentativa: nome igual ou um contendo o outro.
   const semMatchPorNome = [];
   const pedidoComMatch = pedidoItens.map((pItem, idx) => {
     const nomeP = normalizarProduto(pItem.produto_nome);
@@ -1581,18 +1593,18 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     return { pItem, match };
   });
 
-  // 2ª tentativa, pra quem sobrou: o fornecedor costuma abreviar o nome do
+  // 2Âª tentativa, pra quem sobrou: o fornecedor costuma abreviar o nome do
   // produto de um jeito bem diferente do ERP do comprador (ex: "DISJUNTOR
-  // TRIPOLAR 40A MDWP40A WEG" vira "DISJ. TRIP 40A MDWP-C40-3 3KA"), então o
-  // nome sozinho não basta — e como o pedido pode listar os itens numa
-  // ordem e a nota noutra, casar só pela POSIÇÃO também dá pareamento
-  // errado (uma linha "diverge" de outra que nem é o mesmo produto).
+  // TRIPOLAR 40A MDWP40A WEG" vira "DISJ. TRIP 40A MDWP-C40-3 3KA"), entÃ£o o
+  // nome sozinho nÃ£o basta â€” e como o pedido pode listar os itens numa
+  // ordem e a nota noutra, casar sÃ³ pela POSIÃ‡ÃƒO tambÃ©m dÃ¡ pareamento
+  // errado (uma linha "diverge" de outra que nem Ã© o mesmo produto).
   // Usa dois sinais, nessa ordem de prioridade:
-  //  1) "códigos" em comum no nome (ex: 10A, 20A, 40A, 3KA) — específicos o
-  //     bastante pra distinguir itens de preço quase idêntico (ex: dois
+  //  1) "cÃ³digos" em comum no nome (ex: 10A, 20A, 40A, 3KA) â€” especÃ­ficos o
+  //     bastante pra distinguir itens de preÃ§o quase idÃªntico (ex: dois
   //     disjuntores de amperagens diferentes custando quase a mesma coisa);
-  //  2) valor unitário mais PRÓXIMO ainda livre, como critério de desempate
-  //     ou quando não há nenhum código em comum.
+  //  2) valor unitÃ¡rio mais PRÃ“XIMO ainda livre, como critÃ©rio de desempate
+  //     ou quando nÃ£o hÃ¡ nenhum cÃ³digo em comum.
   function codigosProduto(nome) {
     return new Set((normalizarProduto(nome).match(/\d+[a-z]*/g) || []).filter((c) => c.length >= 2));
   }
@@ -1618,8 +1630,8 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
   const pedidoUsado = new Set();
   candidatos.forEach(({ idxPedido, idxNota, codigosComuns, diffPreco }) => {
     if (pedidoUsado.has(idxPedido) || restantes[idxNota].usado) return;
-    // Sem nenhum código em comum, só casa por preço se estiver de fato
-    // perto — preço muito diferente significa que são produtos diferentes.
+    // Sem nenhum cÃ³digo em comum, sÃ³ casa por preÃ§o se estiver de fato
+    // perto â€” preÃ§o muito diferente significa que sÃ£o produtos diferentes.
     if (!codigosComuns) {
       if (diffPreco == null) return;
       if (diffPreco > TOLERANCIA_VALOR * 20 && diffPreco > pedidoItens[idxPedido].valor_unitario * 0.3) return;
@@ -1629,11 +1641,11 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     pedidoUsado.add(idxPedido);
   });
 
-  // 3ª tentativa, pra quem ainda sobrou: fornecedor às vezes vende por
-  // "pacote" (ex: nome do produto vem com "C/100" — cento de folhas — e a
+  // 3Âª tentativa, pra quem ainda sobrou: fornecedor Ã s vezes vende por
+  // "pacote" (ex: nome do produto vem com "C/100" â€” cento de folhas â€” e a
   // nota lista 5 pacotes a R$64 enquanto o pedido lista 500 folhas a R$0,64)
-  // — quantidade e valor unitário nunca vão bater nesse caso, mas o VALOR
-  // TOTAL da linha continua sendo o mesmo dinheiro, então casa por ele.
+  // â€” quantidade e valor unitÃ¡rio nunca vÃ£o bater nesse caso, mas o VALOR
+  // TOTAL da linha continua sendo o mesmo dinheiro, entÃ£o casa por ele.
   function valorTotalDoItem(item) {
     if (item.valor_total != null) return item.valor_total;
     if (item.quantidade != null && item.valor_unitario != null) return item.quantidade * item.valor_unitario;
@@ -1660,14 +1672,14 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     restantes[idxNota].usado = true;
   });
 
-  // 4ª tentativa: sobrou exatamente 1 item sem casar de cada lado (pedido e
-  // nota têm a mesma quantidade de itens, os outros N-1 já bateram) — só
+  // 4Âª tentativa: sobrou exatamente 1 item sem casar de cada lado (pedido e
+  // nota tÃªm a mesma quantidade de itens, os outros N-1 jÃ¡ bateram) â€” sÃ³
   // pode ser o mesmo item descrito diferente (nome mudou, embalagem mudou,
-  // preço divergiu mais que a tolerância aceita nas tentativas acima). Como
-  // não sobra mais nenhum outro candidato pra confundir, casa por
-  // eliminação e deixa a comparação de qtd/valor apontar a divergência real
-  // — em vez de aparecer como "não encontrado" de um lado e "item não
-  // estava no pedido" do outro, o que esconde que é o mesmo item.
+  // preÃ§o divergiu mais que a tolerÃ¢ncia aceita nas tentativas acima). Como
+  // nÃ£o sobra mais nenhum outro candidato pra confundir, casa por
+  // eliminaÃ§Ã£o e deixa a comparaÃ§Ã£o de qtd/valor apontar a divergÃªncia real
+  // â€” em vez de aparecer como "nÃ£o encontrado" de um lado e "item nÃ£o
+  // estava no pedido" do outro, o que esconde que Ã© o mesmo item.
   const semMatchFinal = pedidoComMatch.filter((pc) => !pc.match);
   const notaSemUsoFinal = restantes.filter((n) => !n.usado);
   if (semMatchFinal.length === 1 && notaSemUsoFinal.length === 1) {
@@ -1676,23 +1688,23 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     notaSemUsoFinal[0].usado = true;
   }
 
-  // 5ª tentativa: o pedido pede uma quantidade fechada de um produto (ex: 12
-  // marcadores) e a nota detalha por variação (cor/modelo) em várias linhas
-  // — cada uma com o MESMO valor unitário, mas nome diferente (ex: "PINCEL
-  // P/RETROPROJETOR 1.0 AZ/PT/VD/VM", 3 de cada). O casamento por preço (2ª
-  // tentativa) já pareou o pedido com UMA dessas linhas; sem agrupar as
-  // demais, elas sobram como "item não estava no pedido" — quando na
-  // verdade é tudo a mesma compra, só detalhada. Só agrupa quando a soma das
-  // quantidades bate exato com o que o pedido pedia (senão pode ser mesmo
-  // produto diferente, tipo reposição parcial futura), e exige preço igual
-  // (não só parecido) pra não juntar itens que só coincidem por acaso.
+  // 5Âª tentativa: o pedido pede uma quantidade fechada de um produto (ex: 12
+  // marcadores) e a nota detalha por variaÃ§Ã£o (cor/modelo) em vÃ¡rias linhas
+  // â€” cada uma com o MESMO valor unitÃ¡rio, mas nome diferente (ex: "PINCEL
+  // P/RETROPROJETOR 1.0 AZ/PT/VD/VM", 3 de cada). O casamento por preÃ§o (2Âª
+  // tentativa) jÃ¡ pareou o pedido com UMA dessas linhas; sem agrupar as
+  // demais, elas sobram como "item nÃ£o estava no pedido" â€” quando na
+  // verdade Ã© tudo a mesma compra, sÃ³ detalhada. SÃ³ agrupa quando a soma das
+  // quantidades bate exato com o que o pedido pedia (senÃ£o pode ser mesmo
+  // produto diferente, tipo reposiÃ§Ã£o parcial futura), e exige preÃ§o igual
+  // (nÃ£o sÃ³ parecido) pra nÃ£o juntar itens que sÃ³ coincidem por acaso.
   pedidoComMatch.forEach((pc) => {
     if (!pc.match || pc.matchPorTotal || pc.casadoPorEliminacao) return;
     const vuPedido = pc.pItem.valor_unitario;
     const qtdPedido = pc.pItem.quantidade;
     if (vuPedido == null || qtdPedido == null) return;
     const qtdJaCasada = pc.match.quantidade || 0;
-    if (Math.abs(qtdJaCasada - qtdPedido) < 0.01) return; // já bate, nada a fazer
+    if (Math.abs(qtdJaCasada - qtdPedido) < 0.01) return; // jÃ¡ bate, nada a fazer
     const variacoes = restantes.filter((n) => !n.usado && n.valor_unitario != null && Math.abs(n.valor_unitario - vuPedido) <= TOLERANCIA_VALOR);
     if (!variacoes.length) return;
     const qtdVariacoes = variacoes.reduce((soma, n) => soma + (n.quantidade || 0), 0);
@@ -1704,8 +1716,8 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
 
   let divergente = false;
   const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal, casadoPorEliminacao, variacoes }) => {
-    // Casado só pelo valor total (embalagem diferente) — quantidade e valor
-    // unitário não vão bater mesmo, e tudo bem; o que importa é o total.
+    // Casado sÃ³ pelo valor total (embalagem diferente) â€” quantidade e valor
+    // unitÃ¡rio nÃ£o vÃ£o bater mesmo, e tudo bem; o que importa Ã© o total.
     if (matchPorTotal) {
       return {
         produto: pItem.produto_nome,
@@ -1740,16 +1752,16 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
       obs: embalagem
         ? `nota: ${embalagem.quantidade} ${embalagem.unidade} (1 ${embalagem.unidade} = ${embalagem.fator} un)`
         : casadoPorEliminacao
-          ? `nota: "${match.produto_nome}" — nome/embalagem diferente, casado por eliminação (único item que sobrou dos dois lados)`
+          ? `nota: "${match.produto_nome}" â€” nome/embalagem diferente, casado por eliminaÃ§Ã£o (Ãºnico item que sobrou dos dois lados)`
           : variacoes
-            ? `nota dividiu em variações do mesmo preço: ${[match, ...variacoes].map((n) => `"${n.produto_nome}" (${n.quantidade})`).join(", ")}`
+            ? `nota dividiu em variaÃ§Ãµes do mesmo preÃ§o: ${[match, ...variacoes].map((n) => `"${n.produto_nome}" (${n.quantidade})`).join(", ")}`
             : undefined,
     };
   });
 
-  // Item que sobrou na NOTA sem casar com nenhum item do pedido — sem isso,
-  // ele simplesmente desaparecia da comparação (nem aparecia na tabela, nem
-  // contava como divergência), mesmo sendo um item a mais que ninguém pediu.
+  // Item que sobrou na NOTA sem casar com nenhum item do pedido â€” sem isso,
+  // ele simplesmente desaparecia da comparaÃ§Ã£o (nem aparecia na tabela, nem
+  // contava como divergÃªncia), mesmo sendo um item a mais que ninguÃ©m pediu.
   restantes
     .filter((n) => !n.usado)
     .forEach((n) => {
@@ -1762,7 +1774,7 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
         vuN: n.valor_unitario,
         match: true,
         divergente: true,
-        obs: "item não estava no pedido",
+        obs: "item nÃ£o estava no pedido",
       });
     });
 
@@ -1775,12 +1787,12 @@ function renderTabelaItens(resultado) {
     .map(
       (l) => `
     <tr class="${l.divergente ? "linha-divergente" : ""}">
-      <td>${escapeHtml(l.produto)}${l.obs ? `<div class="hint">📦 ${escapeHtml(l.obs)}</div>` : ""}</td>
-      <td>${l.qtdP ?? "—"}</td>
-      <td>${l.match ? l.qtdN ?? "—" : "não encontrado"}</td>
+      <td>${escapeHtml(l.produto)}${l.obs ? `<div class="hint">ðŸ“¦ ${escapeHtml(l.obs)}</div>` : ""}</td>
+      <td>${l.qtdP ?? "â€”"}</td>
+      <td>${l.match ? l.qtdN ?? "â€”" : "nÃ£o encontrado"}</td>
       <td>${formatarMoeda(l.vuP)}</td>
-      <td>${l.match ? formatarMoeda(l.vuN) : "—"}</td>
-      <td>${l.divergente ? "⚠️" : "✅"}</td>
+      <td>${l.match ? formatarMoeda(l.vuN) : "â€”"}</td>
+      <td>${l.divergente ? "âš ï¸" : "âœ…"}</td>
     </tr>`
     )
     .join("");
@@ -1802,16 +1814,16 @@ function calcularDivergencias() {
 
   let msgValor, divergValor;
   if (pedido.valor_total == null) {
-    msgValor = "Valor esperado não informado no pedido — não é possível conferir.";
+    msgValor = "Valor esperado nÃ£o informado no pedido â€” nÃ£o Ã© possÃ­vel conferir.";
     divergValor = false;
   } else if (!notaValor) {
     msgValor = "Informe o valor da nota pra conferir.";
     divergValor = false;
   } else if (Math.abs(Number(pedido.valor_total) - Number(notaValor)) <= TOLERANCIA_VALOR) {
-    msgValor = `✅ Valor confere (${formatarMoeda(notaValor)}).`;
+    msgValor = `âœ… Valor confere (${formatarMoeda(notaValor)}).`;
     divergValor = false;
   } else {
-    msgValor = `⚠️ Divergência de valor: pedido ${formatarMoeda(pedido.valor_total)} vs nota ${formatarMoeda(notaValor)}.`;
+    msgValor = `âš ï¸ DivergÃªncia de valor: pedido ${formatarMoeda(pedido.valor_total)} vs nota ${formatarMoeda(notaValor)}.`;
     divergValor = true;
   }
 
@@ -1819,16 +1831,16 @@ function calcularDivergencias() {
   const cnpjNota = apenasDigitos(notaCnpj);
   let msgCnpj, divergCnpj;
   if (!cnpjEsperado) {
-    msgCnpj = "CNPJ da empresa compradora não informado no pedido — não é possível conferir.";
+    msgCnpj = "CNPJ da empresa compradora nÃ£o informado no pedido â€” nÃ£o Ã© possÃ­vel conferir.";
     divergCnpj = false;
   } else if (!cnpjNota) {
     msgCnpj = "Informe o CNPJ da nota pra conferir.";
     divergCnpj = false;
   } else if (cnpjEsperado === cnpjNota) {
-    msgCnpj = "✅ CNPJ confere.";
+    msgCnpj = "âœ… CNPJ confere.";
     divergCnpj = false;
   } else {
-    msgCnpj = `⚠️ CNPJ diferente: pedido esperava ${escapeHtml(pedido.empresa_cnpj)} (${escapeHtml(
+    msgCnpj = `âš ï¸ CNPJ diferente: pedido esperava ${escapeHtml(pedido.empresa_cnpj)} (${escapeHtml(
       pedido.empresa_nome || ""
     )}), nota informa ${escapeHtml(notaCnpj)}.`;
     divergCnpj = true;
@@ -1837,10 +1849,10 @@ function calcularDivergencias() {
   return { msgValor, divergValor, msgCnpj, divergCnpj };
 }
 
-// Nome de empresa varia de documento pra documento no sufixo jurídico (ex:
+// Nome de empresa varia de documento pra documento no sufixo jurÃ­dico (ex:
 // "GRAFICA FORMOSA LTDA" no pedido vs "GRAFICA FORMOSA EIRELI ME" na nota,
-// mesma empresa) — remove esses sufixos antes de comparar pra não acusar
-// divergência falsa por causa só disso.
+// mesma empresa) â€” remove esses sufixos antes de comparar pra nÃ£o acusar
+// divergÃªncia falsa por causa sÃ³ disso.
 function normalizarEmpresa(nome) {
   return normalizarProduto(nome)
     .replace(/\b(ltda|me|epp|eireli|s\/?a|mei)\b\.?/g, "")
@@ -1848,9 +1860,9 @@ function normalizarEmpresa(nome) {
     .trim();
 }
 
-// Palavras comuns demais pra usar como "assinatura" de fornecedor — duas
-// empresas diferentes que só têm ISSO em comum não devem ser consideradas a
-// mesma (ex: duas distribuidoras quaisquer não são a mesma loja).
+// Palavras comuns demais pra usar como "assinatura" de fornecedor â€” duas
+// empresas diferentes que sÃ³ tÃªm ISSO em comum nÃ£o devem ser consideradas a
+// mesma (ex: duas distribuidoras quaisquer nÃ£o sÃ£o a mesma loja).
 const PALAVRAS_GENERICAS_FORNECEDOR = new Set([
   "comercio", "comercial", "distribuidora", "distribuicao", "industria", "industrial",
   "solucoes", "produtos", "materiais", "material", "agricola", "agricolas", "brasil",
@@ -1867,10 +1879,10 @@ function palavrasSignificativas(nome) {
 }
 
 // Nem sempre o nome bate inteiro de um documento pro outro (ex: a nota vem
-// no nome da fábrica/matriz — "SUINOCOP SUINOCULTURA COPACABANA LTDA" — e o
-// pedido no nome comercial — "SUINOCOP ALIMENTOS LTDA"): além de "um nome
-// conter o outro", considera parecido também quando os dois compartilham
-// alguma palavra realmente distintiva (não genérica) em comum.
+// no nome da fÃ¡brica/matriz â€” "SUINOCOP SUINOCULTURA COPACABANA LTDA" â€” e o
+// pedido no nome comercial â€” "SUINOCOP ALIMENTOS LTDA"): alÃ©m de "um nome
+// conter o outro", considera parecido tambÃ©m quando os dois compartilham
+// alguma palavra realmente distintiva (nÃ£o genÃ©rica) em comum.
 function fornecedoresParecidos(nomeA, nomeB) {
   const a = normalizarEmpresa(nomeA || "");
   const b = normalizarEmpresa(nomeB || "");
@@ -1880,48 +1892,48 @@ function fornecedoresParecidos(nomeA, nomeB) {
   return palavrasSignificativas(nomeB).some((p) => palavrasA.has(p));
 }
 
-// Nota de serviço (NFS-e) não tem tabela de itens de verdade pra comparar —
+// Nota de serviÃ§o (NFS-e) nÃ£o tem tabela de itens de verdade pra comparar â€”
 // em vez disso, confere se a empresa prestadora bate com o fornecedor
-// registrado no pedido (comparação de nome, não tem CNPJ do fornecedor
-// guardado no pedido pra comparar dígito a dígito).
+// registrado no pedido (comparaÃ§Ã£o de nome, nÃ£o tem CNPJ do fornecedor
+// guardado no pedido pra comparar dÃ­gito a dÃ­gito).
 function compararPrestador(pedido, emitenteNome) {
   const esperado = normalizarEmpresa(pedido.fornecedor_nome);
-  if (!esperado) return { msgPrestador: "Fornecedor não informado no pedido — não é possível conferir.", divergPrestador: false };
-  if (!emitenteNome) return { msgPrestador: "Não foi possível ler a prestadora na nota.", divergPrestador: false };
+  if (!esperado) return { msgPrestador: "Fornecedor nÃ£o informado no pedido â€” nÃ£o Ã© possÃ­vel conferir.", divergPrestador: false };
+  if (!emitenteNome) return { msgPrestador: "NÃ£o foi possÃ­vel ler a prestadora na nota.", divergPrestador: false };
   const lido = normalizarEmpresa(emitenteNome);
   const bate = lido === esperado || lido.includes(esperado) || esperado.includes(lido);
   return bate
-    ? { msgPrestador: `✅ Prestadora confere (${escapeHtml(emitenteNome)}).`, divergPrestador: false }
+    ? { msgPrestador: `âœ… Prestadora confere (${escapeHtml(emitenteNome)}).`, divergPrestador: false }
     : {
-        msgPrestador: `⚠️ Prestadora diferente: pedido esperava ${escapeHtml(pedido.fornecedor_nome)}, nota informa ${escapeHtml(emitenteNome)}.`,
+        msgPrestador: `âš ï¸ Prestadora diferente: pedido esperava ${escapeHtml(pedido.fornecedor_nome)}, nota informa ${escapeHtml(emitenteNome)}.`,
         divergPrestador: true,
       };
 }
 
 const TOLERANCIA_DIAS_PAGAMENTO = 5; // absorve vencimento caindo em fim de semana/feriado
 
-// Confere se o prazo de pagamento que saiu na nota bate com a condição
-// combinada no pedido (código -> dias médios, tabela cs_condicoes_pagamento
-// compartilhada com o Avanço para Contratos). Quando há mais de uma parcela,
-// usa a média ponderada pelo valor de cada uma, do mesmo jeito que os dias
-// da própria tabela foram calculados.
+// Confere se o prazo de pagamento que saiu na nota bate com a condiÃ§Ã£o
+// combinada no pedido (cÃ³digo -> dias mÃ©dios, tabela cs_condicoes_pagamento
+// compartilhada com o AvanÃ§o para Contratos). Quando hÃ¡ mais de uma parcela,
+// usa a mÃ©dia ponderada pelo valor de cada uma, do mesmo jeito que os dias
+// da prÃ³pria tabela foram calculados.
 function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
   const codigo = pedido.condicao_pagamento_codigo;
   if (!codigo) return { msgCondicao: null, divergCondicao: false };
-  // Se a tabela nunca carregou de verdade (conexão ruim na hora que o app
-  // abriu), tenta buscar de novo em segundo plano — assim a PRÓXIMA
-  // conferência já vem certa, sem precisar recarregar a página inteira.
+  // Se a tabela nunca carregou de verdade (conexÃ£o ruim na hora que o app
+  // abriu), tenta buscar de novo em segundo plano â€” assim a PRÃ“XIMA
+  // conferÃªncia jÃ¡ vem certa, sem precisar recarregar a pÃ¡gina inteira.
   if (condicoesPagamentoCache.size === 0) loadCondicoesPagamento();
   let diasEsperados = condicoesPagamentoCache.get(normalizarCodigoCondicao(codigo));
   if (diasEsperados == null) diasEsperados = diasEsperadosDeTexto(codigo);
   if (diasEsperados == null) {
     return {
-      msgCondicao: `Condição de pagamento "${escapeHtml(codigo)}" não reconhecida (não está na tabela de códigos nem parece uma lista de dias) — não é possível conferir.`,
+      msgCondicao: `CondiÃ§Ã£o de pagamento "${escapeHtml(codigo)}" nÃ£o reconhecida (nÃ£o estÃ¡ na tabela de cÃ³digos nem parece uma lista de dias) â€” nÃ£o Ã© possÃ­vel conferir.`,
       divergCondicao: false,
     };
   }
   if (!dataEmissao || !Array.isArray(parcelas) || !parcelas.length) {
-    return { msgCondicao: "Não foi possível ler as datas de pagamento da nota — não é possível conferir o prazo.", divergCondicao: false };
+    return { msgCondicao: "NÃ£o foi possÃ­vel ler as datas de pagamento da nota â€” nÃ£o Ã© possÃ­vel conferir o prazo.", divergCondicao: false };
   }
   const emissao = new Date(dataEmissao + "T00:00:00");
   const comValor = parcelas.every((p) => p.valor != null);
@@ -1933,14 +1945,14 @@ function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
       const peso = comValor ? p.valor : 1;
       return soma + dias * peso;
     }, 0) / pesoTotal;
-  // Só é problema quando a nota dá MENOS prazo do que o combinado (a empresa
-  // acaba tendo que pagar mais cedo do que devia). Prazo maior é bom pra nós
-  // — mais tempo pra pagar — então nunca conta como divergência.
+  // SÃ³ Ã© problema quando a nota dÃ¡ MENOS prazo do que o combinado (a empresa
+  // acaba tendo que pagar mais cedo do que devia). Prazo maior Ã© bom pra nÃ³s
+  // â€” mais tempo pra pagar â€” entÃ£o nunca conta como divergÃªncia.
   const diferenca = diasEsperados - diasNota;
   return diferenca <= TOLERANCIA_DIAS_PAGAMENTO
-    ? { msgCondicao: `✅ Prazo de pagamento confere (${Math.round(diasNota)} dias, condição ${escapeHtml(codigo)}).`, divergCondicao: false }
+    ? { msgCondicao: `âœ… Prazo de pagamento confere (${Math.round(diasNota)} dias, condiÃ§Ã£o ${escapeHtml(codigo)}).`, divergCondicao: false }
     : {
-        msgCondicao: `⚠️ Prazo de pagamento menor que o esperado: condição ${escapeHtml(codigo)} do pedido espera ~${Math.round(
+        msgCondicao: `âš ï¸ Prazo de pagamento menor que o esperado: condiÃ§Ã£o ${escapeHtml(codigo)} do pedido espera ~${Math.round(
           diasEsperados
         )} dias, nota saiu com ${Math.round(diasNota)} dias.`,
         divergCondicao: true,
@@ -1951,13 +1963,13 @@ function atualizarConferencia() {
   if (!paradaEmEdicao) return;
   const box = document.getElementById("conferencia-resultado");
 
-  // Entrega parcial nunca vai bater com o total do pedido — não faz sentido
-  // (nem é justo com o motorista) rodar a conferência nesse caso. A
-  // conferência de verdade só acontece quando a entrega for marcada completa.
+  // Entrega parcial nunca vai bater com o total do pedido â€” nÃ£o faz sentido
+  // (nem Ã© justo com o motorista) rodar a conferÃªncia nesse caso. A
+  // conferÃªncia de verdade sÃ³ acontece quando a entrega for marcada completa.
   if (document.getElementById("nota-parcial").checked) {
     box.classList.remove("hidden", "warn");
     box.classList.add("ok");
-    box.innerHTML = `<div>📦 Entrega parcial — a conferência de valor/itens só é feita quando o pedido for concluído por completo.</div>`;
+    box.innerHTML = `<div>ðŸ“¦ Entrega parcial â€” a conferÃªncia de valor/itens sÃ³ Ã© feita quando o pedido for concluÃ­do por completo.</div>`;
     return;
   }
 
@@ -1967,13 +1979,13 @@ function atualizarConferencia() {
   const { msgCondicao, divergCondicao } = compararCondicaoPagamento(pedido, notaDataEmissaoExtraida, notaParcelasExtraidas);
   const msgCondicaoHtml = msgCondicao ? `<div>${msgCondicao}</div>` : "";
 
-  // Nota de serviço (NFS-e) não tem itens de verdade pra comparar — confere
-  // só tomador (CNPJ, já incluso acima), prestadora e valor total.
+  // Nota de serviÃ§o (NFS-e) nÃ£o tem itens de verdade pra comparar â€” confere
+  // sÃ³ tomador (CNPJ, jÃ¡ incluso acima), prestadora e valor total.
   if (notaTipoDocumento === "servico") {
     const { msgPrestador, divergPrestador } = compararPrestador(pedido, notaEmitenteExtraido);
     box.classList.remove("hidden", "ok", "warn");
     box.classList.add(divergValor || divergCnpj || divergPrestador || divergCondicao ? "warn" : "ok");
-    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>${msgCondicaoHtml}`;
+    box.innerHTML = `<div>ðŸ“„ Nota de serviÃ§o.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>${msgCondicaoHtml}`;
     return;
   }
 
@@ -1983,10 +1995,10 @@ function atualizarConferencia() {
   box.classList.add(divergValor || divergCnpj || resultadoItens.divergente || divergCondicao ? "warn" : "ok");
   let html = `<div>${msgValor}</div><div>${msgCnpj}</div>${msgCondicaoHtml}`;
   if (resultadoItens.temDados) {
-    html += `<div>${resultadoItens.divergente ? "⚠️ Divergência nos itens (veja a tabela abaixo)." : "✅ Itens conferem."}</div>`;
+    html += `<div>${resultadoItens.divergente ? "âš ï¸ DivergÃªncia nos itens (veja a tabela abaixo)." : "âœ… Itens conferem."}</div>`;
     html += renderTabelaItens(resultadoItens);
   } else if (!pedido.itens) {
-    html += `<div class="muted">Pedido não tem lista de itens registrada — não é possível conferir item a item.</div>`;
+    html += `<div class="muted">Pedido nÃ£o tem lista de itens registrada â€” nÃ£o Ã© possÃ­vel conferir item a item.</div>`;
   }
   box.innerHTML = html;
 }
@@ -2004,11 +2016,11 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   }
 
   const btnConcluir = document.getElementById("btn-concluir-parada");
-  // Sem isso, uma nota que não foi lida (foto ruim, motorista esqueceu de
+  // Sem isso, uma nota que nÃ£o foi lida (foto ruim, motorista esqueceu de
   // esperar a leitura, ou fotografou o documento errado) ia direto pro banco
-  // em branco, sem ninguém perceber — só aparecia depois, no Histórico,
-  // como "❓ Nota não lida". Bloqueia a primeira tentativa e exige confirmar
-  // de novo, igual ao padrão de "clique duas vezes" já usado no resto do app.
+  // em branco, sem ninguÃ©m perceber â€” sÃ³ aparecia depois, no HistÃ³rico,
+  // como "â“ Nota nÃ£o lida". Bloqueia a primeira tentativa e exige confirmar
+  // de novo, igual ao padrÃ£o de "clique duas vezes" jÃ¡ usado no resto do app.
   const entregaParcialAgora = document.getElementById("nota-parcial").checked;
   const nadaLido =
     !entregaParcialAgora &&
@@ -2018,8 +2030,8 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     (!notaItensExtraidos || !notaItensExtraidos.length);
   if (nadaLido && !btnConcluir.dataset.confirmandoSemDados) {
     btnConcluir.dataset.confirmandoSemDados = "1";
-    btnConcluir.textContent = "Nota não lida — clique de novo pra enviar assim mesmo";
-    feedback.textContent = "⚠️ Não conseguimos ler nada da nota (valor, CNPJ e itens em branco). Confira se a foto está nítida e tente ler de novo, ou clique no botão acima pra enviar mesmo assim.";
+    btnConcluir.textContent = "Nota nÃ£o lida â€” clique de novo pra enviar assim mesmo";
+    feedback.textContent = "âš ï¸ NÃ£o conseguimos ler nada da nota (valor, CNPJ e itens em branco). Confira se a foto estÃ¡ nÃ­tida e tente ler de novo, ou clique no botÃ£o acima pra enviar mesmo assim.";
     feedback.className = "feedback error";
     setTimeout(() => {
       delete btnConcluir.dataset.confirmandoSemDados;
@@ -2039,17 +2051,17 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     const notaCnpj = document.getElementById("nota-cnpj").value.trim();
     const notaNumero = document.getElementById("nota-numero").value.trim();
 
-    // Entrega parcial não passa pela conferência (o valor/itens dessa nota
-    // não deve mesmo bater com o total do pedido) e o pedido volta pra fila
-    // de disponíveis pra uma próxima rota buscar o restante.
+    // Entrega parcial nÃ£o passa pela conferÃªncia (o valor/itens dessa nota
+    // nÃ£o deve mesmo bater com o total do pedido) e o pedido volta pra fila
+    // de disponÃ­veis pra uma prÃ³xima rota buscar o restante.
     let divergValor = false;
     let divergCnpj = false;
     let itensDivergentes = false;
     let divergCondicao = false;
     if (!entregaParcial) {
       ({ divergValor, divergCnpj } = calcularDivergencias());
-      // Nota de serviço não tem itens de verdade pra comparar — a divergência
-      // de "itens" nesse caso vira divergência de prestadora (fornecedor).
+      // Nota de serviÃ§o nÃ£o tem itens de verdade pra comparar â€” a divergÃªncia
+      // de "itens" nesse caso vira divergÃªncia de prestadora (fornecedor).
       if (notaTipoDocumento === "servico") {
         itensDivergentes = compararPrestador(paradaEmEdicao.rl_pedidos || {}, notaEmitenteExtraido).divergPrestador;
       } else {
@@ -2090,40 +2102,40 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       .eq("id", paradaEmEdicao.pedido_id);
     if (errPedido) throw errPedido;
 
-    // Nota que cobre mais de um pedido junto (ver iniciarConferenciaCif) —
-    // aplica a MESMA conferência e o mesmo resultado nas outras paradas, pra
-    // cada pedido real ficar com seu próprio registro completo no Histórico.
+    // Nota que cobre mais de um pedido junto (ver iniciarConferenciaCif) â€”
+    // aplica a MESMA conferÃªncia e o mesmo resultado nas outras paradas, pra
+    // cada pedido real ficar com seu prÃ³prio registro completo no HistÃ³rico.
     const paradasIrmas = paradaEmEdicao._paradasIrmas || [];
     for (const irma of paradasIrmas) {
       await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", irma.paradaId);
       await db.from("rl_pedidos").update({ status: entregaParcial ? "pendente" : "concluido" }).eq("id", irma.pedidoId);
     }
 
-    // Usa a rota DESSA parada (não a "rota atual" global do motorista) — o
-    // mesmo modal também é reaproveitado pra conferência CIF da portaria, que
-    // roda numa rota "virtual" própria, diferente da que o motorista tem
+    // Usa a rota DESSA parada (nÃ£o a "rota atual" global do motorista) â€” o
+    // mesmo modal tambÃ©m Ã© reaproveitado pra conferÃªncia CIF da portaria, que
+    // roda numa rota "virtual" prÃ³pria, diferente da que o motorista tem
     // aberta no momento (se tiver).
     const { data: pendentes } = await db.from("rl_rota_paradas").select("id").eq("rota_id", rotaId).eq("status", "pendente");
     if (!pendentes || !pendentes.length) {
       await db.from("rl_rotas").update({ status: "concluida" }).eq("id", rotaId);
     }
 
-    // Alerta sonoro (voz do navegador, sem custo) na hora que uma divergência
-    // é encontrada — pra quem estiver por perto ouvir na hora, sem precisar
-    // ficar checando o Histórico depois.
+    // Alerta sonoro (voz do navegador, sem custo) na hora que uma divergÃªncia
+    // Ã© encontrada â€” pra quem estiver por perto ouvir na hora, sem precisar
+    // ficar checando o HistÃ³rico depois.
     const pedidoConcluido = paradaEmEdicao.rl_pedidos || {};
     if (!entregaParcial && (divergValor || divergCnpj || itensDivergentes || divergCondicao)) {
       falarAlerta(
-        `Atenção! Divergência encontrada. Comprador ${pedidoConcluido.comprador_nome || "não informado"}, ` +
-          `pedido ${pedidoConcluido.numero_pedido || "sem número"}.`
+        `AtenÃ§Ã£o! DivergÃªncia encontrada. Comprador ${pedidoConcluido.comprador_nome || "nÃ£o informado"}, ` +
+          `pedido ${pedidoConcluido.numero_pedido || "sem nÃºmero"}.`
       );
     }
 
     document.getElementById("modal-overlay").classList.add("hidden");
     paradaEmEdicao = null;
-    // Atualiza o Histórico/Recebimento CIF, caso a conferência tenha vindo do
-    // fluxo da portaria/almoxarifado, não do motorista — o pedido que acabou
-    // de ser conferido some da lista de "liberados aguardando conferência".
+    // Atualiza o HistÃ³rico/Recebimento CIF, caso a conferÃªncia tenha vindo do
+    // fluxo da portaria/almoxarifado, nÃ£o do motorista â€” o pedido que acabou
+    // de ser conferido some da lista de "liberados aguardando conferÃªncia".
     carregarAvisosLiberadosPendentesConferencia();
     await Promise.all([
       loadRotaAtual(),
@@ -2138,7 +2150,7 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   }
 });
 
-// ---------- configurações ----------
+// ---------- configuraÃ§Ãµes ----------
 document.getElementById("form-empresa").addEventListener("submit", async (e) => {
   e.preventDefault();
   const nome = document.getElementById("empresa-nome").value.trim();
@@ -2151,18 +2163,18 @@ document.getElementById("form-empresa").addEventListener("submit", async (e) => 
   renderCadastros();
 });
 
-// Cadastro direto de almoxarife pela aba Configurações — antes só dava pra
+// Cadastro direto de almoxarife pela aba ConfiguraÃ§Ãµes â€” antes sÃ³ dava pra
 // criar um novo clicando em "+ Novo" ao lado do seletor "Meu nome" (em
-// Recebimento CIF/Comprador), o que não é um lugar óbvio pra administrar
-// usuários. Empresa/setor continuam se ajustando depois, pelos seletores já
-// existentes na própria lista abaixo.
+// Recebimento CIF/Comprador), o que nÃ£o Ã© um lugar Ã³bvio pra administrar
+// usuÃ¡rios. Empresa/setor continuam se ajustando depois, pelos seletores jÃ¡
+// existentes na prÃ³pria lista abaixo.
 document.getElementById("form-almoxarife").addEventListener("submit", async (e) => {
   e.preventDefault();
   const nome = document.getElementById("almoxarife-nome-novo").value.trim();
   if (!nome) return;
   const existente = almoxarifesCache.find((a) => a.nome.toLowerCase() === nome.toLowerCase());
   if (existente) {
-    mostrarAviso(`"${nome}" já está cadastrado.`);
+    mostrarAviso(`"${nome}" jÃ¡ estÃ¡ cadastrado.`);
     return;
   }
   const { error } = await db.from("rl_almoxarifes").insert({ nome });
@@ -2179,7 +2191,7 @@ function renderCadastros() {
         .map(
           (emp) => `
       <li class="${emp.ativo ? "" : "inativo"}">
-        <span>${escapeHtml(emp.nome)}${emp.cnpj ? ` <span class="cadastro-meta">— ${escapeHtml(emp.cnpj)}</span>` : ""}</span>
+        <span>${escapeHtml(emp.nome)}${emp.cnpj ? ` <span class="cadastro-meta">â€” ${escapeHtml(emp.cnpj)}</span>` : ""}</span>
         <button class="link-btn" data-toggle-empresa="${emp.id}" data-ativo="${emp.ativo}" type="button">${emp.ativo ? "Desativar" : "Ativar"}</button>
       </li>`
         )
@@ -2267,9 +2279,9 @@ document.getElementById("tab-config").addEventListener("click", async (e) => {
   const btnComp = e.target.closest("button[data-toggle-comprador]");
   const btnMot = e.target.closest("button[data-toggle-motorista]");
   const btnAlm = e.target.closest("button[data-toggle-almoxarife]");
-  // Sem isso, QUALQUER clique dentro de Configurações (até só focar o campo
-  // de telefone) redesenhava a lista inteira e destruía o campo, fazendo
-  // parecer que só dava pra digitar segurando o botão do mouse pressionado.
+  // Sem isso, QUALQUER clique dentro de ConfiguraÃ§Ãµes (atÃ© sÃ³ focar o campo
+  // de telefone) redesenhava a lista inteira e destruÃ­a o campo, fazendo
+  // parecer que sÃ³ dava pra digitar segurando o botÃ£o do mouse pressionado.
   if (!btnEmp && !btnComp && !btnMot && !btnAlm) return;
 
   if (btnEmp) {
@@ -2291,7 +2303,7 @@ document.getElementById("tab-config").addEventListener("click", async (e) => {
   renderCadastros();
 });
 
-// salva o telefone ao sair do campo (sem botão de salvar separado)
+// salva o telefone ao sair do campo (sem botÃ£o de salvar separado)
 document.getElementById("tab-config").addEventListener(
   "blur",
   async (e) => {
@@ -2312,17 +2324,17 @@ document.getElementById("tab-config").addEventListener(
 );
 
 // ---------- portaria (avisa o almoxarifado que uma entrega chegou) ----------
-// Se a portaria tiver o arquivo da nota em mãos, lê com IA na hora — o
-// almoxarifado reaproveita essa leitura na conferência CIF depois, sem
+// Se a portaria tiver o arquivo da nota em mÃ£os, lÃª com IA na hora â€” o
+// almoxarifado reaproveita essa leitura na conferÃªncia CIF depois, sem
 // fotografar/gastar outra chamada de IA pro mesmo documento. Guarda o File
-// (não a URL) porque só faz sentido subir pro Storage se o aviso for enviado
+// (nÃ£o a URL) porque sÃ³ faz sentido subir pro Storage se o aviso for enviado
 // de verdade.
 let portariaNotaArquivo = null;
 let portariaNotaExtraida = null; // { itens, tipo_documento, emitente_nome, data_emissao, parcelas, valor_total, cnpj, numero }
 let portariaPedidosCandidatos = [];
 
-// Só a AGRICOLA WEHRMANN LTDA tem mais de um almoxarifado (Uso e Consumo /
-// Insumos / Cantina) — o campo "Setor" só aparece quando essa empresa é escolhida.
+// SÃ³ a AGRICOLA WEHRMANN LTDA tem mais de um almoxarifado (Uso e Consumo /
+// Insumos / Cantina) â€” o campo "Setor" sÃ³ aparece quando essa empresa Ã© escolhida.
 document.getElementById("portaria-empresa").addEventListener("change", (e) => {
   const ehWehrmann = e.target.value === "AGRICOLA WEHRMANN LTDA";
   document.getElementById("label-portaria-setor").classList.toggle("hidden", !ehWehrmann);
@@ -2368,9 +2380,9 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
       document.getElementById("portaria-fornecedor").value = extraido.emitente_nome;
     }
 
-    // Sugere os pedidos CIF pendentes do mesmo fornecedor (por nome — a nota
-    // não traz o CNPJ de quem emite, só de quem recebe) e da mesma empresa,
-    // se a portaria já tiver escolhido uma — ajuda a desambiguar quando mais
+    // Sugere os pedidos CIF pendentes do mesmo fornecedor (por nome â€” a nota
+    // nÃ£o traz o CNPJ de quem emite, sÃ³ de quem recebe) e da mesma empresa,
+    // se a portaria jÃ¡ tiver escolhido uma â€” ajuda a desambiguar quando mais
     // de uma empresa do grupo compra do mesmo fornecedor.
     const empresaAlvo = document.getElementById("portaria-empresa").value;
     let queryCandidatos = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
@@ -2384,13 +2396,13 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
     const labelPedido = document.getElementById("label-portaria-pedido-relacionado");
     if (portariaPedidosCandidatos.length) {
       selPedido.innerHTML = portariaPedidosCandidatos
-        .map((p) => `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(p.valor_total)}</option>`)
+        .map((p) => `<option value="${p.id}">NÂº ${escapeHtml(p.numero_pedido || "sem nÃºmero")} â€” ${formatarMoeda(p.valor_total)}</option>`)
         .join("");
       labelPedido.classList.remove("hidden");
-      feedback.textContent = `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — marque qual(is) é(são) esse(s) abaixo (a nota pode cobrir mais de um).`;
+      feedback.textContent = `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" â€” marque qual(is) Ã©(sÃ£o) esse(s) abaixo (a nota pode cobrir mais de um).`;
     } else {
       labelPedido.classList.add("hidden");
-      feedback.textContent = `Nota lida! Não achamos pedido CIF pendente de "${extraido.emitente_nome || "fornecedor não identificado"}" — o almoxarifado escolhe manualmente depois.`;
+      feedback.textContent = `Nota lida! NÃ£o achamos pedido CIF pendente de "${extraido.emitente_nome || "fornecedor nÃ£o identificado"}" â€” o almoxarifado escolhe manualmente depois.`;
     }
     feedback.className = "feedback success";
   } catch (err) {
@@ -2417,7 +2429,7 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
     return;
   }
   if (!cnpj && !fornecedor && !pedidoNumero) {
-    mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o número do pedido.");
+    mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o nÃºmero do pedido.");
     return;
   }
   btn.disabled = true;
@@ -2459,7 +2471,7 @@ document.getElementById("btn-avisar-portaria").addEventListener("click", async (
     mostrarAviso("Erro ao enviar aviso: " + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "🔔 Avisar chegada";
+    btn.textContent = "ðŸ”” Avisar chegada";
   }
 });
 
@@ -2482,12 +2494,12 @@ async function carregarAvisosPortariaEnviados() {
     .map(
       (a) => `
     <div class="aviso-portaria-enviado">
-      ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}
-      ${a.fornecedor_nome ? `<strong>${escapeHtml(a.fornecedor_nome)}</strong>` : "<strong>Fornecedor não informado</strong>"}
-      ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
-      ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
-      · ${formatarDataHora(a.criado_em)}
-      ${a.lido ? ` · ✅ acesso liberado por ${escapeHtml(a.lido_por || "—")}` : " · ⏳ aguardando liberação"}
+      ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` Â· ${escapeHtml(a.setor)}` : ""}</span> ` : ""}
+      ${a.fornecedor_nome ? `<strong>${escapeHtml(a.fornecedor_nome)}</strong>` : "<strong>Fornecedor nÃ£o informado</strong>"}
+      ${a.fornecedor_cnpj ? ` Â· CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
+      ${a.pedido_numero ? ` Â· NÂº ${escapeHtml(a.pedido_numero)}` : ""}
+      Â· ${formatarDataHora(a.criado_em)}
+      ${a.lido ? ` Â· âœ… acesso liberado por ${escapeHtml(a.lido_por || "â€”")}` : " Â· â³ aguardando liberaÃ§Ã£o"}
       ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
     </div>`
     )
@@ -2527,7 +2539,7 @@ async function loadIndicadores() {
     return;
   }
 
-  // últimos 6 meses, incluindo os que tiverem zero coletas
+  // Ãºltimos 6 meses, incluindo os que tiverem zero coletas
   const hoje = new Date();
   const meses = [];
   const mesesLojas = [];
@@ -2541,8 +2553,8 @@ async function loadIndicadores() {
   const porChave = Object.fromEntries(meses.map((m) => [m.chave, m]));
   const porChaveLojas = Object.fromEntries(mesesLojas.map((m) => [m.chave, m]));
 
-  // Um indicador por tipo de divergência — entregas parciais não contam
-  // como divergência (o pedido simplesmente não veio todo de uma vez).
+  // Um indicador por tipo de divergÃªncia â€” entregas parciais nÃ£o contam
+  // como divergÃªncia (o pedido simplesmente nÃ£o veio todo de uma vez).
   const tiposDivergencia = [
     { chave: "divergencia_valor", label: "Valor", total: 0 },
     { chave: "divergencia_cnpj", label: "CNPJ", total: 0 },
@@ -2550,9 +2562,9 @@ async function loadIndicadores() {
     { chave: "divergencia_condicao_pagamento", label: "Cond. pgto", total: 0 },
   ];
 
-  // Divergências que ainda não têm uma decisão registrada (resolucao_divergencia
-  // vazia), agrupadas por comprador, com os dias corridos desde a conclusão da
-  // parada — pra saber quem está devendo resposta e há quanto tempo.
+  // DivergÃªncias que ainda nÃ£o tÃªm uma decisÃ£o registrada (resolucao_divergencia
+  // vazia), agrupadas por comprador, com os dias corridos desde a conclusÃ£o da
+  // parada â€” pra saber quem estÃ¡ devendo resposta e hÃ¡ quanto tempo.
   const semRespostaPorComprador = new Map();
   const divergenciasPorFornecedor = new Map();
   const tempoRespostaPorComprador = new Map();
@@ -2562,11 +2574,11 @@ async function loadIndicadores() {
     const chave = chaveAnoMes(new Date(p.concluido_em));
     if (porChave[chave]) porChave[chave].total++;
 
-    // Só FOB conta como "loja que o motorista passou" — CIF é o fornecedor
-    // que traz até o almoxarifado, não o motorista que vai até a loja.
-    // Normaliza o nome (mesma função usada pra comparar fornecedor na
-    // conferência) pra não contar a mesma loja duas vezes por causa de
-    // LTDA/ME/etc ou variação de maiúscula no nome.
+    // SÃ³ FOB conta como "loja que o motorista passou" â€” CIF Ã© o fornecedor
+    // que traz atÃ© o almoxarifado, nÃ£o o motorista que vai atÃ© a loja.
+    // Normaliza o nome (mesma funÃ§Ã£o usada pra comparar fornecedor na
+    // conferÃªncia) pra nÃ£o contar a mesma loja duas vezes por causa de
+    // LTDA/ME/etc ou variaÃ§Ã£o de maiÃºscula no nome.
     const pedidoDaParada = p.rl_pedidos || {};
     if (porChaveLojas[chave] && pedidoDaParada.frete_fob !== false) {
       const nomeLoja = normalizarEmpresa(pedidoDaParada.fornecedor_nome || "") || (pedidoDaParada.fornecedor_nome || "").trim();
@@ -2580,12 +2592,12 @@ async function loadIndicadores() {
 
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
       if (divergente) {
-        const fornecedor = (p.rl_pedidos || {}).fornecedor_nome || "—";
+        const fornecedor = (p.rl_pedidos || {}).fornecedor_nome || "â€”";
         divergenciasPorFornecedor.set(fornecedor, (divergenciasPorFornecedor.get(fornecedor) || 0) + 1);
 
         if (!p.resolucao_divergencia) {
-          const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
-          const numero = (p.rl_pedidos || {}).numero_pedido || "—";
+          const comprador = (p.rl_pedidos || {}).comprador_nome || "â€”";
+          const numero = (p.rl_pedidos || {}).numero_pedido || "â€”";
           const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
           const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0, pedidos: [] };
           atual.total++;
@@ -2593,7 +2605,7 @@ async function loadIndicadores() {
           atual.pedidos.push({ numero, dias });
           semRespostaPorComprador.set(comprador, atual);
         } else if (p.resolucao_em) {
-          const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+          const comprador = (p.rl_pedidos || {}).comprador_nome || "â€”";
           const diasResposta = Math.max(0, (new Date(p.resolucao_em).getTime() - new Date(p.concluido_em).getTime()) / 86400000);
           const atual = tempoRespostaPorComprador.get(comprador) || { comprador, soma: 0, total: 0 };
           atual.soma += diasResposta;
@@ -2609,7 +2621,7 @@ async function loadIndicadores() {
   const lojasPorMes = mesesLojas.map((m) => ({ chave: m.chave, label: m.label, total: m.lojas.size }));
   renderGraficoBarras(containerLojas, lojasPorMes, "var(--ok)", (m) => `${m.label}: ${m.total} loja(s) diferente(s) visitada(s)`);
 
-  renderGraficoBarras(containerDivergencias, tiposDivergencia, "var(--atrasado)", (t) => `${t.label}: ${t.total} divergência(s)`);
+  renderGraficoBarras(containerDivergencias, tiposDivergencia, "var(--atrasado)", (t) => `${t.label}: ${t.total} divergÃªncia(s)`);
 
   const listaSemResposta = Array.from(semRespostaPorComprador.values()).sort((a, b) => b.diasMax - a.diasMax);
   renderTabelaSemResposta(listaSemResposta);
@@ -2629,13 +2641,13 @@ async function loadIndicadores() {
 function renderTabelaFornecedor(lista) {
   const container = document.getElementById("tabela-divergencias-fornecedor");
   if (!lista.length) {
-    container.innerHTML = `<p class="empty-state">Nenhuma divergência registrada ainda.</p>`;
+    container.innerHTML = `<p class="empty-state">Nenhuma divergÃªncia registrada ainda.</p>`;
     return;
   }
   container.innerHTML = `
     <table class="tabela-itens">
       <thead>
-        <tr><th>Fornecedor</th><th>Divergências</th></tr>
+        <tr><th>Fornecedor</th><th>DivergÃªncias</th></tr>
       </thead>
       <tbody>
         ${lista.map((f) => `<tr><td>${escapeHtml(f.fornecedor)}</td><td>${f.total}</td></tr>`).join("")}
@@ -2646,13 +2658,13 @@ function renderTabelaFornecedor(lista) {
 function renderTabelaTempoResposta(lista) {
   const container = document.getElementById("tabela-tempo-resposta");
   if (!lista.length) {
-    container.innerHTML = `<p class="empty-state">Nenhuma divergência respondida ainda.</p>`;
+    container.innerHTML = `<p class="empty-state">Nenhuma divergÃªncia respondida ainda.</p>`;
     return;
   }
   container.innerHTML = `
     <table class="tabela-itens">
       <thead>
-        <tr><th>Comprador</th><th>Divergências respondidas</th><th>Tempo médio de resposta</th></tr>
+        <tr><th>Comprador</th><th>DivergÃªncias respondidas</th><th>Tempo mÃ©dio de resposta</th></tr>
       </thead>
       <tbody>
         ${lista
@@ -2665,13 +2677,13 @@ function renderTabelaTempoResposta(lista) {
 function renderTabelaSemResposta(lista) {
   const container = document.getElementById("tabela-divergencias-sem-resposta");
   if (!lista.length) {
-    container.innerHTML = `<p class="empty-state">Nenhuma divergência sem resposta. 🎉</p>`;
+    container.innerHTML = `<p class="empty-state">Nenhuma divergÃªncia sem resposta. ðŸŽ‰</p>`;
     return;
   }
   container.innerHTML = `
     <table class="tabela-itens">
       <thead>
-        <tr><th>Comprador</th><th>Divergências sem resposta</th><th>Dias sem resposta (mais antiga)</th></tr>
+        <tr><th>Comprador</th><th>DivergÃªncias sem resposta</th><th>Dias sem resposta (mais antiga)</th></tr>
       </thead>
       <tbody>
         ${lista
@@ -2690,7 +2702,7 @@ function renderTabelaSemResposta(lista) {
           .join("")}
       </tbody>
     </table>
-    <p class="hint">Passe o mouse sobre uma linha pra ver quais pedidos estão pendentes.</p>`;
+    <p class="hint">Passe o mouse sobre uma linha pra ver quais pedidos estÃ£o pendentes.</p>`;
 }
 
 function renderGraficoBarras(container, itens, cor, tituloFn) {
@@ -2723,15 +2735,15 @@ function renderGraficoBarras(container, itens, cor, tituloFn) {
     </svg>`;
 }
 
-// ---------- histórico (rotas concluídas) ----------
-// Sem número salvo, "" abre o seletor de contato do próprio WhatsApp (mesmo
-// padrão usado no Painel de Operações).
+// ---------- histÃ³rico (rotas concluÃ­das) ----------
+// Sem nÃºmero salvo, "" abre o seletor de contato do prÃ³prio WhatsApp (mesmo
+// padrÃ£o usado no Painel de OperaÃ§Ãµes).
 function linkWhatsapp(numero, mensagem) {
   const digitos = String(numero || "").replace(/\D/g, "");
   return `https://wa.me/${digitos}?text=${encodeURIComponent(mensagem)}`;
 }
 
-// Mesma lógica de renderDivergenciasParada, mas em texto puro (sem HTML)
+// Mesma lÃ³gica de renderDivergenciasParada, mas em texto puro (sem HTML)
 // pra poder entrar direto na mensagem do WhatsApp.
 function resumoDivergenciasTexto(parada) {
   const pedido = parada.rl_pedidos || {};
@@ -2740,20 +2752,20 @@ function resumoDivergenciasTexto(parada) {
     linhas.push(`Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.`);
   }
   if (parada.divergencia_cnpj) {
-    linhas.push(`CNPJ: pedido esperava ${pedido.empresa_cnpj || "—"}, nota trouxe ${parada.nota_cnpj || "—"}.`);
+    linhas.push(`CNPJ: pedido esperava ${pedido.empresa_cnpj || "â€”"}, nota trouxe ${parada.nota_cnpj || "â€”"}.`);
   }
   if (parada.divergencia_itens) {
     if (parada.nota_tipo_documento === "servico") {
       linhas.push(
-        `Prestadora do serviço: pedido esperava ${pedido.fornecedor_nome || "—"}, nota trouxe ${parada.nota_emitente_nome || "—"}.`
+        `Prestadora do serviÃ§o: pedido esperava ${pedido.fornecedor_nome || "â€”"}, nota trouxe ${parada.nota_emitente_nome || "â€”"}.`
       );
     } else {
-      linhas.push("Itens com quantidade ou valor unitário diferente do esperado (confira no sistema).");
+      linhas.push("Itens com quantidade ou valor unitÃ¡rio diferente do esperado (confira no sistema).");
     }
   }
   if (parada.divergencia_condicao_pagamento) {
     const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
-    if (msgCondicao) linhas.push(msgCondicao.replace(/^[⚠️✅]\s*/, ""));
+    if (msgCondicao) linhas.push(msgCondicao.replace(/^[âš ï¸âœ…]\s*/, ""));
   }
   return linhas.join("\n");
 }
@@ -2762,45 +2774,45 @@ function linkAvisoComprador(parada) {
   const pedido = parada.rl_pedidos || {};
   const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
   const mensagem =
-    `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! Encontramos uma divergência na conferência do pedido ` +
-    `${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n` +
+    `OlÃ¡${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! Encontramos uma divergÃªncia na conferÃªncia do pedido ` +
+    `${pedido.numero_pedido ? "NÂº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa nÃ£o informada"}):\n` +
     resumoDivergenciasTexto(parada) +
     "\n\nPode conferir com o fornecedor?";
   return linkWhatsapp(comprador.telefone, mensagem);
 }
 
-// Manda pro comprador a observação que o almoxarifado deixou na conferência
+// Manda pro comprador a observaÃ§Ã£o que o almoxarifado deixou na conferÃªncia
 // do recebimento (ex: avaria, embalagem violada, quantidade a menos).
 function linkAvisoObservacaoRecebimento(parada) {
   const pedido = parada.rl_pedidos || {};
   const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
   const mensagem =
-    `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! O almoxarifado deixou uma observação na conferência do ` +
-    `pedido ${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n\n` +
+    `OlÃ¡${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! O almoxarifado deixou uma observaÃ§Ã£o na conferÃªncia do ` +
+    `pedido ${pedido.numero_pedido ? "NÂº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa nÃ£o informada"}):\n\n` +
     `"${parada.recebido_observacao}"`;
   return linkWhatsapp(comprador.telefone, mensagem);
 }
 
-// Reconstrói as mensagens de divergência a partir do que já ficou salvo na
-// parada (nota_valor_total, nota_cnpj, nota_itens) — não depende de nada
-// que só existia na tela no momento em que o motorista concluiu a parada.
+// ReconstrÃ³i as mensagens de divergÃªncia a partir do que jÃ¡ ficou salvo na
+// parada (nota_valor_total, nota_cnpj, nota_itens) â€” nÃ£o depende de nada
+// que sÃ³ existia na tela no momento em que o motorista concluiu a parada.
 function renderDivergenciasParada(parada) {
   const pedido = parada.rl_pedidos || {};
   let html = "";
   if (parada.divergencia_valor) {
-    html += `<div>⚠️ Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.</div>`;
+    html += `<div>âš ï¸ Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.</div>`;
   }
   if (parada.divergencia_cnpj) {
-    html += `<div>⚠️ CNPJ: pedido esperava ${escapeHtml(pedido.empresa_cnpj || "—")}, nota trouxe ${escapeHtml(parada.nota_cnpj || "—")}.</div>`;
+    html += `<div>âš ï¸ CNPJ: pedido esperava ${escapeHtml(pedido.empresa_cnpj || "â€”")}, nota trouxe ${escapeHtml(parada.nota_cnpj || "â€”")}.</div>`;
   }
   if (parada.divergencia_itens) {
     if (parada.nota_tipo_documento === "servico") {
-      html += `<div>⚠️ Prestadora do serviço: pedido esperava ${escapeHtml(pedido.fornecedor_nome || "—")}, nota trouxe ${escapeHtml(
-        parada.nota_emitente_nome || "—"
+      html += `<div>âš ï¸ Prestadora do serviÃ§o: pedido esperava ${escapeHtml(pedido.fornecedor_nome || "â€”")}, nota trouxe ${escapeHtml(
+        parada.nota_emitente_nome || "â€”"
       )}.</div>`;
     } else {
       const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
-      html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
+      html += `<div>âš ï¸ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
     }
   }
   if (parada.divergencia_condicao_pagamento) {
@@ -2810,32 +2822,32 @@ function renderDivergenciasParada(parada) {
   return html;
 }
 
-// Registra o que foi decidido sobre uma divergência (ex: "fornecedor vai
-// reemitir a nota", "confirmado, é a filial certa mesmo") — fica visível
-// pra quem olhar o Histórico depois, sem precisar perguntar de novo.
+// Registra o que foi decidido sobre uma divergÃªncia (ex: "fornecedor vai
+// reemitir a nota", "confirmado, Ã© a filial certa mesmo") â€” fica visÃ­vel
+// pra quem olhar o HistÃ³rico depois, sem precisar perguntar de novo.
 let resolucoesEmEdicao = new Set();
 function renderResolucaoDivergencia(parada) {
   const jaTemResolucao = !!parada.resolucao_divergencia;
   if (jaTemResolucao && !resolucoesEmEdicao.has(parada.id)) {
-    return `<div class="card-meta">💬 Decisão: ${escapeHtml(parada.resolucao_divergencia)}${
-      parada.resolucao_por ? ` — ${escapeHtml(parada.resolucao_por)}` : ""
+    return `<div class="card-meta">ðŸ’¬ DecisÃ£o: ${escapeHtml(parada.resolucao_divergencia)}${
+      parada.resolucao_por ? ` â€” ${escapeHtml(parada.resolucao_por)}` : ""
     }${parada.resolucao_em ? `, ${formatarDataHora(parada.resolucao_em)}` : ""} <button class="link-btn" type="button" data-editar-resolucao="${parada.id}">Editar</button></div>`;
   }
   return `<div class="resolucao-form">
-    <label class="form-label">⚠️ Decisão sobre a divergência acima (o que foi combinado com fornecedor/comprador)</label>
+    <label class="form-label">âš ï¸ DecisÃ£o sobre a divergÃªncia acima (o que foi combinado com fornecedor/comprador)</label>
     <textarea class="input-resolucao" data-parada-id="${parada.id}" rows="2" placeholder="Ex: fornecedor vai reemitir a nota">${escapeHtml(
       parada.resolucao_divergencia || ""
     )}</textarea>
-    <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}">Salvar decisão</button>
+    <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}">Salvar decisÃ£o</button>
   </div>`;
 }
 
 const ITENS_POR_PAGINA_HISTORICO = 10;
 let paginaHistoricoAtual = 1;
 let somenteDivergentesHistorico = false;
-// Guarda só a página atual (já filtrada e paginada pelo próprio banco) — não
-// o histórico inteiro. Assim a busca sempre alcança qualquer registro, não
-// importa o quão antigo ou quantos existam no total.
+// Guarda sÃ³ a pÃ¡gina atual (jÃ¡ filtrada e paginada pelo prÃ³prio banco) â€” nÃ£o
+// o histÃ³rico inteiro. Assim a busca sempre alcanÃ§a qualquer registro, nÃ£o
+// importa o quÃ£o antigo ou quantos existam no total.
 let paginaAtualDados = [];
 let algumFiltroAtivoHistorico = false;
 
@@ -2843,13 +2855,13 @@ function paradaEDivergente(p) {
   return !p.entrega_parcial && (p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento);
 }
 
-// Só redesenha com o que já foi buscado (não refaz consulta ao banco) — usado
-// quando o filtro não muda, ex: entrar/sair do modo de editar uma decisão.
+// SÃ³ redesenha com o que jÃ¡ foi buscado (nÃ£o refaz consulta ao banco) â€” usado
+// quando o filtro nÃ£o muda, ex: entrar/sair do modo de editar uma decisÃ£o.
 function renderHistorico() {
   const el = document.getElementById("lista-historico");
   if (!paginaAtualDados.length) {
     el.innerHTML = `<p class="empty-state">${
-      algumFiltroAtivoHistorico ? "Nenhuma parada concluída com esse filtro." : "Nenhuma parada concluída ainda."
+      algumFiltroAtivoHistorico ? "Nenhuma parada concluÃ­da com esse filtro." : "Nenhuma parada concluÃ­da ainda."
     }</p>`;
     return;
   }
@@ -2882,10 +2894,10 @@ function renderCardsHistorico(paradas) {
   el.innerHTML = paradas
     .map((p) => {
       const pedido = p.rl_pedidos || {};
-      const motorista = (p.rl_rotas || {}).motorista_nome || "—";
+      const motorista = (p.rl_rotas || {}).motorista_nome || "â€”";
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
-      // "OK" só quando teve dado de verdade pra comparar — se a nota não foi
-      // lida (foto ruim, ilegível), não teve conferência nenhuma, então não
+      // "OK" sÃ³ quando teve dado de verdade pra comparar â€” se a nota nÃ£o foi
+      // lida (foto ruim, ilegÃ­vel), nÃ£o teve conferÃªncia nenhuma, entÃ£o nÃ£o
       // pode aparecer como se tivesse batido tudo certinho.
       const notaSemLeitura =
         p.nota_valor_total == null &&
@@ -2893,58 +2905,58 @@ function renderCardsHistorico(paradas) {
         !p.nota_emitente_nome &&
         (!Array.isArray(p.nota_itens) || !p.nota_itens.length);
       const status = p.recebido_por_terceiro
-        ? "🤝 Recebido por terceiro"
+        ? "ðŸ¤ Recebido por terceiro"
         : p.entrega_parcial
-          ? "📦 Entrega parcial"
+          ? "ðŸ“¦ Entrega parcial"
           : divergente
-            ? "⚠️ Divergência"
+            ? "âš ï¸ DivergÃªncia"
             : notaSemLeitura
-              ? "❓ Nota não lida"
-              : "✅ OK";
+              ? "â“ Nota nÃ£o lida"
+              : "âœ… OK";
       return `
       <div class="card-pedido historico-parada-card">
         <div class="card-pedido-head">
-          <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+          <strong>${escapeHtml(pedido.empresa_nome || "Empresa nÃ£o informada")}</strong>
           <span>${status}</span>
         </div>
-        ${pedido.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(pedido.fornecedor_nome)}</div>` : ""}
+        ${pedido.fornecedor_nome ? `<div class="card-fornecedor">ðŸ¢ ${escapeHtml(pedido.fornecedor_nome)}</div>` : ""}
         <div class="card-meta">
-          ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
-          · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
+          ${pedido.numero_pedido ? `NÂº ${escapeHtml(pedido.numero_pedido)} Â· ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "â€”")}
+          Â· Motorista: ${escapeHtml(motorista)} Â· ConcluÃ­do em ${formatarDataHora(p.concluido_em)}
         </div>
-        ${pedido.observacao ? `<div class="card-meta">💬 Observação do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
-        ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
-        ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
+        ${pedido.observacao ? `<div class="card-meta">ðŸ’¬ ObservaÃ§Ã£o do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
+        ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">ðŸ“Ž pedido</a>` : ""}
+        ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">ðŸ“Ž nota fiscal</a>` : ""}
         ${
           p.entrega_parcial
-            ? `<div class="conferencia-box ok">📦 Entrega parcial — o pedido voltou pra fila de disponíveis pra buscar o restante. Confira aqui os dados desta parcial: valor ${formatarMoeda(
+            ? `<div class="conferencia-box ok">ðŸ“¦ Entrega parcial â€” o pedido voltou pra fila de disponÃ­veis pra buscar o restante. Confira aqui os dados desta parcial: valor ${formatarMoeda(
                 p.nota_valor_total
-              )}${p.nota_numero ? `, Nº nota ${escapeHtml(p.nota_numero)}` : ""}.</div>`
+              )}${p.nota_numero ? `, NÂº nota ${escapeHtml(p.nota_numero)}` : ""}.</div>`
             : divergente
               ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}<a class="btn secondary small" href="${linkAvisoComprador(
                   p
-                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}</div>`
+                )}" target="_blank" rel="noopener">ðŸ“± Avisar comprador</a>${renderResolucaoDivergencia(p)}</div>`
               : ""
         }
         <div class="card-meta">
           ${
             p.recebido_em
-              ? `✅ Recebido por ${escapeHtml(p.recebido_por || "—")} em ${formatarDataHora(p.recebido_em)}` +
+              ? `âœ… Recebido por ${escapeHtml(p.recebido_por || "â€”")} em ${formatarDataHora(p.recebido_em)}` +
                 (p.recebido_observacao
-                  ? `<div class="card-meta">💬 ${escapeHtml(p.recebido_observacao)} <a class="arquivo-link" href="${linkAvisoObservacaoRecebimento(
+                  ? `<div class="card-meta">ðŸ’¬ ${escapeHtml(p.recebido_observacao)} <a class="arquivo-link" href="${linkAvisoObservacaoRecebimento(
                       p
-                    )}" target="_blank" rel="noopener">📱 Enviar observação do almoxarifado pro comprador</a></div>`
+                    )}" target="_blank" rel="noopener">ðŸ“± Enviar observaÃ§Ã£o do almoxarifado pro comprador</a></div>`
                   : "") +
                 (Array.isArray(p.recebido_fotos) && p.recebido_fotos.length
                   ? `<div class="card-meta">${p.recebido_fotos
-                      .map((url, i) => `<a class="arquivo-link" href="${url}" target="_blank" rel="noopener">📷 foto ${i + 1}</a>`)
+                      .map((url, i) => `<a class="arquivo-link" href="${url}" target="_blank" rel="noopener">ðŸ“· foto ${i + 1}</a>`)
                       .join(" ")}</div>`
                   : "")
               : `<div class="recebimento-form">
-                  <label class="form-label">📦 Observação do almoxarifado sobre o recebimento (opcional — ex: avaria, embalagem violada, faltou algo)</label>
+                  <label class="form-label">ðŸ“¦ ObservaÃ§Ã£o do almoxarifado sobre o recebimento (opcional â€” ex: avaria, embalagem violada, faltou algo)</label>
                   <textarea class="input-obs-recebimento" data-parada-id="${p.id}" rows="2" placeholder="Ex: caixa chegou amassada"></textarea>
                   <input type="file" class="input-fotos-recebimento" data-parada-id="${p.id}" accept="image/*" capture="environment" multiple>
-                  <button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>
+                  <button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">âœ… Confirmar recebimento</button>
                 </div>`
           }
         </div>
@@ -2954,13 +2966,13 @@ function renderCardsHistorico(paradas) {
     .join("");
 }
 
-// Detecta divergências NOVAS entre uma verificação e outra (pra avisar por
-// voz só o que apareceu agora, não repetir o que já tinha sido avisado) —
+// Detecta divergÃªncias NOVAS entre uma verificaÃ§Ã£o e outra (pra avisar por
+// voz sÃ³ o que apareceu agora, nÃ£o repetir o que jÃ¡ tinha sido avisado) â€”
 // pensado pro app ficar aberto o dia todo numa TV/tela fixa no setor. Roda
-// numa consulta PRÓPRIA (não a lista visível/paginada), porque precisa
-// enxergar TODAS as divergências em aberto, não só a página/filtro que a
-// pessoa está olhando na hora.
-let idsHistoricoConhecidos = null; // null = ainda não verificou nenhuma vez
+// numa consulta PRÃ“PRIA (nÃ£o a lista visÃ­vel/paginada), porque precisa
+// enxergar TODAS as divergÃªncias em aberto, nÃ£o sÃ³ a pÃ¡gina/filtro que a
+// pessoa estÃ¡ olhando na hora.
+let idsHistoricoConhecidos = null; // null = ainda nÃ£o verificou nenhuma vez
 function avisarDivergenciasNovas(paradasDivergentesAtuais) {
   const idsAtuais = new Set(paradasDivergentesAtuais.map((p) => p.id));
   if (idsHistoricoConhecidos) {
@@ -2969,8 +2981,8 @@ function avisarDivergenciasNovas(paradasDivergentesAtuais) {
       .forEach((p) => {
         const pedido = p.rl_pedidos || {};
         falarAlerta(
-          `Atenção! Divergência encontrada. Comprador ${pedido.comprador_nome || "não informado"}, pedido ${
-            pedido.numero_pedido || "sem número"
+          `AtenÃ§Ã£o! DivergÃªncia encontrada. Comprador ${pedido.comprador_nome || "nÃ£o informado"}, pedido ${
+            pedido.numero_pedido || "sem nÃºmero"
           }.`
         );
       });
@@ -2991,23 +3003,31 @@ async function verificarDivergenciasNovas() {
   avisarDivergenciasNovas(data);
 }
 
-// ---------- avisos da portaria pendentes (aparecem no topo do Histórico) ----------
-let idsAvisosPortariaConhecidos = null; // null = ainda não verificou nenhuma vez
+// ---------- avisos da portaria pendentes (aparecem no topo do HistÃ³rico) ----------
+let idsAvisosPortariaConhecidos = null; // null = ainda nÃ£o verificou nenhuma vez
 let avisosPortariaPendentesCache = [];
 
 // O almoxarife selecionado (aba Recebimento CIF) pode estar amarrado a uma
-// empresa (e, só na Wehrmann, também a um setor: Uso e Consumo/Insumos/Cantina) —
-// nesse caso só vê os avisos daquela empresa/setor. Sem empresa definida no
+// empresa (e, sÃ³ na Wehrmann, tambÃ©m a um setor: Uso e Consumo/Insumos/Cantina) â€”
+// nesse caso sÃ³ vÃª os avisos daquela empresa/setor. Sem empresa definida no
 // cadastro dele, continua vendo tudo (comportamento de antes).
 function filtrarAvisosPorAlmoxarifeAtual(avisos) {
   const nomeAtual = document.getElementById("almoxarife-select-cif").value;
   const almoxarife = almoxarifesCache.find((a) => a.nome === nomeAtual);
-  if (!almoxarife || !almoxarife.empresa_nome) return avisos;
-  return avisos.filter((a) => {
-    if (a.empresa_nome !== almoxarife.empresa_nome) return false;
-    if (almoxarife.setor && a.setor !== almoxarife.setor) return false;
-    return true;
-  });
+  let resultado = avisos;
+  if (almoxarife && almoxarife.empresa_nome) {
+    resultado = resultado.filter((a) => {
+      if (a.empresa_nome !== almoxarife.empresa_nome) return false;
+      if (almoxarife.setor && a.setor !== almoxarife.setor) return false;
+      return true;
+    });
+  }
+  // Filtro manual de setor â€” independente do almoxarife escolhido, pra dar
+  // pra olhar sÃ³ um setor sem precisar trocar de pessoa (ex: alguÃ©m que
+  // enxerga a empresa toda querendo focar sÃ³ na Cantina por um instante).
+  const setorFiltro = document.getElementById("filtro-setor-cif")?.value;
+  if (setorFiltro) resultado = resultado.filter((a) => a.setor === setorFiltro);
+  return resultado;
 }
 
 async function carregarAvisosPortariaPendentes() {
@@ -3018,19 +3038,19 @@ async function carregarAvisosPortariaPendentes() {
 
   const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
 
-  // Avisa por voz só o que apareceu de novo desde a última verificação —
-  // mesmo padrão já usado pras divergências (ver avisarDivergenciasNovas).
-  // IMPORTANTE: o conjunto de "já conhecidos" usa TODOS os avisos pendentes
-  // (não só os visíveis pro almoxarife selecionado agora) — senão, trocar de
+  // Avisa por voz sÃ³ o que apareceu de novo desde a Ãºltima verificaÃ§Ã£o â€”
+  // mesmo padrÃ£o jÃ¡ usado pras divergÃªncias (ver avisarDivergenciasNovas).
+  // IMPORTANTE: o conjunto de "jÃ¡ conhecidos" usa TODOS os avisos pendentes
+  // (nÃ£o sÃ³ os visÃ­veis pro almoxarife selecionado agora) â€” senÃ£o, trocar de
   // almoxarife no mesmo aparelho (empresa/setor diferente) faz um aviso
-  // antigo, que só ficou fora do filtro até agora, parecer "novo" de novo e
-  // repete o alerta sonoro à toa toda vez que alguém troca a seleção.
+  // antigo, que sÃ³ ficou fora do filtro atÃ© agora, parecer "novo" de novo e
+  // repete o alerta sonoro Ã  toa toda vez que alguÃ©m troca a seleÃ§Ã£o.
   const idsAtuais = new Set(data.map((a) => a.id));
   if (idsAvisosPortariaConhecidos) {
     avisosVisiveis
       .filter((a) => !idsAvisosPortariaConhecidos.has(a.id))
       .forEach((a) => {
-        falarAlerta(`Atenção! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "não informado"}.`);
+        falarAlerta(`AtenÃ§Ã£o! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "nÃ£o informado"}.`);
       });
   }
   idsAvisosPortariaConhecidos = idsAtuais;
@@ -3059,55 +3079,55 @@ function renderAvisosPortariaPendentes() {
       return `
       <div class="aviso-portaria-card">
         <div>
-          🚪 ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
-          ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
-          ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
-          · ${formatarDataHora(a.criado_em)}
+          ðŸšª ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` Â· ${escapeHtml(a.setor)}` : ""}</span> ` : ""}<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor nÃ£o informado")}</strong>
+          ${a.fornecedor_cnpj ? ` Â· CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
+          ${a.pedido_numero ? ` Â· NÂº ${escapeHtml(a.pedido_numero)}` : ""}
+          Â· ${formatarDataHora(a.criado_em)}
           ${
             a.nota_arquivo_url
-              ? `<div class="card-meta">📎 Nota já lida pela portaria${
+              ? `<div class="card-meta">ðŸ“Ž Nota jÃ¡ lida pela portaria${
                   a.pedido_ids && a.pedido_ids.length
-                    ? ` e já relacionada a ${a.pedido_ids.length > 1 ? `${a.pedido_ids.length} pedidos` : "um pedido"}`
+                    ? ` e jÃ¡ relacionada a ${a.pedido_ids.length > 1 ? `${a.pedido_ids.length} pedidos` : "um pedido"}`
                     : ""
-                } — <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a> — a conferência libera assim que o acesso for liberado.</div>`
+                } â€” <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a> â€” a conferÃªncia libera assim que o acesso for liberado.</div>`
               : ""
           }
           ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
         </div>
         <div style="display:flex; gap:0.5rem; flex-shrink:0;">
-          <button type="button" class="btn secondary small" data-dispensar-aviso-portaria="${a.id}">✅ Liberar acesso</button>
+          <button type="button" class="btn secondary small" data-dispensar-aviso-portaria="${a.id}">âœ… Liberar acesso</button>
         </div>
       </div>`;
     })
     .join("");
 }
 
-// ---------- avisos liberados, aguardando conferência ----------
-// A conferência só fica disponível DEPOIS de liberar o acesso — de propósito
-// (ordem obrigatória: primeiro libera o caminhão, a conferência da nota é
+// ---------- avisos liberados, aguardando conferÃªncia ----------
+// A conferÃªncia sÃ³ fica disponÃ­vel DEPOIS de liberar o acesso â€” de propÃ³sito
+// (ordem obrigatÃ³ria: primeiro libera o caminhÃ£o, a conferÃªncia da nota Ã©
 // feita com calma depois). Some da lista assim que os pedidos relacionados
 // forem conferidos/marcados como recebidos.
 let avisosLiberadosPendentesCache = [];
-// aviso.id -> lista de pedidos candidatos (com texto de busca já pronto),
+// aviso.id -> lista de pedidos candidatos (com texto de busca jÃ¡ pronto),
 // usado pra filtrar sem precisar reconsultar o banco a cada tecla digitada.
 let candidatosPorAvisoSemPedido = {};
 
 async function carregarAvisosLiberadosPendentesConferencia() {
   const el = document.getElementById("avisos-liberados-aguardando-conferencia");
   if (!el) return;
-  // Não filtra por pedido_ids aqui: um aviso pode ter sido liberado sem
-  // nenhum pedido vinculado (a portaria não achou pedido pendente do
-  // fornecedor, ou não escolheu nenhum) — esses precisam continuar
-  // aparecendo pro almoxarife vincular manualmente, senão somem sem deixar
-  // rastro (foi exatamente o bug que motivou essa seção existir).
+  // NÃ£o filtra por pedido_ids aqui: um aviso pode ter sido liberado sem
+  // nenhum pedido vinculado (a portaria nÃ£o achou pedido pendente do
+  // fornecedor, ou nÃ£o escolheu nenhum) â€” esses precisam continuar
+  // aparecendo pro almoxarife vincular manualmente, senÃ£o somem sem deixar
+  // rastro (foi exatamente o bug que motivou essa seÃ§Ã£o existir).
   const { data, error } = await comTimeout(
     db.from("rl_avisos_portaria").select("*").eq("lido", true).order("lido_em", { ascending: false }).limit(50)
   );
   if (error || !data) return;
 
   const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
-  // pedido_ids null = nunca vinculado ainda (precisa de ação); [] = almoxarife
-  // já dispensou explicitamente ("não tem pedido pra conferir aqui").
+  // pedido_ids null = nunca vinculado ainda (precisa de aÃ§Ã£o); [] = almoxarife
+  // jÃ¡ dispensou explicitamente ("nÃ£o tem pedido pra conferir aqui").
   const comPedidos = avisosVisiveis.filter((a) => a.pedido_ids && a.pedido_ids.length);
   const semPedidos = avisosVisiveis.filter((a) => a.pedido_ids == null);
 
@@ -3117,10 +3137,10 @@ async function carregarAvisosLiberadosPendentesConferencia() {
     const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("id").eq("status", "pendente").in("id", idsPedidos));
     const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
 
-    // Se algum dos pedidos ainda pendentes já teve uma entrega PARCIAL
-    // registrada antes (voltou pra fila de propósito, esperando o resto),
-    // sinaliza isso no card — senão o aviso continua aparecendo aqui igual
-    // a um que ninguém tocou ainda, e parece que "não saiu do lugar".
+    // Se algum dos pedidos ainda pendentes jÃ¡ teve uma entrega PARCIAL
+    // registrada antes (voltou pra fila de propÃ³sito, esperando o resto),
+    // sinaliza isso no card â€” senÃ£o o aviso continua aparecendo aqui igual
+    // a um que ninguÃ©m tocou ainda, e parece que "nÃ£o saiu do lugar".
     const { data: paradasParciais } = await comTimeout(
       db.from("rl_rota_paradas").select("pedido_id").eq("entrega_parcial", true).in("pedido_id", [...idsPendentes])
     );
@@ -3133,11 +3153,11 @@ async function carregarAvisosLiberadosPendentesConferencia() {
 
   let semPedidosComCandidatos = [];
   if (semPedidos.length) {
-    // Não sugere mais uma LISTA automática (ficava grande e poluía o card) —
+    // NÃ£o sugere mais uma LISTA automÃ¡tica (ficava grande e poluÃ­a o card) â€”
     // o almoxarife busca e vincula manualmente. Mas continua valendo dar uma
-    // dica discreta (no máximo 2 pedidos) quando o fornecedor bate — sem
-    // isso, um pedido que já está no sistema mas com nome de fornecedor um
-    // pouco diferente na nota parecia "não vinculável" à toa.
+    // dica discreta (no mÃ¡ximo 2 pedidos) quando o fornecedor bate â€” sem
+    // isso, um pedido que jÃ¡ estÃ¡ no sistema mas com nome de fornecedor um
+    // pouco diferente na nota parecia "nÃ£o vinculÃ¡vel" Ã  toa.
     const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
     semPedidosComCandidatos = semPedidos.map((a) => {
       const candidatos = a.empresa_nome ? (pendentesGeral || []).filter((p) => p.empresa_nome === a.empresa_nome) : pendentesGeral || [];
@@ -3154,26 +3174,26 @@ function renderAvisosLiberadosPendentesConferencia() {
   const el = document.getElementById("avisos-liberados-aguardando-conferencia");
   if (!el) return;
   if (!avisosLiberadosPendentesCache.length) {
-    el.innerHTML = `<p class="empty-state">Nenhum acesso liberado aguardando conferência.</p>`;
+    el.innerHTML = `<p class="empty-state">Nenhum acesso liberado aguardando conferÃªncia.</p>`;
     return;
   }
   el.innerHTML = avisosLiberadosPendentesCache
     .map((a) => {
-      const cabecalho = `✅ ${
-        a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""
-      }<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong> · liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(
-        a.lido_por || "—"
+      const cabecalho = `âœ… ${
+        a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` Â· ${escapeHtml(a.setor)}` : ""}</span> ` : ""
+      }<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor nÃ£o informado")}</strong> Â· liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(
+        a.lido_por || "â€”"
       )}${
         a.nota_arquivo_url
-          ? ` · <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a>`
-          : ` · <span class="hint">nota não anexada pela portaria</span>`
+          ? ` Â· <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a>`
+          : ` Â· <span class="hint">nota nÃ£o anexada pela portaria</span>`
       }`;
 
       if (a._candidatos) {
         // Guarda os candidatos (com o resumo dos produtos e o texto de busca
-        // já calculados) num mapa à parte — não renderiza a lista inteira de
-        // cara (sem "sugestão" pré-carregada poluindo o card); só aparece o
-        // que a pessoa efetivamente procurar (ou o que bater como sugestão).
+        // jÃ¡ calculados) num mapa Ã  parte â€” nÃ£o renderiza a lista inteira de
+        // cara (sem "sugestÃ£o" prÃ©-carregada poluindo o card); sÃ³ aparece o
+        // que a pessoa efetivamente procurar (ou o que bater como sugestÃ£o).
         const candidatosComResumo = a._candidatos.map((p) => {
           const itensArr = Array.isArray(p.itens) ? p.itens : p.itens ? [p.itens] : [];
           const resumoItens = itensArr
@@ -3192,35 +3212,35 @@ function renderAvisosLiberadosPendentesConferencia() {
         const sugestoesHtml = (a._sugestoes || [])
           .map((pSemResumo) => {
             const p = idsResumo.get(pSemResumo.id) || pSemResumo;
-            const resumoCurto = p._resumoItens && p._resumoItens.length > 80 ? `${p._resumoItens.slice(0, 80)}…` : p._resumoItens;
+            const resumoCurto = p._resumoItens && p._resumoItens.length > 80 ? `${p._resumoItens.slice(0, 80)}â€¦` : p._resumoItens;
             return `
             <div class="sugestao-pedido-aviso">
-              💡 Pode ser o pedido Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(
+              ðŸ’¡ Pode ser o pedido NÂº ${escapeHtml(p.numero_pedido || "sem nÃºmero")} â€” ${escapeHtml(p.fornecedor_nome || "")} â€” ${formatarMoeda(
               p.valor_total
-            )}${resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""}
+            )}${resumoCurto ? ` â€” ${escapeHtml(resumoCurto)}` : ""}
               <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
-              <button type="button" class="link-btn" data-usar-sugestao="${a.id}" data-pedido-sugerido="${p.id}">é esse, conferir</button>
+              <button type="button" class="link-btn" data-usar-sugestao="${a.id}" data-pedido-sugerido="${p.id}">Ã© esse, conferir</button>
             </div>`;
           })
           .join("");
         return `
         <div class="aviso-portaria-card aviso-sem-pedido">
-          <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda.</span></div>
+          <div>${cabecalho}<br><span class="hint">NinguÃ©m vinculou um pedido a este aviso ainda.</span></div>
           ${sugestoesHtml}
           <label class="form-label">Vincular pedido manualmente</label>
-          <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="🔎 Buscar por número, fornecedor ou produto...">
+          <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="ðŸ”Ž Buscar por nÃºmero, fornecedor ou produto...">
           <div class="resultado-busca-pedido" data-aviso-id="${a.id}"></div>
-          <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>
+          <button type="button" class="btn small" data-conferir-vinculando="${a.id}">ðŸ” Conferir selecionados</button>
           <details class="anexar-pedido-novo">
-            <summary class="link-btn">📎 Não achou o pedido? Anexe o arquivo (foto ou PDF) dele aqui</summary>
+            <summary class="link-btn">ðŸ“Ž NÃ£o achou o pedido? Anexe o arquivo (foto ou PDF) dele aqui</summary>
             <label>
               Arquivo do pedido de compra
               <input type="file" class="anexo-pedido-novo" data-aviso-id="${a.id}" accept="image/*,application/pdf" capture="environment">
             </label>
-            <button type="button" class="btn secondary small" data-ler-pedido-novo="${a.id}">🤖 Ler pedido com IA e vincular</button>
+            <button type="button" class="btn secondary small" data-ler-pedido-novo="${a.id}">ðŸ¤– Ler pedido com IA e vincular</button>
             <p class="feedback" data-feedback-pedido-novo="${a.id}"></p>
           </details>
-          <button type="button" class="link-btn" data-dispensar-sem-pedido="${a.id}">Não tem pedido pra conferir aqui</button>
+          <button type="button" class="link-btn" data-dispensar-sem-pedido="${a.id}">NÃ£o tem pedido pra conferir aqui</button>
         </div>`;
       }
 
@@ -3228,19 +3248,19 @@ function renderAvisosLiberadosPendentesConferencia() {
       <div class="aviso-portaria-card">
         <div>${cabecalho}${
         a._temParcial
-          ? `<br><span class="hint">📦 Já teve uma entrega parcial registrada aqui — confira o restante quando chegar (anexe a nota nova, não reaproveite a antiga).</span>`
+          ? `<br><span class="hint">ðŸ“¦ JÃ¡ teve uma entrega parcial registrada aqui â€” confira o restante quando chegar (anexe a nota nova, nÃ£o reaproveite a antiga).</span>`
           : ""
       }</div>
         <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
-        a._temParcial ? "📦 Conferir o restante" : a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
+        a._temParcial ? "ðŸ“¦ Conferir o restante" : a.nota_arquivo_url ? "âœ… Ver conferÃªncia" : "ðŸ” Conferir"
       }</button>
       </div>`;
     })
     .join("");
 }
 
-// Busca manual do pedido pra vincular — não mostra nenhuma sugestão de cara
-// (só depois que a pessoa digita algo com 2+ caracteres), pra não poluir o
+// Busca manual do pedido pra vincular â€” nÃ£o mostra nenhuma sugestÃ£o de cara
+// (sÃ³ depois que a pessoa digita algo com 2+ caracteres), pra nÃ£o poluir o
 // card com uma lista grande de candidatos que talvez nem sejam o certo.
 const MAX_RESULTADOS_BUSCA_PEDIDO = 8;
 document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("input", (e) => {
@@ -3263,13 +3283,13 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
   }
   resultadoEl.innerHTML = encontrados
     .map((p) => {
-      const resumoCurto = p._resumoItens.length > 60 ? `${p._resumoItens.slice(0, 60)}…` : p._resumoItens;
+      const resumoCurto = p._resumoItens.length > 60 ? `${p._resumoItens.slice(0, 60)}â€¦` : p._resumoItens;
       return `
       <div class="resultado-busca-item">
         <label class="checkbox-line">
           <input type="checkbox" value="${p.id}">
-          Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
-        resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
+          NÂº ${escapeHtml(p.numero_pedido || "sem nÃºmero")} â€” ${escapeHtml(p.fornecedor_nome || "")} â€” ${formatarMoeda(p.valor_total)}${
+        resumoCurto ? ` â€” ${escapeHtml(resumoCurto)}` : ""
       }
         </label>
         <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
@@ -3278,9 +3298,9 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
     .join("");
 });
 
-// Grava o vínculo aviso -> pedido(s) e já abre a conferência — usado tanto
+// Grava o vÃ­nculo aviso -> pedido(s) e jÃ¡ abre a conferÃªncia â€” usado tanto
 // pela busca manual (um ou mais pedidos marcados) quanto pelo atalho de
-// sugestão "é esse, conferir" (um só, direto).
+// sugestÃ£o "Ã© esse, conferir" (um sÃ³, direto).
 async function vincularPedidosEConferir(avisoId, ids) {
   const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
   if (!aviso) return;
@@ -3305,7 +3325,7 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
     if (!aviso) return;
     const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids).eq("status", "pendente"));
     if (error || !pedidos || !pedidos.length) {
-      mostrarAviso("Erro ao buscar o(s) pedido(s): " + (error ? error.message : "já foram conferidos ou não encontrados"));
+      mostrarAviso("Erro ao buscar o(s) pedido(s): " + (error ? error.message : "jÃ¡ foram conferidos ou nÃ£o encontrados"));
       carregarAvisosLiberadosPendentesConferencia();
       return;
     }
@@ -3358,14 +3378,14 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
         );
         if (existente && existente.length) {
           throw new Error(
-            `Pedido Nº ${extraido.numero_pedido} já existe no sistema — busque por ele no campo de busca acima em vez de anexar de novo.`
+            `Pedido NÂº ${extraido.numero_pedido} jÃ¡ existe no sistema â€” busque por ele no campo de busca acima em vez de anexar de novo.`
           );
         }
       }
 
-      // Acha a empresa pelo CNPJ/nome lido no documento; se a IA não achar,
-      // cai pra empresa já registrada no próprio aviso (a portaria já
-      // informou qual é na hora de avisar a chegada).
+      // Acha a empresa pelo CNPJ/nome lido no documento; se a IA nÃ£o achar,
+      // cai pra empresa jÃ¡ registrada no prÃ³prio aviso (a portaria jÃ¡
+      // informou qual Ã© na hora de avisar a chegada).
       const cnpjLido = apenasDigitos(extraido.empresa_compradora_cnpj);
       let empresa = cnpjLido ? empresasCache.find((e) => apenasDigitos(e.cnpj) === cnpjLido) : null;
       if (!empresa && extraido.empresa_compradora_nome) {
@@ -3376,11 +3396,11 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
         empresa = empresasCache.find((e) => e.nome === aviso.empresa_nome);
       }
 
-      // Acha ou cria o comprador pelo nome lido — mesmo padrão do robô/import
-      // automático, sem pedir pra digitar de novo um nome que já veio no
-      // próprio documento.
+      // Acha ou cria o comprador pelo nome lido â€” mesmo padrÃ£o do robÃ´/import
+      // automÃ¡tico, sem pedir pra digitar de novo um nome que jÃ¡ veio no
+      // prÃ³prio documento.
       const nomeSolicitante = (extraido.solicitante_nome || "").trim();
-      let compradorNome = "Importação automática";
+      let compradorNome = "ImportaÃ§Ã£o automÃ¡tica";
       if (nomeSolicitante) {
         const existenteComprador = compradoresCache.find((c) => c.nome.trim().toLowerCase() === nomeSolicitante.toLowerCase());
         if (existenteComprador) {
@@ -3417,8 +3437,8 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
           condicao_pagamento_codigo: extraido.condicao_pagamento_codigo || null,
           urgente: false,
           retirar_transportadora: false,
-          // Chegou por aqui (conferência CIF, aviso da portaria) — por
-          // definição é entrega do fornecedor, não precisa de coleta.
+          // Chegou por aqui (conferÃªncia CIF, aviso da portaria) â€” por
+          // definiÃ§Ã£o Ã© entrega do fornecedor, nÃ£o precisa de coleta.
           frete_fob: false,
           status: "pendente",
         })
@@ -3429,7 +3449,7 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
       const { error: errAviso } = await db.from("rl_avisos_portaria").update({ pedido_ids: [novoPedido.id] }).eq("id", avisoId);
       if (errAviso) throw errAviso;
 
-      mostrarAviso(`Pedido Nº ${novoPedido.numero_pedido || "sem número"} cadastrado e vinculado a este aviso.`);
+      mostrarAviso(`Pedido NÂº ${novoPedido.numero_pedido || "sem nÃºmero"} cadastrado e vinculado a este aviso.`);
       await iniciarConferenciaCif([novoPedido], notaPreLidaDoAviso(aviso));
     } catch (err) {
       feedback.textContent = "Erro: " + err.message;
@@ -3442,14 +3462,14 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
 
   const btnDispensarSemPedido = e.target.closest("button[data-dispensar-sem-pedido]");
   if (btnDispensarSemPedido) {
-    // Mesmo padrão de confirmação em dois cliques do resto do app — dispensar
+    // Mesmo padrÃ£o de confirmaÃ§Ã£o em dois cliques do resto do app â€” dispensar
     // sem vincular pedido nenhum tira o aviso da lista pra sempre.
     if (!btnDispensarSemPedido.dataset.confirmando) {
       btnDispensarSemPedido.dataset.confirmando = "1";
       btnDispensarSemPedido.textContent = "Confirma? Clique de novo";
       setTimeout(() => {
         delete btnDispensarSemPedido.dataset.confirmando;
-        btnDispensarSemPedido.textContent = "Não tem pedido pra conferir aqui";
+        btnDispensarSemPedido.textContent = "NÃ£o tem pedido pra conferir aqui";
       }, 4000);
       return;
     }
@@ -3466,10 +3486,10 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
 });
 
 // Arquiva de uma vez os avisos "sem pedido vinculado" mais antigos que 7
-// dias — pedido do Danilo (2026-09-22): a tela ficou poluída de avisos de
-// uma época em que o pedido ainda não era anexado no sistema, então nunca
-// vão achar um pedido pra vincular. Em vez de dispensar um por um, arquiva
-// todos de uma vez (mesmo efeito do botão individual: pedido_ids vira []).
+// dias â€” pedido do Danilo (2026-09-22): a tela ficou poluÃ­da de avisos de
+// uma Ã©poca em que o pedido ainda nÃ£o era anexado no sistema, entÃ£o nunca
+// vÃ£o achar um pedido pra vincular. Em vez de dispensar um por um, arquiva
+// todos de uma vez (mesmo efeito do botÃ£o individual: pedido_ids vira []).
 document.getElementById("btn-arquivar-sem-pedido-antigos").addEventListener("click", async (e) => {
   const btn = e.target;
   const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -3483,12 +3503,12 @@ document.getElementById("btn-arquivar-sem-pedido-antigos").addEventListener("cli
     btn.textContent = `Confirma arquivar ${antigos.length}? Clique de novo`;
     setTimeout(() => {
       delete btn.dataset.confirmando;
-      btn.textContent = "🗄️ Arquivar antigos sem pedido (+7 dias)";
+      btn.textContent = "ðŸ—„ï¸ Arquivar antigos sem pedido (+7 dias)";
     }, 4000);
     return;
   }
   delete btn.dataset.confirmando;
-  btn.textContent = "🗄️ Arquivar antigos sem pedido (+7 dias)";
+  btn.textContent = "ðŸ—„ï¸ Arquivar antigos sem pedido (+7 dias)";
   const { error } = await db
     .from("rl_avisos_portaria")
     .update({ pedido_ids: [] })
@@ -3502,7 +3522,7 @@ document.getElementById("btn-arquivar-sem-pedido-antigos").addEventListener("cli
 });
 
 // Monta o objeto "notaPreLida" (mesmo formato usado por abrirModalConcluir)
-// a partir de um aviso que já veio com a nota lida pela portaria.
+// a partir de um aviso que jÃ¡ veio com a nota lida pela portaria.
 function notaPreLidaDoAviso(aviso) {
   if (!aviso.nota_arquivo_url) return null;
   return {
@@ -3518,9 +3538,9 @@ function notaPreLidaDoAviso(aviso) {
   };
 }
 
-// Único botão possível num aviso ainda pendente: liberar o acesso. A
-// conferência (ver mais abaixo) só fica disponível DEPOIS disso, de
-// propósito — ordem obrigatória, não é só uma sugestão.
+// Ãšnico botÃ£o possÃ­vel num aviso ainda pendente: liberar o acesso. A
+// conferÃªncia (ver mais abaixo) sÃ³ fica disponÃ­vel DEPOIS disso, de
+// propÃ³sito â€” ordem obrigatÃ³ria, nÃ£o Ã© sÃ³ uma sugestÃ£o.
 document.getElementById("avisos-portaria-pendentes").addEventListener("click", async (e) => {
   const btnDispensar = e.target.closest("button[data-dispensar-aviso-portaria]");
   if (!btnDispensar) return;
@@ -3537,28 +3557,28 @@ document.getElementById("avisos-portaria-pendentes").addEventListener("click", a
   carregarAvisosLiberadosPendentesConferencia();
 });
 
-// Cria uma "rota" mínima (só pra essa entrega) e abre o MESMO modal de
-// conferência que o motorista usa pra concluir uma parada — reaproveita 100%
-// da leitura de nota por IA e da comparação de itens/valor/CNPJ/condição de
-// pagamento, sem duplicar nada disso só porque dessa vez quem confere é o
-// almoxarifado (entrega CIF), não o motorista numa rota de coleta.
-// Junta vários pedidos pendentes num só "pedido" pra fins de comparação —
-// usado quando uma nota só cobre mais de um pedido do mesmo fornecedor
+// Cria uma "rota" mÃ­nima (sÃ³ pra essa entrega) e abre o MESMO modal de
+// conferÃªncia que o motorista usa pra concluir uma parada â€” reaproveita 100%
+// da leitura de nota por IA e da comparaÃ§Ã£o de itens/valor/CNPJ/condiÃ§Ã£o de
+// pagamento, sem duplicar nada disso sÃ³ porque dessa vez quem confere Ã© o
+// almoxarifado (entrega CIF), nÃ£o o motorista numa rota de coleta.
+// Junta vÃ¡rios pedidos pendentes num sÃ³ "pedido" pra fins de comparaÃ§Ã£o â€”
+// usado quando uma nota sÃ³ cobre mais de um pedido do mesmo fornecedor
 // (soma o valor esperado, junta os itens de todos).
 function mesclarPedidosParaConferencia(pedidos) {
   if (pedidos.length === 1) return pedidos[0];
   return {
     ...pedidos[0],
-    numero_pedido: pedidos.map((p) => p.numero_pedido || "s/ nº").join(" + "),
+    numero_pedido: pedidos.map((p) => p.numero_pedido || "s/ nÂº").join(" + "),
     valor_total: pedidos.reduce((soma, p) => soma + (Number(p.valor_total) || 0), 0),
     itens: pedidos.flatMap((p) => (Array.isArray(p.itens) ? p.itens : [])),
   };
 }
 
-// "pedidos" é sempre um array — normalmente com 1 item, mas pode ter mais de
-// um quando o fornecedor manda uma nota só cobrindo vários pedidos juntos.
+// "pedidos" Ã© sempre um array â€” normalmente com 1 item, mas pode ter mais de
+// um quando o fornecedor manda uma nota sÃ³ cobrindo vÃ¡rios pedidos juntos.
 // Cria uma parada por pedido real (pra cada um ficar registrado certinho no
-// Histórico), mas mostra/compara tudo junto numa conferência só.
+// HistÃ³rico), mas mostra/compara tudo junto numa conferÃªncia sÃ³.
 async function iniciarConferenciaCif(pedidos, notaPreLida) {
   const almoxarife = document.getElementById("almoxarife-select-cif").value;
   try {
@@ -3586,7 +3606,7 @@ async function iniciarConferenciaCif(pedidos, notaPreLida) {
       notaPreLida
     );
   } catch (err) {
-    mostrarAviso("Erro ao iniciar conferência: " + err.message);
+    mostrarAviso("Erro ao iniciar conferÃªncia: " + err.message);
   }
 }
 
@@ -3602,8 +3622,8 @@ async function carregarPedidosCifPendentes() {
   if (numeroFiltro) query = query.ilike("numero_pedido", `%${numeroFiltro}%`);
   if (fornecedorFiltro) query = query.ilike("fornecedor_nome", `%${fornecedorFiltro}%`);
 
-  // Mesma regra dos avisos: almoxarife com empresa cadastrada só vê pedidos
-  // daquela empresa (o pedido não tem "setor", só a nota/aviso tem).
+  // Mesma regra dos avisos: almoxarife com empresa cadastrada sÃ³ vÃª pedidos
+  // daquela empresa (o pedido nÃ£o tem "setor", sÃ³ a nota/aviso tem).
   const nomeAtual = document.getElementById("almoxarife-select-cif").value;
   const almoxarife = almoxarifesCache.find((a) => a.nome === nomeAtual);
   if (almoxarife && almoxarife.empresa_nome) query = query.eq("empresa_nome", almoxarife.empresa_nome);
@@ -3630,19 +3650,19 @@ function renderPedidosCifPendentes() {
         ${pedidosCifPendentesCache
           .map(
             (p) => `<tr>
-              <td>${escapeHtml(p.numero_pedido || "—")}</td>
-              <td>${escapeHtml(p.empresa_nome || "—")}</td>
-              <td>${escapeHtml(p.fornecedor_nome || "—")}</td>
-              <td>${escapeHtml(p.comprador_nome || "—")}</td>
+              <td>${escapeHtml(p.numero_pedido || "â€”")}</td>
+              <td>${escapeHtml(p.empresa_nome || "â€”")}</td>
+              <td>${escapeHtml(p.fornecedor_nome || "â€”")}</td>
+              <td>${escapeHtml(p.comprador_nome || "â€”")}</td>
               <td>${formatarMoeda(p.valor_total)}</td>
-              <td><button type="button" class="btn small" data-conferir-pedido-cif-geral="${p.id}">🔍 Conferir</button></td>
+              <td><button type="button" class="btn small" data-conferir-pedido-cif-geral="${p.id}">ðŸ” Conferir</button></td>
               <td><input type="checkbox" class="chk-recebido-terceiro" data-id="${p.id}"></td>
             </tr>`
           )
           .join("")}
       </tbody>
     </table>
-    <p class="hint">Marque o(s) pedido(s) recebido(s) fora do almoxarifado (sem nota fiscal pra conferir aqui) e use "Recebido por terceiro" acima — marca como recebido sem passar pela comparação de divergência.</p>`;
+    <p class="hint">Marque o(s) pedido(s) recebido(s) fora do almoxarifado (sem nota fiscal pra conferir aqui) e use "Recebido por terceiro" acima â€” marca como recebido sem passar pela comparaÃ§Ã£o de divergÃªncia.</p>`;
 }
 
 document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click", async (e) => {
@@ -3665,27 +3685,27 @@ btnRecebidoTerceiroSelecionados.addEventListener("click", async () => {
     mostrarAviso("Selecione ao menos um pedido na lista.");
     return;
   }
-  // Mesmo padrão de confirmação em dois cliques já usado no resto do app
-  // (ex: "Excluir" no Histórico) — marcar como recebido sem conferência não
-  // tem volta fácil, então evita clique acidental.
+  // Mesmo padrÃ£o de confirmaÃ§Ã£o em dois cliques jÃ¡ usado no resto do app
+  // (ex: "Excluir" no HistÃ³rico) â€” marcar como recebido sem conferÃªncia nÃ£o
+  // tem volta fÃ¡cil, entÃ£o evita clique acidental.
   if (!btnRecebidoTerceiroSelecionados.dataset.confirmando) {
     btnRecebidoTerceiroSelecionados.dataset.confirmando = "1";
     btnRecebidoTerceiroSelecionados.textContent = `Confirma ${ids.length} pedido(s)? Clique de novo`;
     setTimeout(() => {
       delete btnRecebidoTerceiroSelecionados.dataset.confirmando;
-      btnRecebidoTerceiroSelecionados.textContent = "🤝 Recebido por terceiro (selecionados)";
+      btnRecebidoTerceiroSelecionados.textContent = "ðŸ¤ Recebido por terceiro (selecionados)";
     }, 4000);
     return;
   }
   delete btnRecebidoTerceiroSelecionados.dataset.confirmando;
-  btnRecebidoTerceiroSelecionados.textContent = "🤝 Recebido por terceiro (selecionados)";
+  btnRecebidoTerceiroSelecionados.textContent = "ðŸ¤ Recebido por terceiro (selecionados)";
   await marcarRecebidoPorTerceiro(ids);
 });
 
-// Registra o recebimento sem nenhuma conferência de nota — cria a mesma rota
-// "virtual" usada na conferência normal (só pra manter um registro no
-// Histórico), mas já marca concluído na hora, sem divergência nenhuma (não
-// há nota pra comparar). Aceita um ou mais pedidos de uma vez (seleção via
+// Registra o recebimento sem nenhuma conferÃªncia de nota â€” cria a mesma rota
+// "virtual" usada na conferÃªncia normal (sÃ³ pra manter um registro no
+// HistÃ³rico), mas jÃ¡ marca concluÃ­do na hora, sem divergÃªncia nenhuma (nÃ£o
+// hÃ¡ nota pra comparar). Aceita um ou mais pedidos de uma vez (seleÃ§Ã£o via
 // checkbox na lista geral).
 async function marcarRecebidoPorTerceiro(pedidoIds) {
   const pedidos = pedidosCifPendentesCache.filter((p) => pedidoIds.includes(p.id));
@@ -3737,10 +3757,10 @@ document.getElementById("btn-atualizar-recebimento-cif").addEventListener("click
 });
 
 // Preenche os filtros de empresa/comprador (dropdown) a partir de TODOS os
-// pedidos já cadastrados — não só da página atual do histórico — pra sempre
-// oferecer a lista completa de opções, mesmo filtrando por algo raro/antigo.
-// Só é chamado ao abrir a aba (não a cada atualização de 1 min), já que essas
-// opções mudam bem devagar.
+// pedidos jÃ¡ cadastrados â€” nÃ£o sÃ³ da pÃ¡gina atual do histÃ³rico â€” pra sempre
+// oferecer a lista completa de opÃ§Ãµes, mesmo filtrando por algo raro/antigo.
+// SÃ³ Ã© chamado ao abrir a aba (nÃ£o a cada atualizaÃ§Ã£o de 1 min), jÃ¡ que essas
+// opÃ§Ãµes mudam bem devagar.
 async function carregarFiltrosHistorico() {
   const { data, error } = await comTimeout(db.from("rl_pedidos").select("empresa_nome, comprador_nome"));
   if (error || !data) return;
@@ -3760,10 +3780,10 @@ async function carregarFiltrosHistorico() {
   if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
 }
 
-// Busca só a página atual, já filtrada, direto no banco — nunca baixa o
-// histórico inteiro. Por isso qualquer filtro (número, empresa, comprador,
-// fornecedor, data, só-divergentes) sempre alcança TODO o histórico, não
-// importa o quão antigo o registro seja nem quantos existam no total.
+// Busca sÃ³ a pÃ¡gina atual, jÃ¡ filtrada, direto no banco â€” nunca baixa o
+// histÃ³rico inteiro. Por isso qualquer filtro (nÃºmero, empresa, comprador,
+// fornecedor, data, sÃ³-divergentes) sempre alcanÃ§a TODO o histÃ³rico, nÃ£o
+// importa o quÃ£o antigo o registro seja nem quantos existam no total.
 async function loadHistorico() {
   const el = document.getElementById("lista-historico");
   const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim();
@@ -3782,9 +3802,9 @@ async function loadHistorico() {
     dataFim ||
     somenteDivergentesHistorico
   );
-  // Filtrar por uma coluna do pedido (número/empresa/comprador/fornecedor)
-  // exige "!inner" no embed — sem isso o Supabase filtra só o que aparece
-  // dentro de rl_pedidos, mas não restringe quais paradas voltam.
+  // Filtrar por uma coluna do pedido (nÃºmero/empresa/comprador/fornecedor)
+  // exige "!inner" no embed â€” sem isso o Supabase filtra sÃ³ o que aparece
+  // dentro de rl_pedidos, mas nÃ£o restringe quais paradas voltam.
   const precisaInner = numeroFiltro || empresaFiltro || compradorFiltro || fornecedorFiltro;
   let query = db
     .from("rl_rota_paradas")
@@ -3792,7 +3812,7 @@ async function loadHistorico() {
     .eq("status", "concluida")
     .not("concluido_em", "is", null);
 
-  // "Até" inclui o dia inteiro (23:59:59), não só a meia-noite.
+  // "AtÃ©" inclui o dia inteiro (23:59:59), nÃ£o sÃ³ a meia-noite.
   if (dataInicio) query = query.gte("concluido_em", `${dataInicio}T00:00:00`);
   if (dataFim) query = query.lte("concluido_em", `${dataFim}T23:59:59`);
   if (numeroFiltro) query = query.ilike("rl_pedidos.numero_pedido", `%${numeroFiltro}%`);
@@ -3811,23 +3831,23 @@ async function loadHistorico() {
 
   const { data, error, count } = await comTimeout(query);
   if (error) {
-    el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
+    el.innerHTML = `<p class="empty-state">Erro ao carregar histÃ³rico.</p>`;
     return;
   }
 
-  // Se a página pedida ficou além do total (ex: um filtro novo reduziu o
-  // total de páginas), volta pra última página válida e busca de novo.
+  // Se a pÃ¡gina pedida ficou alÃ©m do total (ex: um filtro novo reduziu o
+  // total de pÃ¡ginas), volta pra Ãºltima pÃ¡gina vÃ¡lida e busca de novo.
   const totalPaginas = Math.max(1, Math.ceil((count || 0) / ITENS_POR_PAGINA_HISTORICO));
   if (paginaHistoricoAtual > totalPaginas) {
     paginaHistoricoAtual = totalPaginas;
     return loadHistorico();
   }
 
-  // Não redesenha a tela se alguém estiver digitando algo no Histórico agora
-  // (ex: a justificativa da divergência, ou a observação do almoxarifado) —
-  // sem isso, o refresh automático de 1 em 1 minuto podia cair bem no meio
+  // NÃ£o redesenha a tela se alguÃ©m estiver digitando algo no HistÃ³rico agora
+  // (ex: a justificativa da divergÃªncia, ou a observaÃ§Ã£o do almoxarifado) â€”
+  // sem isso, o refresh automÃ¡tico de 1 em 1 minuto podia cair bem no meio
   // de um texto mais longo (que demora mais pra digitar) e apagar tudo,
-  // porque redesenhar a lista destrói e recria a caixinha de texto.
+  // porque redesenhar a lista destrÃ³i e recria a caixinha de texto.
   const elementoAtivo = document.activeElement;
   const digitandoNoHistorico =
     elementoAtivo && elementoAtivo.matches && elementoAtivo.matches(".input-resolucao, .input-obs-recebimento");
@@ -3916,11 +3936,11 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
   } catch (err) {
     mostrarAviso("Erro ao confirmar recebimento: " + err.message);
     btn.disabled = false;
-    btn.textContent = "✅ Confirmar recebimento";
+    btn.textContent = "âœ… Confirmar recebimento";
   }
 });
 
-// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"/"Pedidos disponíveis"
+// mesmo padrÃ£o de confirmaÃ§Ã£o por duplo clique usado em "Meus pedidos"/"Pedidos disponÃ­veis"
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-excluir-historico]");
   if (!btn) return;
@@ -3971,7 +3991,7 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
   }
 });
 
-// ---------- botões de atualizar (dados podem mudar por outro comprador/motorista usando o site ao mesmo tempo) ----------
+// ---------- botÃµes de atualizar (dados podem mudar por outro comprador/motorista usando o site ao mesmo tempo) ----------
 document.getElementById("btn-atualizar-comprador").addEventListener("click", loadMeusPedidos);
 document.getElementById("btn-atualizar-motorista").addEventListener("click", () => {
   loadDisponiveis();
@@ -3984,22 +4004,22 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
   renderCadastros();
 });
 
-// ---------- inicialização ----------
+// ---------- inicializaÃ§Ã£o ----------
 (async function init() {
   await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes(), loadCondicoesPagamento()]);
   loadMeusPedidos();
 
-  // Verifica divergências e avisos da portaria em aberto assim que a página
-  // carrega, pra já conhecer o que existe agora e só avisar por voz do que
+  // Verifica divergÃªncias e avisos da portaria em aberto assim que a pÃ¡gina
+  // carrega, pra jÃ¡ conhecer o que existe agora e sÃ³ avisar por voz do que
   // aparecer DEPOIS disso (ver avisarDivergenciasNovas/carregarAvisosPortariaPendentes).
   verificarDivergenciasNovas();
   carregarAvisosPortariaPendentes();
   carregarAvisosLiberadosPendentesConferencia();
 
-  // Atualização automática a cada 1 min — pensado pro app ficar aberto o dia
-  // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência ou
-  // aviso da portaria novo em qualquer lugar (não só na página/filtro visível
-  // agora) e atualiza a lista visível, sem precisar de ninguém clicar em nada.
+  // AtualizaÃ§Ã£o automÃ¡tica a cada 1 min â€” pensado pro app ficar aberto o dia
+  // todo (ex: numa TV do setor): reconfere se surgiu alguma divergÃªncia ou
+  // aviso da portaria novo em qualquer lugar (nÃ£o sÃ³ na pÃ¡gina/filtro visÃ­vel
+  // agora) e atualiza a lista visÃ­vel, sem precisar de ninguÃ©m clicar em nada.
   setInterval(() => {
     verificarDivergenciasNovas();
     carregarAvisosPortariaPendentes();
