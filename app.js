@@ -1543,7 +1543,12 @@ function agruparPorProduto(itens) {
 const FATORES_EMBALAGEM = { ct: 100, cento: 100, dz: 12, duzia: 12, milheiro: 1000, mil: 1000 };
 
 function converterEmbalagem(item) {
-  const fator = FATORES_EMBALAGEM[String(item.unidade || "").toLowerCase().trim()];
+  // Prioriza o fator que a própria nota informa (coluna "UND" no formato
+  // "FD/0020/UN", lido pela IA em fator_conversao) — é específico de cada
+  // produto/nota, bem mais confiável que a tabela fixa abaixo (que só cobre
+  // umas poucas unidades padronizadas tipo "cento"/"dúzia", sempre com o
+  // mesmo fator; "fardo" e "caixa" variam de produto pra produto).
+  const fator = item.fator_conversao || FATORES_EMBALAGEM[String(item.unidade || "").toLowerCase().trim()];
   if (!fator) return item;
   return {
     ...item,
