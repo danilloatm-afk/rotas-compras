@@ -12,23 +12,23 @@
 <div id="app-shell">
 <header class="topbar">
   <div class="topbar-title-row">
-    <h1>ðŸšš Rotas de Compras</h1>
+    <h1>🚚 Rotas de Compras</h1>
     <div class="topbar-actions">
-      <button id="btn-ativar-som" type="button" class="btn secondary small" title="Ativa o alerta sonoro de divergÃªncia nesta tela (precisa de 1 toque por causa do navegador)">ðŸ”Š Ativar som</button>
-      <button id="btn-theme-toggle" type="button" class="btn secondary small theme-toggle" title="Alternar modo claro/escuro">ðŸŒ™</button>
+      <button id="btn-ativar-som" type="button" class="btn secondary small" title="Ativa o alerta sonoro de divergência nesta tela (precisa de 1 toque por causa do navegador)">🔊 Ativar som</button>
+      <button id="btn-theme-toggle" type="button" class="btn secondary small theme-toggle" title="Alternar modo claro/escuro">🌙</button>
     </div>
   </div>
   <p id="aviso-som-bloqueado" class="aviso-som-bloqueado" hidden>
-    ðŸ”‡ O navegador bloqueou o som dos alertas nesta tela. Toque no botÃ£o "ðŸ”Š Ativar som" acima pra liberar.
+    🔇 O navegador bloqueou o som dos alertas nesta tela. Toque no botão "🔊 Ativar som" acima pra liberar.
   </p>
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="comprador">ðŸ“¥ Comprador</button>
-    <button class="tab-btn" data-tab="motorista">ðŸšš Motorista</button>
-    <button class="tab-btn" data-tab="indicadores">ðŸ“Š Indicadores</button>
-    <button class="tab-btn" data-tab="portaria">ðŸšª Portaria</button>
-    <button class="tab-btn" data-tab="recebimento-cif">ðŸ“¦ Recebimento CIF<span id="badge-avisos-portaria" class="badge-contador" hidden></span></button>
-    <button class="tab-btn" data-tab="historico">ðŸ—‚ï¸ HistÃ³rico</button>
-    <button class="tab-btn" data-tab="config">ConfiguraÃ§Ãµes</button>
+    <button class="tab-btn active" data-tab="comprador">📥 Comprador</button>
+    <button class="tab-btn" data-tab="motorista">🚚 Motorista</button>
+    <button class="tab-btn" data-tab="indicadores">📊 Indicadores</button>
+    <button class="tab-btn" data-tab="portaria">🚪 Portaria</button>
+    <button class="tab-btn" data-tab="recebimento-cif">📦 Recebimento CIF<span id="badge-avisos-portaria" class="badge-contador" hidden></span></button>
+    <button class="tab-btn" data-tab="historico">🗂️ Histórico</button>
+    <button class="tab-btn" data-tab="config">Configurações</button>
   </nav>
 </header>
 
@@ -57,7 +57,7 @@
         Arquivo do pedido (PDF ou foto)
         <input type="file" id="pedido-arquivo" accept="application/pdf,image/*" required>
       </label>
-      <button type="button" id="btn-ler-pedido" class="btn secondary">ðŸ¤– Ler com IA</button>
+      <button type="button" id="btn-ler-pedido" class="btn secondary">🤖 Ler com IA</button>
       <p id="pedido-ia-feedback" class="feedback"></p>
       <p id="pedido-duplicado-aviso" class="feedback error hidden"></p>
 
@@ -68,7 +68,7 @@
       <p id="pedido-empresa-info" class="hint"></p>
 
       <label>
-        NÂº do pedido (opcional)
+        Nº do pedido (opcional)
         <input type="text" id="pedido-numero">
       </label>
 
@@ -83,8 +83,8 @@
       </label>
 
       <label>
-        ObservaÃ§Ãµes (opcional)
-        <textarea id="pedido-observacao" rows="2" placeholder="Local de retirada, contato, instruÃ§Ãµes para o motorista..."></textarea>
+        Observações (opcional)
+        <textarea id="pedido-observacao" rows="2" placeholder="Local de retirada, contato, instruções para o motorista..."></textarea>
       </label>
 
       <button type="submit" class="btn primary">Enviar pedido</button>
@@ -93,7 +93,7 @@
 
     <div class="section-head mt">
       <h2>Meus pedidos</h2>
-      <button id="btn-atualizar-comprador" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <button id="btn-atualizar-comprador" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
     <div id="lista-meus-pedidos" class="cards-grid"></div>
   </section>
@@ -116,11 +116,11 @@
     </div>
 
     <div class="section-head">
-      <h2>Pedidos disponÃ­veis</h2>
-      <button id="btn-atualizar-motorista" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <h2>Pedidos disponíveis</h2>
+      <button id="btn-atualizar-motorista" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
     <div class="section-head">
-      <p class="hint">Marque os pedidos que vÃ£o entrar na rota e clique em "Montar rota".</p>
+      <p class="hint">Marque os pedidos que vão entrar na rota e clique em "Montar rota".</p>
       <div class="filtro-e-botao">
         <div class="filtro-multiplo">
           <button type="button" id="btn-filtro-cidade" class="btn secondary small">Todas as cidades</button>
@@ -136,16 +136,16 @@
     <div id="lista-disponiveis" class="cards-grid"></div>
 
     <div class="section-head mt">
-      <h2>ðŸ­ Retirada em transportadora</h2>
-      <button id="btn-atualizar-transportadora" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <h2>🏭 Retirada em transportadora</h2>
+      <button id="btn-atualizar-transportadora" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
-    <p class="hint">Pedidos que o fornecedor despachou para uma transportadora â€” sem rota fixa, confira aqui quando passar por lÃ¡ e conclua na hora.</p>
+    <p class="hint">Pedidos que o fornecedor despachou para uma transportadora — sem rota fixa, confira aqui quando passar por lá e conclua na hora.</p>
     <div id="lista-transportadora" class="cards-grid"></div>
 
     <div class="section-head mt">
       <h2>Minha rota de hoje</h2>
       <div class="filtro-e-botao">
-        <button id="btn-abrir-maps" type="button" class="btn secondary small hidden">ðŸ“ Abrir rota no Google Maps</button>
+        <button id="btn-abrir-maps" type="button" class="btn secondary small hidden">📍 Abrir rota no Google Maps</button>
         <button id="btn-excluir-selecionadas" type="button" class="btn secondary danger small hidden">Excluir selecionadas</button>
         <button id="btn-excluir-rota" type="button" class="btn secondary danger small hidden">Excluir rota</button>
       </div>
@@ -167,76 +167,76 @@
   <!-- INDICADORES -->
   <section id="tab-indicadores" class="tab-content">
     <div class="section-head">
-      <h2>Pedidos coletados por mÃªs</h2>
-      <button id="btn-atualizar-indicadores" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <h2>Pedidos coletados por mês</h2>
+      <button id="btn-atualizar-indicadores" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
-    <p class="hint">Conta as paradas concluÃ­das (pedido efetivamente coletado pelo motorista), agrupadas pelo mÃªs da coleta.</p>
+    <p class="hint">Conta as paradas concluídas (pedido efetivamente coletado pelo motorista), agrupadas pelo mês da coleta.</p>
     <div id="grafico-coletados" class="grafico-wrap"></div>
 
     <div class="section-head mt">
-      <h2>Lojas diferentes visitadas por mÃªs</h2>
+      <h2>Lojas diferentes visitadas por mês</h2>
     </div>
-    <p class="hint">Conta quantos fornecedores (lojas) diferentes o motorista efetivamente visitou em cada mÃªs â€” nÃ£o conta pedido repetido na mesma loja. SÃ³ entregas FOB (o motorista retira), CIF nÃ£o entra aqui.</p>
+    <p class="hint">Conta quantos fornecedores (lojas) diferentes o motorista efetivamente visitou em cada mês — não conta pedido repetido na mesma loja. Só entregas FOB (o motorista retira), CIF não entra aqui.</p>
     <div id="grafico-lojas-diferentes" class="grafico-wrap"></div>
 
     <div class="section-head mt">
-      <h2>DivergÃªncias por tipo</h2>
+      <h2>Divergências por tipo</h2>
     </div>
-    <p class="hint">Conta, entre todas as paradas concluÃ­das (sem contar entregas parciais), quantas tiveram cada tipo de divergÃªncia.</p>
+    <p class="hint">Conta, entre todas as paradas concluídas (sem contar entregas parciais), quantas tiveram cada tipo de divergência.</p>
     <div id="grafico-divergencias" class="grafico-wrap"></div>
 
     <div class="section-head mt">
-      <h2>DivergÃªncias sem resposta por comprador</h2>
+      <h2>Divergências sem resposta por comprador</h2>
     </div>
-    <p class="hint">DivergÃªncias que ainda nÃ£o tÃªm uma decisÃ£o registrada (campo "DecisÃ£o sobre a divergÃªncia" no HistÃ³rico), com os dias contados desde a conclusÃ£o da parada.</p>
+    <p class="hint">Divergências que ainda não têm uma decisão registrada (campo "Decisão sobre a divergência" no Histórico), com os dias contados desde a conclusão da parada.</p>
     <div id="tabela-divergencias-sem-resposta"></div>
 
     <div class="section-head mt">
-      <h2>DivergÃªncias por fornecedor</h2>
+      <h2>Divergências por fornecedor</h2>
     </div>
-    <p class="hint">Top 10 fornecedores com mais divergÃªncias (valor, CNPJ, itens ou condiÃ§Ã£o de pagamento), entre as paradas concluÃ­das.</p>
+    <p class="hint">Top 10 fornecedores com mais divergências (valor, CNPJ, itens ou condição de pagamento), entre as paradas concluídas.</p>
     <div id="tabela-divergencias-fornecedor"></div>
 
     <div class="section-head mt">
-      <h2>Tempo mÃ©dio de resposta por comprador</h2>
+      <h2>Tempo médio de resposta por comprador</h2>
     </div>
-    <p class="hint">MÃ©dia de dias entre a conclusÃ£o da parada e o registro da decisÃ£o, considerando sÃ³ divergÃªncias que jÃ¡ tÃªm decisÃ£o salva.</p>
+    <p class="hint">Média de dias entre a conclusão da parada e o registro da decisão, considerando só divergências que já têm decisão salva.</p>
     <div id="tabela-tempo-resposta"></div>
   </section>
 
   <!-- PORTARIA -->
   <section id="tab-portaria" class="tab-content">
     <h2>Avisar chegada de entrega</h2>
-    <p class="hint">Pra entregas que o fornecedor traz atÃ© aqui (frete CIF) â€” avisa o almoxarifado na hora, com som, sem precisar ligar ou ir atÃ© lÃ¡.</p>
+    <p class="hint">Pra entregas que o fornecedor traz até aqui (frete CIF) — avisa o almoxarifado na hora, com som, sem precisar ligar ou ir até lá.</p>
     <div class="card-pedido">
       <label>
-        Empresa (pra qual empresa Ã© a entrega) *
-        <select id="portaria-empresa" required><option value="">â€” selecione â€”</option></select>
+        Empresa (pra qual empresa é a entrega) *
+        <select id="portaria-empresa" required><option value="">— selecione —</option></select>
       </label>
       <label id="label-portaria-setor" class="hidden">
         Almoxarifado (setor) *
         <select id="portaria-setor">
-          <option value="">â€” selecione â€”</option>
+          <option value="">— selecione —</option>
           <option value="Uso e Consumo">Uso e Consumo</option>
           <option value="Insumos">Insumos</option>
           <option value="Cantina">Cantina</option>
         </select>
       </label>
       <label>
-        Nota fiscal (opcional â€” sÃ³ se tiver o arquivo no computador)
+        Nota fiscal (opcional — só se tiver o arquivo no computador)
         <input type="file" id="portaria-nota-arquivo" accept="image/*,application/pdf">
       </label>
-      <p class="hint">Se anexar e ler agora, o almoxarifado recebe a conferÃªncia pronta â€” nÃ£o precisa fotografar de novo nem gastar outra leitura de IA.</p>
-      <button type="button" id="btn-portaria-ler-nota" class="btn secondary">ðŸ¤– Ler nota com IA</button>
+      <p class="hint">Se anexar e ler agora, o almoxarifado recebe a conferência pronta — não precisa fotografar de novo nem gastar outra leitura de IA.</p>
+      <button type="button" id="btn-portaria-ler-nota" class="btn secondary">🤖 Ler nota com IA</button>
       <p id="portaria-nota-ia-feedback" class="feedback"></p>
 
       <label id="label-portaria-pedido-relacionado" class="hidden">
-        Quais pedidos sÃ£o esses? (segure Ctrl ou Cmd pra marcar mais de um, se a nota cobrir vÃ¡rios pedidos juntos)
+        Quais pedidos são esses? (segure Ctrl ou Cmd pra marcar mais de um, se a nota cobrir vários pedidos juntos)
         <select id="portaria-pedido-relacionado" multiple size="4"></select>
       </label>
 
       <label>
-        CNPJ do fornecedor (o que estÃ¡ na nota que chegou)
+        CNPJ do fornecedor (o que está na nota que chegou)
         <input type="text" id="portaria-cnpj" placeholder="Ex: 12.345.678/0001-90" inputmode="numeric">
       </label>
       <label>
@@ -244,14 +244,14 @@
         <input type="text" id="portaria-fornecedor" placeholder="Ex: Ultra Componentes Automotivo">
       </label>
       <label>
-        NÂº do pedido (se souber)
+        Nº do pedido (se souber)
         <input type="text" id="portaria-pedido-numero" placeholder="Opcional">
       </label>
       <label>
-        ObservaÃ§Ã£o
+        Observação
         <textarea id="portaria-mensagem" rows="2" placeholder="Ex: motorista aguardando na guarita"></textarea>
       </label>
-      <button id="btn-avisar-portaria" type="button" class="btn">ðŸ”” Avisar chegada</button>
+      <button id="btn-avisar-portaria" type="button" class="btn">🔔 Avisar chegada</button>
     </div>
 
     <h3 class="mt">Avisos enviados hoje</h3>
@@ -262,9 +262,9 @@
   <section id="tab-recebimento-cif" class="tab-content">
     <div class="section-head">
       <h2>Recebimento CIF</h2>
-      <button id="btn-atualizar-recebimento-cif" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <button id="btn-atualizar-recebimento-cif" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
-    <p class="hint">Entregas que o fornecedor traz atÃ© aqui â€” confira a nota e libere o acesso da portaria por aqui.</p>
+    <p class="hint">Entregas que o fornecedor traz até aqui — confira a nota e libere o acesso da portaria por aqui.</p>
 
     <div class="quem-sou-eu">
       <label>
@@ -282,33 +282,33 @@
       </label>
     </div>
 
-    <h3 class="mt">ðŸšª Avisos da portaria aguardando</h3>
-    <p class="hint">Libere o acesso primeiro â€” a conferÃªncia da nota sÃ³ fica disponÃ­vel depois disso (ver seÃ§Ã£o abaixo).</p>
+    <h3 class="mt">🚪 Avisos da portaria aguardando</h3>
+    <p class="hint">Libere o acesso primeiro — a conferência da nota só fica disponível depois disso (ver seção abaixo).</p>
     <div id="avisos-portaria-pendentes"><p class="empty-state">Nenhum aviso pendente no momento.</p></div>
 
     <div class="section-head mt">
-      <h3>âœ… Liberados, aguardando conferÃªncia</h3>
-      <button id="btn-arquivar-sem-pedido-antigos" type="button" class="link-btn">ðŸ—„ï¸ Arquivar antigos sem pedido (+7 dias)</button>
+      <h3>✅ Liberados, aguardando conferência</h3>
+      <button id="btn-arquivar-sem-pedido-antigos" type="button" class="link-btn">🗄️ Arquivar antigos sem pedido (+7 dias)</button>
     </div>
-    <div id="avisos-liberados-aguardando-conferencia"><p class="empty-state">Nenhum acesso liberado aguardando conferÃªncia.</p></div>
+    <div id="avisos-liberados-aguardando-conferencia"><p class="empty-state">Nenhum acesso liberado aguardando conferência.</p></div>
 
-    <h3 class="mt">ðŸ“¦ Todos os pedidos CIF pendentes</h3>
+    <h3 class="mt">📦 Todos os pedidos CIF pendentes</h3>
     <div class="filtro-e-botao mb">
-      <input type="text" id="filtro-numero-cif" placeholder="Buscar por NÂº do pedido">
+      <input type="text" id="filtro-numero-cif" placeholder="Buscar por Nº do pedido">
       <input type="text" id="filtro-fornecedor-cif" placeholder="Buscar por fornecedor">
       <button id="btn-limpar-filtros-cif" type="button" class="link-btn">Limpar filtros</button>
-      <button id="btn-recebido-terceiro-selecionados" type="button" class="btn secondary small">ðŸ¤ Recebido por terceiro (selecionados)</button>
+      <button id="btn-recebido-terceiro-selecionados" type="button" class="btn secondary small">🤝 Recebido por terceiro (selecionados)</button>
     </div>
     <div id="lista-pedidos-cif-pendentes"></div>
   </section>
 
-  <!-- HISTÃ“RICO -->
+  <!-- HISTÓRICO -->
   <section id="tab-historico" class="tab-content">
     <div class="section-head">
-      <h2>Paradas concluÃ­das</h2>
-      <button id="btn-atualizar-historico" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <h2>Paradas concluídas</h2>
+      <button id="btn-atualizar-historico" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
-    <p class="hint">Cada parada aparece aqui assim que Ã© concluÃ­da, com o detalhe de qualquer divergÃªncia (valor, CNPJ ou itens) ou aviso de entrega parcial. O almoxarifado confere e confirma o recebimento de cada uma.</p>
+    <p class="hint">Cada parada aparece aqui assim que é concluída, com o detalhe de qualquer divergência (valor, CNPJ ou itens) ou aviso de entrega parcial. O almoxarifado confere e confirma o recebimento de cada uma.</p>
 
     <div class="quem-sou-eu">
       <label>
@@ -326,13 +326,13 @@
     </div>
 
     <div class="filtro-e-botao mb">
-      <input type="text" id="filtro-numero-historico" placeholder="Buscar por NÂº do pedido">
+      <input type="text" id="filtro-numero-historico" placeholder="Buscar por Nº do pedido">
       <input type="text" id="filtro-fornecedor-historico" placeholder="Buscar por fornecedor">
       <select id="filtro-empresa-historico"><option value="">Todas as empresas</option></select>
       <select id="filtro-comprador-historico"><option value="">Todos os compradores</option></select>
       <label class="filtro-data-label">De <input type="date" id="filtro-data-inicio"></label>
-      <label class="filtro-data-label">AtÃ© <input type="date" id="filtro-data-fim"></label>
-      <button id="btn-somente-divergentes" type="button" class="btn secondary small">âš ï¸ Somente divergentes</button>
+      <label class="filtro-data-label">Até <input type="date" id="filtro-data-fim"></label>
+      <button id="btn-somente-divergentes" type="button" class="btn secondary small">⚠️ Somente divergentes</button>
       <button id="btn-limpar-filtros-historico" type="button" class="link-btn">Limpar filtros</button>
     </div>
 
@@ -344,9 +344,9 @@
   <section id="tab-config" class="tab-content">
     <div class="section-head">
       <h2>Empresas do grupo</h2>
-      <button id="btn-atualizar-config" type="button" class="btn secondary small">ðŸ”„ Atualizar</button>
+      <button id="btn-atualizar-config" type="button" class="btn secondary small">🔄 Atualizar</button>
     </div>
-    <p class="hint">Cadastre aqui as empresas compradoras (com CNPJ) usadas na conferÃªncia com a nota fiscal.</p>
+    <p class="hint">Cadastre aqui as empresas compradoras (com CNPJ) usadas na conferência com a nota fiscal.</p>
     <form id="form-empresa" class="inline-form">
       <input type="text" id="empresa-nome" placeholder="Nome da empresa" required>
       <input type="text" id="empresa-cnpj" placeholder="CNPJ">
@@ -376,14 +376,14 @@
   <div class="modal-card">
     <div class="modal-head">
       <h2>Concluir parada</h2>
-      <button id="btn-modal-fechar" type="button" class="link-btn">Fechar âœ•</button>
+      <button id="btn-modal-fechar" type="button" class="link-btn">Fechar ✕</button>
     </div>
     <form id="form-modal-nota" class="form-card modal-form">
       <div id="bloco-pedido-anexo" class="conferencia-box hidden">
-        ðŸ“¦ <a id="link-pedido-anexo" href="#" target="_blank" rel="noopener">Ver anexo do pedido de compra</a>
+        📦 <a id="link-pedido-anexo" href="#" target="_blank" rel="noopener">Ver anexo do pedido de compra</a>
       </div>
       <div id="bloco-nota-pre-lida" class="conferencia-box ok hidden">
-        ðŸ“Ž Nota jÃ¡ lida pela portaria â€” <a id="link-nota-pre-lida" href="#" target="_blank" rel="noopener">ver arquivo</a>.
+        📎 Nota já lida pela portaria — <a id="link-nota-pre-lida" href="#" target="_blank" rel="noopener">ver arquivo</a>.
         <button type="button" id="btn-reler-nota" class="link-btn">Anexar outra foto e ler de novo</button>
       </div>
       <div id="bloco-upload-nota">
@@ -391,8 +391,8 @@
           Foto da nota fiscal
           <input type="file" id="nota-arquivo" accept="image/*,application/pdf" capture="environment" required>
         </label>
-        <p class="hint">ðŸ“¸ Dica: boa luz, sem reflexo, foto reta (nÃ£o torta) e aproxime atÃ© o texto ficar nÃ­tido â€” isso ajuda demais a leitura automÃ¡tica.</p>
-        <button type="button" id="btn-ler-nota" class="btn secondary">ðŸ¤– Ler nota com IA</button>
+        <p class="hint">📸 Dica: boa luz, sem reflexo, foto reta (não torta) e aproxime até o texto ficar nítido — isso ajuda demais a leitura automática.</p>
+        <button type="button" id="btn-ler-nota" class="btn secondary">🤖 Ler nota com IA</button>
         <p id="nota-ia-feedback" class="feedback"></p>
       </div>
 
@@ -401,17 +401,17 @@
         <input type="number" id="nota-valor" step="0.01" min="0">
       </label>
       <label>
-        CNPJ do destinatÃ¡rio na nota
+        CNPJ do destinatário na nota
         <input type="text" id="nota-cnpj" placeholder="00.000.000/0000-00">
       </label>
       <label>
-        NÃºmero da nota (opcional)
+        Número da nota (opcional)
         <input type="text" id="nota-numero">
       </label>
 
       <label class="checkbox-line">
         <input type="checkbox" id="nota-parcial">
-        ðŸ“¦ Entrega parcial (ainda falta buscar mais deste pedido)
+        📦 Entrega parcial (ainda falta buscar mais deste pedido)
       </label>
 
       <div id="conferencia-resultado" class="conferencia-box hidden"></div>
