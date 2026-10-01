@@ -331,7 +331,12 @@ function Processar-Fonte($fonte) {
                 arquivo_url     = $arquivoUrl
                 arquivo_nome    = $arquivo.Name
                 valor_total     = if ($null -ne $dados.valor_total) { $dados.valor_total } else { $null }
-                itens           = if ($dados.itens) { $dados.itens } else { $null }
+                # "@(...)" força virar lista mesmo com 1 item só — sem isso, o
+                # PowerShell "destrói" uma lista de 1 elemento vinda da API e
+                # guarda o item solto (não dentro de uma lista), o que fazia a
+                # conferência de itens no site ficar muda pra esses pedidos
+                # (não tinha como comparar, mas também não avisava nada).
+                itens           = if ($dados.itens) { @($dados.itens) } else { $null }
                 urgente         = $false
                 retirar_transportadora = $retirarTransportadora
                 frete_fob       = $ehFob
