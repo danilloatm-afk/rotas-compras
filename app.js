@@ -2842,6 +2842,20 @@ function renderResolucaoDivergencia(parada) {
   </div>`;
 }
 
+// Quando uma nota cobre mais de um pedido e só um deles foi vinculado na hora
+// da conferência (ex: motorista/almoxarife não sabia), o comprador — que é
+// quem de fato sabe disso — pode resolver aqui no Histórico, buscando e
+// juntando o outro pedido na mesma conferência já concluída. Não lê nada de
+// novo com IA: só reorganiza pedidos que já existem contra a nota que já foi
+// lida (ver vincularOutroPedidoHistorico).
+function renderVincularOutroPedido(parada) {
+  return `<details class="vincular-outro-pedido">
+    <summary>🔗 Essa nota também cobre outro pedido? Buscar e vincular</summary>
+    <input type="text" class="busca-pedido-vincular" data-parada-id="${parada.id}" placeholder="🔎 Buscar pedido pendente por número ou fornecedor...">
+    <div class="resultado-busca-pedido-vincular" data-parada-id="${parada.id}"></div>
+  </details>`;
+}
+
 const ITENS_POR_PAGINA_HISTORICO = 10;
 let paginaHistoricoAtual = 1;
 let somenteDivergentesHistorico = false;
@@ -2935,7 +2949,7 @@ function renderCardsHistorico(paradas) {
             : divergente
               ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}<a class="btn secondary small" href="${linkAvisoComprador(
                   p
-                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}</div>`
+                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderVincularOutroPedido(p)}</div>`
               : ""
         }
         <div class="card-meta">
@@ -3960,6 +3974,169 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
   }
   loadHistorico();
 });
+
+// Busca pedidos PENDENTES (ainda não conferidos) pra juntar numa conferência
+// já concluída — mesmo padrão de debounce/mínimo de caracteres da busca
+// manual da tela de "sem pedido vinculado", só que aqui é consulta direta ao
+// banco (Histórico não mantém uma lista de pendentes pré-carregada).
+document.getElementById("lista-historico").addEventListener("input", (e) => {
+  const input = e.target.closest("input.busca-pedido-vincular");
+  if (!input) return;
+  const paradaId = input.dataset.paradaId;
+  const resultadoEl = document.querySelector(`.resultado-busca-pedido-vincular[data-parada-id="${paradaId}"]`);
+  if (!resultadoEl) return;
+
+  const termo = input.value.trim();
+  clearTimeout(input._buscaTimeout);
+  if (termo.length < 2) {
+    resultadoEl.innerHTML = "";
+    return;
+  }
+  input._buscaTimeout = setTimeout(async () => {
+    const parada = paginaAtualDados.find((p) => p.id === paradaId);
+    const empresaAtual = (parada && parada.rl_pedidos && parada.rl_pedidos.empresa_nome) || null;
+    let query = db
+      .from("rl_pedidos")
+      .select("id, numero_pedido, fornecedor_nome, valor_total, arquivo_url")
+      .eq("status", "pendente")
+      .or(`numero_pedido.ilike.%${termo}%,fornecedor_nome.ilike.%${termo}%`)
+      .limit(8);
+    if (empresaAtual) query = query.eq("empresa_nome", empresaAtual);
+    const { data, error } = await comTimeout(query);
+    if (error) {
+      resultadoEl.innerHTML = `<p class="hint">Erro na busca: ${escapeHtml(error.message)}</p>`;
+      return;
+    }
+    if (!data || !data.length) {
+      resultadoEl.innerHTML = `<p class="hint">Nenhum pedido pendente encontrado com "${escapeHtml(termo)}".</p>`;
+      return;
+    }
+    resultadoEl.innerHTML = data
+      .map(
+        (ped) => `
+      <div class="resultado-busca-item">
+        <span>Nº ${escapeHtml(ped.numero_pedido || "sem número")} — ${escapeHtml(ped.fornecedor_nome || "")} — ${formatarMoeda(ped.valor_total)}</span>
+        <a href="${ped.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
+        <button type="button" class="btn small" data-vincular-outro-pedido="${ped.id}" data-parada-origem="${paradaId}">Vincular e juntar</button>
+      </div>`
+      )
+      .join("");
+  }, 300);
+});
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btnVincular = e.target.closest("button[data-vincular-outro-pedido]");
+  if (btnVincular) {
+    if (!btnVincular.dataset.confirmando) {
+      btnVincular.dataset.confirmando = "1";
+      btnVincular.textContent = "Clique de novo pra confirmar";
+      setTimeout(() => {
+        delete btnVincular.dataset.confirmando;
+        btnVincular.textContent = "Vincular e juntar";
+      }, 4000);
+      return;
+    }
+    await vincularOutroPedidoHistorico(btnVincular.dataset.paradaOrigem, btnVincular.dataset.vincularOutroPedido, btnVincular);
+    return;
+  }
+});
+
+// Junta um pedido pendente (que o comprador identificou como estando na MESMA
+// nota) a uma conferência já concluída — sem reler nada com IA: reaproveita a
+// nota já extraída (nota_itens, nota_valor_total etc. já salvos na parada
+// original) e só recalcula a comparação somando os dois pedidos, igual ao que
+// já acontece quando vários pedidos são conferidos juntos desde o início (ver
+// mesclarPedidosParaConferencia/iniciarConferenciaCif). Cria uma 2ª parada,
+// na mesma rota, pro pedido novo ficar com seu próprio registro no Histórico.
+async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Juntando...";
+  }
+  try {
+    const { data: paradaOrigem, error: errParada } = await db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*)")
+      .eq("id", paradaOrigemId)
+      .single();
+    if (errParada || !paradaOrigem) throw errParada || new Error("Conferência original não encontrada.");
+
+    const { data: pedidoNovo, error: errPedido } = await db
+      .from("rl_pedidos")
+      .select("*")
+      .eq("id", pedidoNovoId)
+      .eq("status", "pendente")
+      .single();
+    if (errPedido || !pedidoNovo) throw new Error("Esse pedido não está mais pendente (alguém já deve ter mexido nele). Atualize a página e tente de novo.");
+
+    const pedidoOriginal = paradaOrigem.rl_pedidos || {};
+    const pedidoMesclado = mesclarPedidosParaConferencia([pedidoOriginal, pedidoNovo]);
+
+    const divergValor =
+      pedidoMesclado.valor_total != null && paradaOrigem.nota_valor_total != null
+        ? Math.abs(Number(pedidoMesclado.valor_total) - Number(paradaOrigem.nota_valor_total)) > TOLERANCIA_VALOR
+        : paradaOrigem.divergencia_valor;
+
+    const itensDivergentes =
+      paradaOrigem.nota_tipo_documento === "servico"
+        ? paradaOrigem.divergencia_itens
+        : compararItens(pedidoMesclado.itens, paradaOrigem.nota_itens).divergente;
+
+    const { divergCondicao } = compararCondicaoPagamento(pedidoMesclado, paradaOrigem.nota_data_emissao, paradaOrigem.nota_parcelas);
+
+    const dadosConclusao = {
+      status: "concluida",
+      nota_arquivo_url: paradaOrigem.nota_arquivo_url,
+      nota_numero: paradaOrigem.nota_numero,
+      nota_valor_total: paradaOrigem.nota_valor_total,
+      nota_cnpj: paradaOrigem.nota_cnpj,
+      nota_itens: paradaOrigem.nota_itens,
+      nota_tipo_documento: paradaOrigem.nota_tipo_documento,
+      nota_emitente_nome: paradaOrigem.nota_emitente_nome,
+      nota_data_emissao: paradaOrigem.nota_data_emissao,
+      nota_parcelas: paradaOrigem.nota_parcelas,
+      entrega_parcial: false,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: paradaOrigem.divergencia_cnpj,
+      divergencia_itens: itensDivergentes,
+      divergencia_condicao_pagamento: divergCondicao,
+      concluido_em: paradaOrigem.concluido_em,
+      // Acrescenta à decisão já escrita (se tinha) em vez de apagar — a nota
+      // original pode ter contexto que vale a pena manter.
+      resolucao_divergencia: [
+        paradaOrigem.resolucao_divergencia,
+        `Nota também cobre o pedido Nº ${pedidoNovo.numero_pedido || pedidoNovo.id} — conferência unificada.`,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      resolucao_por: paradaOrigem.resolucao_por || document.getElementById("almoxarife-select")?.value || null,
+      resolucao_em: paradaOrigem.resolucao_em || new Date().toISOString(),
+    };
+
+    const { error: errNovaParada } = await db.from("rl_rota_paradas").insert({
+      rota_id: paradaOrigem.rota_id,
+      pedido_id: pedidoNovo.id,
+      ordem: (paradaOrigem.ordem || 0) + 1,
+      ...dadosConclusao,
+    });
+    if (errNovaParada) throw errNovaParada;
+
+    const { error: errUpdateOrigem } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaOrigemId);
+    if (errUpdateOrigem) throw errUpdateOrigem;
+
+    const { error: errUpdatePedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedidoNovo.id);
+    if (errUpdatePedido) throw errUpdatePedido;
+
+    mostrarAviso("Pedidos vinculados — conferência recalculada com os dois juntos.");
+    await loadHistorico();
+  } catch (err) {
+    mostrarAviso("Erro ao vincular: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Vincular e juntar";
+    }
+  }
+}
 
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
   const btnEditar = e.target.closest("button[data-editar-resolucao]");
