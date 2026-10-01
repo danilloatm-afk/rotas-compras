@@ -3995,10 +3995,13 @@ document.getElementById("lista-historico").addEventListener("input", (e) => {
   input._buscaTimeout = setTimeout(async () => {
     const parada = paginaAtualDados.find((p) => p.id === paradaId);
     const empresaAtual = (parada && parada.rl_pedidos && parada.rl_pedidos.empresa_nome) || null;
+    // "na_rota" entra também — pedido já pode estar numa rota do motorista
+    // esperando a parada dele ser concluída; nesse caso a função de vincular
+    // reaproveita essa parada existente em vez de criar outra.
     let query = db
       .from("rl_pedidos")
       .select("id, numero_pedido, fornecedor_nome, valor_total, arquivo_url")
-      .eq("status", "pendente")
+      .in("status", ["pendente", "na_rota"])
       .or(`numero_pedido.ilike.%${termo}%,fornecedor_nome.ilike.%${termo}%`)
       .limit(8);
     if (empresaAtual) query = query.eq("empresa_nome", empresaAtual);
@@ -4065,9 +4068,22 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
       .from("rl_pedidos")
       .select("*")
       .eq("id", pedidoNovoId)
-      .eq("status", "pendente")
+      .in("status", ["pendente", "na_rota"])
       .single();
-    if (errPedido || !pedidoNovo) throw new Error("Esse pedido não está mais pendente (alguém já deve ter mexido nele). Atualize a página e tente de novo.");
+    if (errPedido || !pedidoNovo) throw new Error("Esse pedido não está mais disponível pra vincular (alguém já deve ter mexido nele). Atualize a página e tente de novo.");
+
+    // Se o pedido já está "na_rota", já existe uma parada dele esperando
+    // (pendente) numa rota do motorista — reaproveita ela em vez de criar
+    // outra (senão sobraria uma parada fantasma pendente pra sempre lá).
+    // Se ainda está "pendente" (nunca foi roteirizado), não existe parada
+    // nenhuma ainda, então cria uma nova.
+    const { data: paradaExistente, error: errParadaExistente } = await db
+      .from("rl_rota_paradas")
+      .select("id")
+      .eq("pedido_id", pedidoNovo.id)
+      .eq("status", "pendente")
+      .maybeSingle();
+    if (errParadaExistente) throw errParadaExistente;
 
     const pedidoOriginal = paradaOrigem.rl_pedidos || {};
     const pedidoMesclado = mesclarPedidosParaConferencia([pedidoOriginal, pedidoNovo]);
@@ -4113,13 +4129,18 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
       resolucao_em: paradaOrigem.resolucao_em || new Date().toISOString(),
     };
 
-    const { error: errNovaParada } = await db.from("rl_rota_paradas").insert({
-      rota_id: paradaOrigem.rota_id,
-      pedido_id: pedidoNovo.id,
-      ordem: (paradaOrigem.ordem || 0) + 1,
-      ...dadosConclusao,
-    });
-    if (errNovaParada) throw errNovaParada;
+    if (paradaExistente) {
+      const { error: errAtualizaParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaExistente.id);
+      if (errAtualizaParada) throw errAtualizaParada;
+    } else {
+      const { error: errNovaParada } = await db.from("rl_rota_paradas").insert({
+        rota_id: paradaOrigem.rota_id,
+        pedido_id: pedidoNovo.id,
+        ordem: (paradaOrigem.ordem || 0) + 1,
+        ...dadosConclusao,
+      });
+      if (errNovaParada) throw errNovaParada;
+    }
 
     const { error: errUpdateOrigem } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaOrigemId);
     if (errUpdateOrigem) throw errUpdateOrigem;
