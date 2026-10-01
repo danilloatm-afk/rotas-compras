@@ -2753,10 +2753,27 @@ function linkWhatsapp(numero, mensagem) {
   return `https://wa.me/${digitos}?text=${encodeURIComponent(mensagem)}`;
 }
 
+// Quando uma nota cobre mais de um pedido (ver vincularOutroPedidoHistorico/
+// iniciarConferenciaCif), cada pedido real tem sua própria parada, mas todas
+// apontam pro mesmo arquivo de nota — usa isso pra reconhecer o grupo e
+// mostrar o comparativo somado (senão cada card mostraria só o pedaço do seu
+// próprio pedido, e um item que é do pedido IRMÃO apareceria como "item
+// extra" mesmo batendo perfeitamente quando somado).
+function pedidosIrmaos(parada, todasParadas) {
+  if (!parada.nota_arquivo_url) return [];
+  return todasParadas.filter((q) => q.id !== parada.id && q.nota_arquivo_url === parada.nota_arquivo_url);
+}
+
+function pedidoEfetivoParaExibicao(parada, todasParadas) {
+  const irmas = pedidosIrmaos(parada, todasParadas || []);
+  if (!irmas.length) return parada.rl_pedidos || {};
+  return mesclarPedidosParaConferencia([parada.rl_pedidos, ...irmas.map((q) => q.rl_pedidos)].filter(Boolean));
+}
+
 // Mesma lógica de renderDivergenciasParada, mas em texto puro (sem HTML)
 // pra poder entrar direto na mensagem do WhatsApp.
-function resumoDivergenciasTexto(parada) {
-  const pedido = parada.rl_pedidos || {};
+function resumoDivergenciasTexto(parada, pedidoEfetivo) {
+  const pedido = pedidoEfetivo || parada.rl_pedidos || {};
   const linhas = [];
   if (parada.divergencia_valor) {
     linhas.push(`Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.`);
@@ -2780,13 +2797,13 @@ function resumoDivergenciasTexto(parada) {
   return linhas.join("\n");
 }
 
-function linkAvisoComprador(parada) {
-  const pedido = parada.rl_pedidos || {};
+function linkAvisoComprador(parada, pedidoEfetivo) {
+  const pedido = pedidoEfetivo || parada.rl_pedidos || {};
   const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
   const mensagem =
     `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! Encontramos uma divergência na conferência do pedido ` +
     `${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n` +
-    resumoDivergenciasTexto(parada) +
+    resumoDivergenciasTexto(parada, pedido) +
     "\n\nPode conferir com o fornecedor?";
   return linkWhatsapp(comprador.telefone, mensagem);
 }
@@ -2806,8 +2823,8 @@ function linkAvisoObservacaoRecebimento(parada) {
 // Reconstrói as mensagens de divergência a partir do que já ficou salvo na
 // parada (nota_valor_total, nota_cnpj, nota_itens) — não depende de nada
 // que só existia na tela no momento em que o motorista concluiu a parada.
-function renderDivergenciasParada(parada) {
-  const pedido = parada.rl_pedidos || {};
+function renderDivergenciasParada(parada, pedidoEfetivo) {
+  const pedido = pedidoEfetivo || parada.rl_pedidos || {};
   let html = "";
   if (parada.divergencia_valor) {
     html += `<div>⚠️ Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.</div>`;
@@ -2918,6 +2935,7 @@ function renderCardsHistorico(paradas) {
   el.innerHTML = paradas
     .map((p) => {
       const pedido = p.rl_pedidos || {};
+      const pedidoEfetivo = pedidoEfetivoParaExibicao(p, paradas);
       const motorista = (p.rl_rotas || {}).motorista_nome || "—";
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
       // "OK" só quando teve dado de verdade pra comparar — se a nota não foi
@@ -2948,6 +2966,13 @@ function renderCardsHistorico(paradas) {
           ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
           · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
         </div>
+        ${
+          pedidosIrmaos(p, paradas).length
+            ? `<div class="card-meta">🔗 Nota também cobre: ${pedidosIrmaos(p, paradas)
+                .map((q) => escapeHtml((q.rl_pedidos || {}).numero_pedido || "sem número"))
+                .join(", ")}</div>`
+            : ""
+        }
         ${pedido.observacao ? `<div class="card-meta">💬 Observação do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
         ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
         ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
@@ -2957,8 +2982,9 @@ function renderCardsHistorico(paradas) {
                 p.nota_valor_total
               )}${p.nota_numero ? `, Nº nota ${escapeHtml(p.nota_numero)}` : ""}.</div>`
             : divergente
-              ? `<div class="conferencia-box warn">${renderDivergenciasParada(p)}<a class="btn secondary small" href="${linkAvisoComprador(
-                  p
+              ? `<div class="conferencia-box warn">${renderDivergenciasParada(p, pedidoEfetivo)}<a class="btn secondary small" href="${linkAvisoComprador(
+                  p,
+                  pedidoEfetivo
                 )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderVincularOutroPedido(p)}</div>`
               : ""
         }
