@@ -1570,11 +1570,21 @@ function converterEmbalagem(item) {
   };
 }
 
+// Pedido com um item só às vezes foi salvo com "itens" sendo o objeto do
+// item direto, não um array de 1 elemento (bug de import antigo — achado ao
+// testar a conferência unificada dos pedidos S51677/S51831, onde isso fazia
+// a comparação de itens virar "sem dados" silenciosamente, mascarando
+// divergência real de preço). Normaliza aqui, pra cobrir pedidos antigos já
+// salvos assim e qualquer import futuro que repita o problema.
+function itensComoArray(itens) {
+  if (Array.isArray(itens)) return itens;
+  if (itens && typeof itens === "object") return [itens];
+  return [];
+}
+
 function compararItens(pedidoItensBrutos, notaItensBrutos) {
-  const pedidoItens = agruparPorProduto(Array.isArray(pedidoItensBrutos) ? pedidoItensBrutos : []);
-  const notaItens = agruparPorProduto(
-    (Array.isArray(notaItensBrutos) ? notaItensBrutos : []).map(converterEmbalagem)
-  );
+  const pedidoItens = agruparPorProduto(itensComoArray(pedidoItensBrutos));
+  const notaItens = agruparPorProduto(itensComoArray(notaItensBrutos).map(converterEmbalagem));
   if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
 
   const restantes = notaItens.map((it) => ({ ...it, usado: false }));
@@ -3209,7 +3219,7 @@ function renderAvisosLiberadosPendentesConferencia() {
         // cara (sem "sugestão" pré-carregada poluindo o card); só aparece o
         // que a pessoa efetivamente procurar (ou o que bater como sugestão).
         const candidatosComResumo = a._candidatos.map((p) => {
-          const itensArr = Array.isArray(p.itens) ? p.itens : p.itens ? [p.itens] : [];
+          const itensArr = itensComoArray(p.itens);
           const resumoItens = itensArr
             .map((it) => it.produto_nome)
             .filter(Boolean)
@@ -3585,7 +3595,7 @@ function mesclarPedidosParaConferencia(pedidos) {
     ...pedidos[0],
     numero_pedido: pedidos.map((p) => p.numero_pedido || "s/ nº").join(" + "),
     valor_total: pedidos.reduce((soma, p) => soma + (Number(p.valor_total) || 0), 0),
-    itens: pedidos.flatMap((p) => (Array.isArray(p.itens) ? p.itens : [])),
+    itens: pedidos.flatMap((p) => itensComoArray(p.itens)),
   };
 }
 
