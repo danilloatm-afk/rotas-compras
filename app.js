@@ -1742,10 +1742,22 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     }
     const qtdNEfetiva = variacoes ? (match.quantidade || 0) + variacoes.reduce((soma, n) => soma + (n.quantidade || 0), 0) : match ? match.quantidade : null;
     const qtdOk = match && pItem.quantidade != null && qtdNEfetiva != null ? Math.abs(pItem.quantidade - qtdNEfetiva) < 0.01 : null;
-    const vuOk =
+    let vuOk =
       match && pItem.valor_unitario != null && match.valor_unitario != null
         ? Math.abs(pItem.valor_unitario - match.valor_unitario) <= TOLERANCIA_VALOR
         : null;
+    // Nota com desconto NA LINHA do item (coluna "V. DESC."): o valor unitário
+    // impresso é o de tabela (bruto), mas o que de fato se paga é o líquido
+    // (valor total da linha / quantidade) — se o líquido bate com o pedido, não
+    // é divergência (ex: S50669, unit. 1.591,09 - desc. 111,09 = 1.480,00).
+    let obsDescontoLinha;
+    if (vuOk === false && match.valor_total != null && match.quantidade > 0 && pItem.valor_unitario != null) {
+      const liquido = match.valor_total / match.quantidade;
+      if (Math.abs(pItem.valor_unitario - liquido) <= TOLERANCIA_VALOR) {
+        vuOk = true;
+        obsDescontoLinha = "nota traz desconto na linha — valor líquido confere com o pedido";
+      }
+    }
 
     const linhaDivergente = !match || qtdOk === false || vuOk === false;
     if (linhaDivergente) divergente = true;
@@ -1765,7 +1777,7 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
           ? `nota: "${match.produto_nome}" — nome/embalagem diferente, casado por eliminação (único item que sobrou dos dois lados)`
           : variacoes
             ? `nota dividiu em variações do mesmo preço: ${[match, ...variacoes].map((n) => `"${n.produto_nome}" (${n.quantidade})`).join(", ")}`
-            : undefined,
+            : obsDescontoLinha,
     };
   });
 
