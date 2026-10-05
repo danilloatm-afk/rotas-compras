@@ -3873,6 +3873,10 @@ async function loadHistorico() {
     query = query
       .eq("entrega_parcial", false)
       .or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true");
+    // "Justificada" = alguém já registrou a decisão sobre a divergência.
+    const filtroJustificativa = document.getElementById("filtro-justificativa-historico").value;
+    if (filtroJustificativa === "sem") query = query.is("resolucao_divergencia", null);
+    if (filtroJustificativa === "com") query = query.not("resolucao_divergencia", "is", null);
   }
 
   query = query.order("concluido_em", { ascending: false });
@@ -3934,6 +3938,13 @@ document.getElementById("filtro-data-fim").addEventListener("change", () => {
 document.getElementById("btn-somente-divergentes").addEventListener("click", (e) => {
   somenteDivergentesHistorico = !somenteDivergentesHistorico;
   e.currentTarget.classList.toggle("ativo", somenteDivergentesHistorico);
+  const selJustificativa = document.getElementById("filtro-justificativa-historico");
+  selJustificativa.classList.toggle("hidden", !somenteDivergentesHistorico);
+  if (!somenteDivergentesHistorico) selJustificativa.value = "";
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-justificativa-historico").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
@@ -3946,6 +3957,9 @@ document.getElementById("btn-limpar-filtros-historico").addEventListener("click"
   document.getElementById("filtro-data-fim").value = "";
   somenteDivergentesHistorico = false;
   document.getElementById("btn-somente-divergentes").classList.remove("ativo");
+  const selJustificativaLimpar = document.getElementById("filtro-justificativa-historico");
+  selJustificativaLimpar.value = "";
+  selJustificativaLimpar.classList.add("hidden");
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
