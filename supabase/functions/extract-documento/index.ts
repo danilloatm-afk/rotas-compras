@@ -269,7 +269,13 @@ const PROMPT_NOTA =
   "diretamente com 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço', e omita valor_total_nota_impresso/valor_produtos/" +
   "desconto.\n\n" +
   "Em qualquer um dos dois casos: o CNPJ e nome de quem RECEBE (destinatário/tomador) são os mais importantes de extrair " +
-  "corretamente, não confunda com o de quem emitiu/prestou. A foto pode ter qualidade ruim, reflexo ou estar levemente " +
+  "corretamente, não confunda com o de quem emitiu/prestou. ATENÇÃO AO CNPJ DO DESTINATÁRIO: o DANFE tem DOIS CNPJs na " +
+  "parte de cima — o do EMITENTE fica no cabeçalho (na linha de 'Inscrição Estadual', logo ANTES do título " +
+  "'DESTINATÁRIO / REMETENTE') e o do DESTINATÁRIO fica DENTRO do quadro do destinatário, na MESMA LINHA da 'DATA DA " +
+  "EMISSÃO'. Em foto torta ou inclinada, o CNPJ do emitente pode parecer estar dentro do quadro do destinatário — nunca " +
+  "use um CNPJ que esteja na linha de 'Inscrição Estadual' do cabeçalho; use o que está na mesma linha da data de " +
+  "emissão. Se o CNPJ do emitente também aparece na chave de acesso/código de barras, ignore-o. A foto pode ter " +
+  "qualidade ruim, reflexo ou estar levemente " +
   "torta — leia com cuidado; se algum campo não estiver legível com confiança, omita-o em vez de arriscar um valor errado.\n\n" +
   "Extraia também a DATA DE EMISSÃO da nota, e cada parcela/duplicata de pagamento (data de vencimento e valor) da seção " +
   "'Fatura/Duplicata' ou equivalente — usadas depois pra conferir se o prazo de pagamento bate com a condição combinada no " +
