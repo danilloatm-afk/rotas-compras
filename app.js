@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "250";
+const VERSAO_APP = "251";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -3329,7 +3329,10 @@ function renderCardsHistorico(paradas) {
                 </div>`
           }
         </div>
-        <button class="link-btn danger" data-excluir-historico="${p.id}" type="button">Excluir</button>
+        <button class="link-btn" data-desfazer-historico="${p.id}" type="button" title="Apaga esta conclusão e devolve o pedido para ser conferido de novo">↩️ Desfazer e devolver ${
+          pedido.frete_fob ? "à fila do motorista" : "ao recebimento"
+        }</button>
+        <button class="link-btn danger" data-excluir-historico="${p.id}" type="button" title="Só apaga este registro do Histórico — o pedido continua como concluído">Excluir</button>
       </div>`;
     })
     .join("");
@@ -4777,20 +4780,33 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
       divergencia_itens: itensDivergentes,
       divergencia_condicao_pagamento: divergCondicao,
       concluido_em: paradaOrigem.concluido_em,
-      // Acrescenta à decisão já escrita (se tinha) em vez de apagar — a nota
-      // original pode ter contexto que vale a pena manter.
+    };
+    // Cada card cita o OUTRO pedido na decisão. No registro original,
+    // acrescenta à decisão já escrita (se tinha) em vez de apagar — a nota
+    // original pode ter contexto que vale a pena manter.
+    const quem = document.getElementById("almoxarife-select")?.value || null;
+    const agora = new Date().toISOString();
+    const resolucaoOrigem = {
       resolucao_divergencia: [
         paradaOrigem.resolucao_divergencia,
         `Nota também cobre o pedido Nº ${pedidoNovo.numero_pedido || pedidoNovo.id} — conferência unificada.`,
       ]
         .filter(Boolean)
         .join("\n\n"),
-      resolucao_por: paradaOrigem.resolucao_por || document.getElementById("almoxarife-select")?.value || null,
-      resolucao_em: paradaOrigem.resolucao_em || new Date().toISOString(),
+      resolucao_por: paradaOrigem.resolucao_por || quem,
+      resolucao_em: paradaOrigem.resolucao_em || agora,
+    };
+    const resolucaoNovo = {
+      resolucao_divergencia: `Nota também cobre o pedido Nº ${pedidoOriginal.numero_pedido || pedidoOriginal.id} — conferência unificada.`,
+      resolucao_por: quem,
+      resolucao_em: agora,
     };
 
     if (paradaExistente) {
-      const { error: errAtualizaParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaExistente.id);
+      const { error: errAtualizaParada } = await db
+        .from("rl_rota_paradas")
+        .update({ ...dadosConclusao, ...resolucaoNovo })
+        .eq("id", paradaExistente.id);
       if (errAtualizaParada) throw errAtualizaParada;
     } else {
       const { error: errNovaParada } = await db.from("rl_rota_paradas").insert({
@@ -4798,11 +4814,15 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
         pedido_id: pedidoNovo.id,
         ordem: (paradaOrigem.ordem || 0) + 1,
         ...dadosConclusao,
+        ...resolucaoNovo,
       });
       if (errNovaParada) throw errNovaParada;
     }
 
-    const { error: errUpdateOrigem } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaOrigemId);
+    const { error: errUpdateOrigem } = await db
+      .from("rl_rota_paradas")
+      .update({ ...dadosConclusao, ...resolucaoOrigem })
+      .eq("id", paradaOrigemId);
     if (errUpdateOrigem) throw errUpdateOrigem;
 
     const { error: errUpdatePedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedidoNovo.id);
@@ -4818,6 +4838,101 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
     }
   }
 }
+
+// Desfaz uma conclusão do Histórico: apaga o registro, devolve o pedido pra
+// "pendente" (volta pra fila do recebimento CIF ou do motorista) e, se esse
+// registro fazia parte de um grupo de pedidos na mesma nota, recalcula os
+// outros SEM ele. Diferente do "Excluir", que só apaga o registro e deixa o
+// pedido como concluído.
+async function desfazerParadaHistorico(paradaId, btn) {
+  const textoOriginal = btn.dataset.rotulo || btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Desfazendo...";
+  try {
+    const { data: parada, error } = await db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
+      .eq("id", paradaId)
+      .single();
+    if (error || !parada) throw error || new Error("Registro não encontrado. Atualize a página.");
+    const pedido = parada.rl_pedidos || {};
+
+    // Outros pedidos da mesma nota (mesma foto), buscados direto no banco.
+    let irmas = [];
+    if (parada.nota_arquivo_url) {
+      const { data: encontradas, error: errIrmas } = await db
+        .from("rl_rota_paradas")
+        .select("*, rl_pedidos(*)")
+        .eq("nota_arquivo_url", parada.nota_arquivo_url)
+        .eq("status", "concluida")
+        .neq("id", paradaId);
+      if (errIrmas) throw errIrmas;
+      irmas = encontradas || [];
+    }
+
+    const { error: errDel } = await db.from("rl_rota_paradas").delete().eq("id", paradaId);
+    if (errDel) throw errDel;
+    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "pendente" }).eq("id", parada.pedido_id);
+    if (errPedido) throw errPedido;
+
+    // Rota "virtual" do recebimento CIF que ficou vazia não serve pra mais nada.
+    const { count } = await db.from("rl_rota_paradas").select("id", { count: "exact", head: true }).eq("rota_id", parada.rota_id);
+    if (!count && /\(recebimento CIF\)$/.test((parada.rl_rotas || {}).motorista_nome || "")) {
+      await db.from("rl_rotas").delete().eq("id", parada.rota_id);
+    }
+
+    if (irmas.length) {
+      const pedidoRestante = mesclarPedidosParaConferencia(irmas.map((i) => i.rl_pedidos));
+      const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoRestante, irmas[0]);
+      const numero = pedido.numero_pedido || pedido.id;
+      const fraseJuncao = new RegExp(`\\n*Nota também cobre o pedido Nº ${String(numero).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} — conferência unificada\\.`, "g");
+      for (const irma of irmas) {
+        const texto = (irma.resolucao_divergencia || "").replace(fraseJuncao, "").trim();
+        const { error: errIrma } = await db
+          .from("rl_rota_paradas")
+          .update({
+            divergencia_valor: divergValor,
+            divergencia_itens: itensDivergentes,
+            divergencia_condicao_pagamento: divergCondicao,
+            resolucao_divergencia: texto || null,
+            resolucao_por: texto ? irma.resolucao_por : null,
+            resolucao_em: texto ? irma.resolucao_em : null,
+          })
+          .eq("id", irma.id);
+        if (errIrma) throw errIrma;
+      }
+    }
+
+    mostrarAviso(
+      `Desfeito: o pedido ${pedido.numero_pedido || ""} voltou para ${pedido.frete_fob ? "a fila do motorista" : "o recebimento"}.` +
+        (irmas.length ? " Os outros pedidos da mesma nota foram recalculados sem ele." : "")
+    );
+    await loadHistorico();
+    carregarAvisosLiberadosPendentesConferencia();
+    carregarPedidosCifPendentes();
+  } catch (err) {
+    mostrarAviso("Erro ao desfazer: " + err.message);
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-desfazer-historico]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    const textoOriginal = btn.textContent;
+    btn.dataset.rotulo = textoOriginal;
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo pra confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = textoOriginal;
+    }, 4000);
+    return;
+  }
+  await desfazerParadaHistorico(btn.dataset.desfazerHistorico, btn);
+});
 
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
   const btnEditar = e.target.closest("button[data-editar-resolucao]");
