@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "257";
+const VERSAO_APP = "264";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -1941,6 +1941,36 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
             : obsDescontoLinha,
     };
   });
+
+  // Preços CRUZADOS entre duas linhas: o preço que o pedido tem num item
+  // aparece na nota no OUTRO item e vice-versa, com as mesmas quantidades e o
+  // mesmo total. Quase sempre é a IA que trocou duas linhas ao ler a foto (ex:
+  // nota fotografada de cabeça pra baixo — achado no pedido 828425), não o
+  // fornecedor. Não conta como divergência, mas fica avisado na linha pra
+  // conferir na foto.
+  const candidatasCruzadas = linhas
+    .map((l, idx) => ({ l, idx }))
+    .filter(({ l }) => l.match && l.divergente && l.vuP != null && l.vuN != null && l.qtdP != null && l.qtdP === l.qtdN && Math.abs(l.vuP - l.vuN) > TOLERANCIA_VALOR);
+  for (let a = 0; a < candidatasCruzadas.length; a++) {
+    for (let b = a + 1; b < candidatasCruzadas.length; b++) {
+      const A = candidatasCruzadas[a].l;
+      const B = candidatasCruzadas[b].l;
+      if (A.cruzadoCom || B.cruzadoCom) continue;
+      const cruza = Math.abs(A.vuP - B.vuN) <= TOLERANCIA_VALOR && Math.abs(B.vuP - A.vuN) <= TOLERANCIA_VALOR;
+      const totalPedido = A.qtdP * A.vuP + B.qtdP * B.vuP;
+      const totalNota = A.qtdN * A.vuN + B.qtdN * B.vuN;
+      if (cruza && Math.abs(totalPedido - totalNota) <= TOLERANCIA_VALOR * 2) {
+        A.cruzadoCom = B.produto;
+        B.cruzadoCom = A.produto;
+      }
+    }
+  }
+  linhas.forEach((l) => {
+    if (!l.cruzadoCom) return;
+    l.divergente = false;
+    l.obs = `preços cruzados com "${l.cruzadoCom}" (total igual) — provável troca de linhas na leitura da nota; confira na foto`;
+  });
+  divergente = linhas.some((l) => l.divergente);
 
   // Item que sobrou na NOTA sem casar com nenhum item do pedido — sem isso,
   // ele simplesmente desaparecia da comparação (nem aparecia na tabela, nem
