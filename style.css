@@ -311,6 +311,13 @@ input, select, textarea {
 .anexar-pedido-novo label { display: block; margin-top: 0.5rem; }
 .anexar-pedido-novo input[type="file"] { display: block; margin-top: 0.3rem; width: 100%; }
 .anexar-pedido-novo button { margin-top: 0.5rem; }
+.versao-app {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
 .nota-foto-item {
   font-size: 0.85rem;
   padding: 0.3rem 0;
