@@ -311,6 +311,13 @@ input, select, textarea {
 .anexar-pedido-novo label { display: block; margin-top: 0.5rem; }
 .anexar-pedido-novo input[type="file"] { display: block; margin-top: 0.3rem; width: 100%; }
 .anexar-pedido-novo button { margin-top: 0.5rem; }
+.aviso-acoes {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
 .previa-conferencia {
   display: block;
   margin-top: 0.25rem;
