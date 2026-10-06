@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{var t=localStorage.getItem("rl_tema");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>Manual Rotas de Compras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: capa curta, índice por função e uma seção completa por função, tudo visível de uma vez (também imprime bem). */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --fg: #1c2030;
+  --muted: #5b6275;
+  --line: #d9dce6;
+  --accent: #4338c5;
+  --accent-soft: #e6e4fa;
+  --warn-bg: #fff3d6;
+  --warn-fg: #6b4a00;
+  --ok-bg: #dff3e6;
+  --ok-fg: #14532d;
+  --bad-bg: #fde4e1;
+  --bad-fg: #7a1c12;
+  --c-motorista: #a15c07;
+  --c-comprador: #4338c5;
+  --c-almox: #0b6e66;
+  --c-portaria: #475a7a;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-label: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161f;
+    --surface: #1d202c;
+    --fg: #e8eaf2;
+    --muted: #a0a7bb;
+    --line: #333849;
+    --accent: #9d97ff;
+    --accent-soft: #2a2860;
+    --warn-bg: #3a2f10;
+    --warn-fg: #f3d58a;
+    --ok-bg: #16331f;
+    --ok-fg: #a8e6bb;
+    --bad-bg: #3d1a16;
+    --bad-fg: #f5b3aa;
+    --c-motorista: #f0b15a;
+    --c-comprador: #9d97ff;
+    --c-almox: #5fd0c4;
+    --c-portaria: #9fb4d8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161f;
+  --surface: #1d202c;
+  --fg: #e8eaf2;
+  --muted: #a0a7bb;
+  --line: #333849;
+  --accent: #9d97ff;
+  --accent-soft: #2a2860;
+  --warn-bg: #3a2f10;
+  --warn-fg: #f3d58a;
+  --ok-bg: #16331f;
+  --ok-fg: #a8e6bb;
+  --bad-bg: #3d1a16;
+  --bad-fg: #f5b3aa;
+  --c-motorista: #f0b15a;
+  --c-comprador: #9d97ff;
+  --c-almox: #5fd0c4;
+  --c-portaria: #9fb4d8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; }
+h1, h2, h3 { font-family: var(--font-label); line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 6vw, 2.9rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.7rem; font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.01em; margin-top: 1.6rem; margin-bottom: 0.4rem; }
+p { margin: 0.5rem 0; max-width: 68ch; }
+a { color: var(--accent); }
+
+.capa { padding-block: 8px 20px; display: grid; gap: 10px; }
+.capa .tag { font-family: var(--font-label); text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.capa p { color: var(--muted); font-size: 1.05rem; }
+
+.indice { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-block: 18px 8px; padding: 0; list-style: none; }
+.indice a {
+  display: grid; gap: 2px; padding: 12px 14px; text-decoration: none; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--cor, var(--accent)); border-radius: 6px;
+}
+.indice a strong { font-family: var(--font-label); font-size: 1.1rem; }
+.indice a span { font-size: 0.85rem; color: var(--muted); line-height: 1.35; }
+.indice a:focus-visible, .indice a:hover { outline: 2px solid var(--cor, var(--accent)); outline-offset: 1px; }
+
+section.bloco { margin-top: 40px; }
+section.funcao { margin-top: 56px; padding-top: 8px; border-top: 6px solid var(--cor); }
+.funcao-cab { display: grid; gap: 6px; margin-block: 14px 6px; }
+.funcao-cab .papel { font-family: var(--font-label); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.8rem; font-weight: 600; color: var(--cor); }
+.funcao-cab h2 { color: var(--cor); }
+.resumo { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; margin-block: 10px; }
+.resumo dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; }
+.resumo dt { font-family: var(--font-label); font-weight: 600; color: var(--muted); }
+.resumo dd { margin: 0; min-width: 0; }
+@media (max-width: 520px) { .resumo dl { grid-template-columns: 1fr; gap: 0; } .resumo dd { margin-bottom: 8px; } }
+
+ol.passos { counter-reset: passo; list-style: none; padding: 0; margin: 0.6rem 0; display: grid; gap: 12px; }
+ol.passos > li { counter-increment: passo; position: relative; padding-left: 44px; min-width: 0; }
+ol.passos > li::before {
+  content: counter(passo); position: absolute; left: 0; top: 1px; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--cor); color: var(--bg); font-family: var(--font-label); font-weight: 700;
+}
+ol.passos > li > strong:first-child { display: block; }
+ul.simples { margin: 0.4rem 0; padding-left: 1.2rem; display: grid; gap: 4px; }
+
+.btn-nome {
+  display: inline-block; font-family: var(--font-label); font-weight: 600; font-size: 0.92em; white-space: normal;
+  padding: 1px 8px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); color: var(--fg);
+}
+.aviso { border-radius: 6px; padding: 10px 14px; margin-block: 12px; border: 1px solid transparent; }
+.aviso strong { font-family: var(--font-label); letter-spacing: 0.02em; }
+.aviso.atencao { background: var(--warn-bg); color: var(--warn-fg); }
+.aviso.dica { background: var(--ok-bg); color: var(--ok-fg); }
+.aviso.erro { background: var(--bad-bg); color: var(--bad-fg); }
+.aviso p { margin: 0.2rem 0 0; max-width: none; }
+
+.tabela { overflow-x: auto; margin-block: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-label); font-weight: 600; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+
+.fluxo { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px; overflow-x: auto; }
+.legenda { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+.legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+
+@media print {
+  section.funcao { break-before: page; }
+  .indice { display: none; }
+}
+</style>
+
+<style>
+body { margin: 0; }
+.voltar { font-family: var(--font-label); font-weight: 600; text-decoration: none; }
+.voltar:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p><a class="voltar" href="index.html">← Voltar ao sistema</a></p>
+  <header class="capa">
+    <span class="tag">Grupo Wehrmann · treinamento da equipe · atualizado em 06/10/2026</span>
+    <h1>Manual do Rotas de Compras</h1>
+    <p>Como cada pessoa usa o sistema no dia a dia: portaria, almoxarife, motorista e comprador. Cada função tem o passo a passo da sua parte e o que fazer quando algo não bate.</p>
+    <ul class="indice">
+      <li><a href="#portaria" style="--cor: var(--c-portaria)"><strong>Portaria</strong><span>Avisa que a entrega chegou</span></a></li>
+      <li><a href="#almoxarife" style="--cor: var(--c-almox)"><strong>Almoxarife</strong><span>Libera, confere e confirma o recebimento</span></a></li>
+      <li><a href="#motorista" style="--cor: var(--c-motorista)"><strong>Motorista</strong><span>Monta a rota e fotografa a nota</span></a></li>
+      <li><a href="#comprador" style="--cor: var(--c-comprador)"><strong>Comprador</strong><span>Cuida dos pedidos e das divergências</span></a></li>
+    </ul>
+  </header>
+
+  <section class="bloco" id="visao-geral">
+    <h2>Como o sistema funciona</h2>
+    <p>Todo pedido de compra entra no sistema e segue um de dois caminhos, conforme o frete. O sistema lê a nota fiscal com inteligência artificial e compara com o pedido. Quando algo não bate, aparece como <strong>divergência</strong> no Histórico para alguém resolver.</p>
+    <div class="fluxo">
+      <pre class="mermaid">
+flowchart TD
+  P["Pedido de compra entra no sistema<br/>(automático pela pasta de compras ou anexado pelo comprador)"] --> T{"Tem a palavra FOB<br/>no nome do arquivo?"}
+  T -- "Sim: o motorista busca" --> F1["Motorista monta a rota"]
+  F1 --> F2["Coleta no fornecedor e fotografa a nota"]
+  T -- "Não: o fornecedor entrega (CIF)" --> C1["Portaria avisa a chegada"]
+  C1 --> C2["Almoxarife libera o acesso"]
+  C2 --> C3["Almoxarife confere a nota"]
+  F2 --> IA["IA lê a nota e compara com o pedido"]
+  C3 --> IA
+  IA --> H["Histórico"]
+  H --> OK["Tudo certo: almoxarife confirma o recebimento"]
+  H --> D["Divergência: comprador resolve e registra a decisão"]
+      </pre>
+    </div>
+    <div class="legenda">
+      <span><i style="background: var(--c-motorista)"></i>Motorista</span>
+      <span><i style="background: var(--c-portaria)"></i>Portaria</span>
+      <span><i style="background: var(--c-almox)"></i>Almoxarife</span>
+      <span><i style="background: var(--c-comprador)"></i>Comprador</span>
+    </div>
+
+    <h3>Palavras que aparecem no sistema</h3>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Termo</th><th>Significa</th></tr></thead>
+        <tbody>
+          <tr><td><strong>FOB</strong></td><td>O comprador é responsável pelo transporte. O motorista vai buscar a mercadoria no fornecedor.</td></tr>
+          <tr><td><strong>CIF</strong></td><td>O fornecedor entrega aqui. Não precisa de rota; a conferência é feita pelo almoxarifado.</td></tr>
+          <tr><td><strong>Parada</strong></td><td>Uma visita da rota (um fornecedor). Ao concluir a parada, a nota é lida e conferida.</td></tr>
+          <tr><td><strong>Divergência</strong></td><td>Algo da nota que não bate com o pedido: valor, CNPJ, itens ou condição de pagamento.</td></tr>
+          <tr><td><strong>Entrega parcial</strong></td><td>Veio só uma parte do pedido. O pedido volta para a fila para buscar o restante.</td></tr>
+          <tr><td><strong>Recebido por terceiro</strong></td><td>O pedido foi recebido fora do almoxarifado, sem nota para conferir. Fica registrado sem comparação.</td></tr>
+          <tr><td><strong>Decisão</strong></td><td>O texto que explica o que foi combinado sobre uma divergência. Uma divergência com decisão é chamada de justificada.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Vale para todo mundo</h3>
+    <ul class="simples">
+      <li><strong>Seu nome:</strong> em cada aba, escolha o seu nome na lista no topo. Se não estiver, use <span class="btn-nome">+ Novo</span>.</li>
+      <li><strong>Versão:</strong> ao lado do título do app aparece, por exemplo, <em>v248 · IA 25</em>. Se alguém reportar um problema, informe esse número.</li>
+      <li><strong>Atualizar:</strong> o Histórico e os avisos se atualizam sozinhos a cada minuto. O botão <span class="btn-nome">🔄 Atualizar</span> força na hora.</li>
+      <li><strong>Som:</strong> em uma tela fixa (TV ou computador do setor), toque uma vez em <span class="btn-nome">🔊 Ativar som</span>. O navegador exige esse toque para liberar os alertas de voz.</li>
+      <li><strong>Tema:</strong> o botão da lua alterna entre modo claro e escuro.</li>
+    </ul>
+  </section>
+
+  <!-- PORTARIA -->
+  <section class="funcao" id="portaria" style="--cor: var(--c-portaria)">
+    <div class="funcao-cab">
+      <span class="papel">Função 1 de 4</span>
+      <h2>Portaria</h2>
+    </div>
+    <div class="resumo"><dl>
+      <dt>Seu papel</dt><dd>Avisar o almoxarifado, na hora, quando um fornecedor chega com uma entrega (frete CIF).</dd>
+      <dt>Aba que usa</dt><dd><span class="btn-nome">🚪 Portaria</span></dd>
+      <dt>Resultado</dt><dd>O almoxarifado recebe o aviso com som e já pode liberar o acesso, sem telefonema.</dd>
+    </dl></div>
+
+    <h3>Passo a passo: avisar uma chegada</h3>
+    <ol class="passos">
+      <li><strong>Escolha a empresa</strong>
+        Em <em>Empresa (pra qual empresa é a entrega)</em>, selecione para quem é a mercadoria. É obrigatório.</li>
+      <li><strong>Se for a Agrícola Wehrmann, escolha o almoxarifado (setor)</strong>
+        Aparecem <em>Uso e Consumo</em>, <em>Insumos</em> e <em>Cantina</em>. Também é obrigatório. Almoxarife com setor cadastrado só vê os avisos do seu setor.</li>
+      <li><strong>Anexe a nota, se tiver o arquivo (opcional)</strong>
+        Escolha o arquivo da nota e toque em <span class="btn-nome">🤖 Ler nota com IA</span>. O sistema preenche o fornecedor, o número do pedido que a nota cita e mostra os pedidos pendentes desse fornecedor. Os que a nota cita já vêm marcados como <em>(citado na nota)</em>. Confira e marque quais são. Se a nota cobre mais de um pedido, marque todos (segure Ctrl ou Cmd).</li>
+      <li><strong>Preencha o que faltar</strong>
+        CNPJ do fornecedor, nome do fornecedor, número do pedido (se souber) e uma observação, como "motorista aguardando na guarita". É preciso informar pelo menos o CNPJ, o fornecedor ou o número do pedido.</li>
+      <li><strong>Toque em <span class="btn-nome">🔔 Avisar chegada</span></strong>
+        O aviso vai para o almoxarifado com alerta de voz. Ele aparece na lista <em>Avisos enviados hoje</em>.</li>
+    </ol>
+
+    <div class="aviso dica"><strong>Dica</strong>
+      <p>Anexar a nota na portaria economiza trabalho: o almoxarifado recebe a leitura pronta e não precisa fotografar de novo.</p></div>
+    <div class="aviso atencao"><strong>Atenção</strong>
+      <p>Avise só entregas CIF, que o fornecedor traz até aqui. Coleta feita pelo motorista (FOB) não passa pela portaria.</p></div>
+
+    <h3>Se algo der errado</h3>
+    <div class="tabela"><table>
+      <thead><tr><th>Situação</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>A leitura da nota deu erro</td><td>Confira se a imagem está nítida e tente de novo. Se não funcionar, avise sem a nota: o almoxarifado fotografa depois.</td></tr>
+        <tr><td>Não apareceu nenhum pedido do fornecedor</td><td>O pedido pode ainda não estar no sistema. Envie o aviso mesmo assim; o almoxarifado vincula ou anexa o pedido depois.</td></tr>
+        <tr><td>Enviei o aviso com empresa errada</td><td>Avise o almoxarifado para ignorar esse aviso e envie um novo com a empresa certa.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ALMOXARIFE -->
+  <section class="funcao" id="almoxarife" style="--cor: var(--c-almox)">
+    <div class="funcao-cab">
+      <span class="papel">Função 2 de 4</span>
+      <h2>Almoxarife</h2>
+    </div>
+    <div class="resumo"><dl>
+      <dt>Seu papel</dt><dd>Liberar a entrada do caminhão, conferir a nota contra o pedido e confirmar o recebimento da mercadoria.</dd>
+      <dt>Abas que usa</dt><dd><span class="btn-nome">📦 Recebimento CIF</span> e <span class="btn-nome">🗂️ Histórico</span></dd>
+      <dt>Resultado</dt><dd>Cada entrega fica conferida e registrada, com observações e fotos de qualquer problema.</dd>
+    </dl></div>
+
+    <h3>Antes de começar</h3>
+    <ul class="simples">
+      <li>Em <em>Meu nome (almoxarifado)</em>, escolha o seu nome. Se o seu cadastro tem empresa e setor, você só vê o que é seu.</li>
+      <li>Use <em>Filtrar por setor</em> para olhar só um setor (Uso e Consumo, Insumos ou Cantina).</li>
+      <li>Em tela fixa, toque em <span class="btn-nome">🔊 Ativar som</span> uma vez. Cada chegada na portaria dispara um alerta de voz.</li>
+    </ul>
+
+    <h3 id="almoxarife-recebimento">Passo a passo: receber uma entrega CIF</h3>
+    <ol class="passos">
+      <li><strong>Libere o acesso</strong>
+        Na aba <em>Recebimento CIF</em>, em <em>Avisos da portaria aguardando</em>, toque em <span class="btn-nome">✅ Liberar acesso</span>. A conferência só fica disponível depois disso, de propósito: primeiro libera o caminhão.</li>
+      <li><strong>Abra a conferência</strong>
+        O aviso passa para <em>Liberados, aguardando conferência</em>. Se já tem pedido vinculado, toque em <span class="btn-nome">🔍 Conferir</span> (ou <span class="btn-nome">✅ Ver conferência</span> quando a portaria já anexou a nota).</li>
+      <li><strong>Se o aviso está sem pedido, escolha o pedido olhando a prévia</strong>
+        A primeira sugestão é <em>🎯 A nota cita o pedido Nº…</em>. Se não houver, busque em <em>Vincular pedido manualmente</em> por número, fornecedor ou produto. Cada pedido mostra uma linha <em>🔎 Prévia com a nota</em> (veja "Como ler a prévia" abaixo). Escolha o que combina, marque e toque em <span class="btn-nome">é esse, conferir</span> ou <span class="btn-nome">🔍 Conferir selecionados</span>. Se o pedido não está no sistema, use <em>📎 Não achou o pedido?</em> e anexe a foto ou o PDF dele.</li>
+      <li><strong>Confira a nota na tela de conferência</strong>
+        Se a nota já veio da portaria, ela aparece pronta. Senão, tire a foto (ou escolha várias da galeria, se a nota tiver muitas páginas). O sistema lê e mostra ✅ ou ⚠️ para valor, CNPJ, itens e condição de pagamento. Corrija algum campo se a leitura errou.</li>
+      <li><strong>Conclua</strong>
+        Toque em <span class="btn-nome">Concluir parada</span>. Se chegou só uma parte do pedido, marque <em>Entrega parcial</em> antes: o pedido volta para a fila para o restante.</li>
+      <li><strong>Confirme o recebimento no Histórico</strong>
+        Na aba <em>Histórico</em>, escolha o seu nome e, no card, escreva uma observação (avaria, embalagem violada, faltou algo), anexe fotos se precisar e toque em <span class="btn-nome">✅ Confirmar recebimento</span>.</li>
+    </ol>
+
+    <h3>Como ler a prévia (antes de vincular)</h3>
+    <p>Quando a portaria anexou a nota, o sistema compara essa nota com cada pedido candidato <strong>antes</strong> de você vincular, para você não ligar a nota ao pedido errado. Não gasta leitura de IA, usa o que a portaria já leu.</p>
+    <div class="tabela"><table>
+      <thead><tr><th>Aparece</th><th>Quer dizer</th></tr></thead>
+      <tbody>
+        <tr><td>✅ valor confere · ✅ itens: 3 de 3 batem</td><td>Esse pedido combina com a nota. Pode vincular.</td></tr>
+        <tr><td>⚠️ valor difere R$ 66,20 · ⚠️ itens: 1 de 2 batem</td><td>Ou é o pedido errado, ou a nota cobre também outro pedido. Marque os outros pedidos da nota e veja a prévia dos marcados somados.</td></tr>
+        <tr><td>🚩 fornecedor diferente do da nota</td><td>Quase certamente é o pedido errado. Procure outro.</td></tr>
+        <tr><td>⚠️ CNPJ da nota é de outra empresa</td><td>A nota foi emitida para outra empresa do grupo. Confira com o comprador antes de seguir.</td></tr>
+        <tr><td>Nenhuma prévia</td><td>A portaria não anexou a nota neste aviso. Confira na tela de conferência, depois de vincular.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="aviso dica"><strong>Nota com mais de um pedido</strong>
+      <p>Ao marcar vários pedidos na busca, aparece <em>Prévia dos N marcados somados</em>. Quando a soma bate com a nota, os pedidos marcados são exatamente os que ela cobre.</p></div>
+    <p>A prévia é só um aviso: quem decide é você. Depois de vincular, a tela de conferência ainda mostra tudo, e nada é concluído até você tocar em <span class="btn-nome">Concluir parada</span>.</p>
+
+    <h3>Outras tarefas do dia a dia</h3>
+    <ul class="simples">
+      <li><strong>Pedido recebido fora do almoxarifado:</strong> em <em>Todos os pedidos CIF pendentes</em>, marque os pedidos e toque em <span class="btn-nome">🤝 Recebido por terceiro (selecionados)</span>. Confirme com o segundo toque. Fica registrado sem comparação de nota.</li>
+      <li><strong>Conferir um pedido sem aviso da portaria:</strong> na mesma lista, toque em <span class="btn-nome">🔍 Conferir</span> no pedido.</li>
+      <li><strong>Vinculei o pedido errado no aviso:</strong> em <em>Liberados, aguardando conferência</em>, o aviso já vinculado mostra os pedidos e a <em>🔎 Prévia do vinculado</em>. Se ela alertar, toque em <span class="btn-nome">🔁 Trocar o pedido vinculado</span> (dois toques). O aviso volta para a escolha do pedido, com sugestões, busca e prévia. Nada que já foi conferido é alterado.</li>
+      <li><strong>Aviso que não tem pedido para conferir:</strong> toque em <span class="btn-nome">Não tem pedido pra conferir aqui</span>. Para limpar os antigos de uma vez, use <span class="btn-nome">🗄️ Arquivar antigos sem pedido (+7 dias)</span>.</li>
+      <li><strong>Cadastrar um almoxarife novo:</strong> aba <em>Configurações</em>, seção <em>Almoxarifado</em>.</li>
+    </ul>
+
+    <div class="aviso atencao"><strong>Atenção</strong>
+      <p>A nota pode cobrir mais de um pedido do mesmo fornecedor. Ao vincular, marque todos os pedidos dela. Assim o valor e os itens são somados antes de comparar e a divergência não aparece à toa.</p></div>
+    <div class="aviso dica"><strong>Dica</strong>
+      <p>Foto boa vale mais que qualquer ajuste: boa luz, sem reflexo, nota reta e chegando perto até o texto ficar nítido.</p></div>
+
+    <h3>Se algo der errado</h3>
+    <div class="tabela"><table>
+      <thead><tr><th>Situação</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>Fotografei a nota errada</td><td>No Histórico, abra <em>🔄 Foto da nota errada? Trocar a nota e ler de novo</em> no card, escolha a foto certa e confirme.</td></tr>
+        <tr><td>Concluí ou juntei o pedido errado</td><td>No card do Histórico, use <span class="btn-nome">↩️ Desfazer e devolver ao recebimento</span> (dois toques). O pedido volta para a fila e pode ser conferido de novo. Se ele estava junto com outros pedidos na mesma nota, os outros são recalculados sem ele. Não use <em>Excluir</em> para isso: ele só apaga o registro e o pedido continua como concluído.</td></tr>
+        <tr><td>A nota tem várias páginas</td><td>Tire uma foto de cada parte, sem repetir os mesmos itens. O sistema lê cada uma e junta.</td></tr>
+        <tr><td>Deu divergência</td><td>Veja o detalhe no card. Se for erro de leitura, troque a nota. Se for real, avise o comprador pelo botão <em>📱 Avisar comprador</em> (veja a seção do Comprador).</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- MOTORISTA -->
+  <section class="funcao" id="motorista" style="--cor: var(--c-motorista)">
+    <div class="funcao-cab">
+      <span class="papel">Função 3 de 4</span>
+      <h2>Motorista</h2>
+    </div>
+    <div class="resumo"><dl>
+      <dt>Seu papel</dt><dd>Montar a rota do dia, buscar os pedidos FOB nos fornecedores e fotografar a nota de cada parada.</dd>
+      <dt>Aba que usa</dt><dd><span class="btn-nome">🚚 Motorista</span> (de preferência pelo celular)</dd>
+      <dt>Resultado</dt><dd>Cada parada concluída já mostra na hora se a nota bate com o pedido.</dd>
+    </dl></div>
+
+    <h3>Passo a passo: o dia na rota</h3>
+    <ol class="passos">
+      <li><strong>Escolha o seu nome</strong>
+        Em <em>Meu nome (motorista)</em>. Se não estiver na lista, use <span class="btn-nome">+ Novo</span>.</li>
+      <li><strong>Escolha os pedidos</strong>
+        Em <em>Pedidos disponíveis</em> estão os pedidos FOB à espera de coleta. Use os filtros de cidade, comprador e fornecedor. Marque <em>Incluir na rota</em> nos que vai buscar. Os cartões mostram selos de <em>Urgente</em> e <em>📦 Pode vir parcial</em>. Abra <em>📎 pedido</em> para ver o documento.</li>
+      <li><strong>Monte a rota</strong>
+        Toque em <span class="btn-nome">Montar rota com selecionados</span>. Pedidos do mesmo fornecedor viram uma parada só.</li>
+      <li><strong>Organize e navegue</strong>
+        Em <em>Minha rota de hoje</em>, arraste o ícone ⠿ para mudar a ordem. Use <span class="btn-nome">📍 Abrir rota no Google Maps</span> para a rota inteira ou <em>Navegar</em> em cada parada.</li>
+      <li><strong>Em cada fornecedor, conclua a parada</strong>
+        Depois de receber a mercadoria, toque em <span class="btn-nome">Concluir</span>. Fotografe a nota com <em>📷 Tirar foto da nota fiscal</em>. A leitura começa sozinha. Confira valor, CNPJ e número da nota.</li>
+      <li><strong>Veja o resultado</strong>
+        O sistema mostra ✅ quando bate e ⚠️ quando não bate. Toque em <span class="btn-nome">Concluir parada</span> mesmo com divergência: ela vai para o Histórico para o comprador resolver.</li>
+    </ol>
+
+    <h3>Casos especiais</h3>
+    <ul class="simples">
+      <li><strong>Nota com muitos itens:</strong> tire uma foto de cada parte (toque na câmera de novo para cada uma) ou escolha várias da galeria. Não repita os mesmos itens em duas fotos. O sistema junta tudo.</li>
+      <li><strong>Veio só uma parte do pedido:</strong> marque <em>📦 Entrega parcial</em>. O pedido volta para <em>Pedidos disponíveis</em> para buscar o restante.</li>
+      <li><strong>Retirada em transportadora:</strong> em <em>🏭 Retirada em transportadora</em> não existe rota. Quando encontrar o pedido lá, toque em <span class="btn-nome">📦 Encontrei — concluir</span> e fotografe a nota.</li>
+      <li><strong>Uma nota para dois pedidos do mesmo fornecedor:</strong> conclua cada parada normalmente, fotografando a nota em cada uma. O comprador junta os dois pedidos depois, no Histórico.</li>
+      <li><strong>Excluir da rota:</strong> marque as paradas e use <span class="btn-nome">Excluir selecionadas</span>, ou <span class="btn-nome">Excluir rota</span> para tudo.</li>
+    </ul>
+
+    <div class="aviso dica"><strong>Como fotografar a nota</strong>
+      <p>Boa luz, sem reflexo, nota reta (não torta) e chegue perto até o texto ficar nítido. É isso que mais ajuda a leitura automática a acertar o CNPJ e os valores.</p></div>
+    <div class="aviso atencao"><strong>Atenção</strong>
+      <p>Se aparecer "Nota não lida — clique de novo pra enviar assim mesmo", a foto não foi lida. Tire outra com mais nitidez antes de enviar. Marcar entrega parcial só para conseguir enviar atrapalha a conferência.</p></div>
+
+    <h3>Se algo der errado</h3>
+    <div class="tabela"><table>
+      <thead><tr><th>Situação</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>Anexei a foto errada</td><td>Se ainda não concluiu, remova a foto na lista e tire a certa. Se já concluiu, avise o comprador: ele troca a nota no Histórico.</td></tr>
+        <tr><td>O CNPJ aparece diferente da empresa</td><td>Em foto torta ou borrada a leitura pode trocar um dígito. Corrija o campo na hora se viu o número certo na nota.</td></tr>
+        <tr><td>A rota sumiu ou está vazia</td><td>Toque em <span class="btn-nome">🔄 Atualizar</span> e confira se o seu nome está selecionado.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- COMPRADOR -->
+  <section class="funcao" id="comprador" style="--cor: var(--c-comprador)">
+    <div class="funcao-cab">
+      <span class="papel">Função 4 de 4</span>
+      <h2>Comprador</h2>
+    </div>
+    <div class="resumo"><dl>
+      <dt>Seu papel</dt><dd>Garantir que os pedidos estejam no sistema e resolver as divergências que aparecem nas conferências.</dd>
+      <dt>Abas que usa</dt><dd><span class="btn-nome">📥 Comprador</span>, <span class="btn-nome">🗂️ Histórico</span> e <span class="btn-nome">📊 Indicadores</span></dd>
+      <dt>Resultado</dt><dd>Pedidos chegam ao motorista ou ao almoxarifado, e cada divergência termina com uma decisão registrada.</dd>
+    </dl></div>
+
+    <h3>Como o pedido chega ao sistema</h3>
+    <ul class="simples">
+      <li><strong>Automático:</strong> um robô lê a pasta de compras a cada 15 minutos e cadastra os pedidos novos, com empresa, fornecedor, valor, itens e comprador. O nome do arquivo decide o frete: com <strong>FOB</strong> vai para o motorista; sem FOB é CIF e vai para o almoxarifado.</li>
+      <li><strong>Manual:</strong> se o pedido não entrou sozinho, anexe você mesmo.</li>
+    </ul>
+
+    <h3>Passo a passo: anexar um pedido manualmente</h3>
+    <ol class="passos">
+      <li><strong>Escolha o seu nome</strong> em <em>Meu nome (comprador)</em>.</li>
+      <li><strong>Anexe o arquivo</strong> (PDF ou foto) e toque em <span class="btn-nome">🤖 Ler com IA</span>. Ela preenche empresa, número, valor e local de retirada. O sistema avisa se o pedido já foi enviado antes.</li>
+      <li><strong>Confira os campos</strong> e acrescente observações para o motorista, se precisar.</li>
+      <li><strong>Toque em <span class="btn-nome">Enviar pedido</span></strong>. Acompanhe em <em>Meus pedidos</em>. Um pedido ainda pendente pode ser cancelado em <em>Cancelar pedido</em> (dois toques).</li>
+    </ol>
+
+    <h3 id="comprador-divergencias">Passo a passo: resolver uma divergência</h3>
+    <ol class="passos">
+      <li><strong>Encontre as divergências</strong>
+        No <em>Histórico</em>, toque em <span class="btn-nome">⚠️ Somente divergentes</span>. Ao lado aparece um seletor: <em>Só as NÃO justificadas</em> mostra o que ainda precisa da sua decisão.</li>
+      <li><strong>Entenda o que divergiu</strong>
+        O card lista cada divergência (tabela abaixo). Abra <em>📎 pedido</em> e <em>📎 nota fiscal</em> para conferir os documentos.</li>
+      <li><strong>Decida se é erro de leitura ou divergência real</strong>
+        Se a nota está certa e a IA leu errado, troque a nota (veja abaixo). Se o fornecedor errou, é divergência real.</li>
+      <li><strong>Fale com o fornecedor, se for real</strong>
+        Toque em <span class="btn-nome">📱 Avisar comprador</span>: abre o WhatsApp com o resumo das divergências já escrito.</li>
+      <li><strong>Registre a decisão</strong>
+        Escreva o que foi combinado (por exemplo, "fornecedor vai reemitir a nota") e toque em <span class="btn-nome">Salvar decisão</span>. Isso marca a divergência como justificada e alimenta os indicadores.</li>
+    </ol>
+
+    <div class="tabela"><table>
+      <thead><tr><th>Divergência</th><th>O que o sistema comparou</th><th>Causas comuns</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Valor</strong></td><td>Total do pedido contra o total da nota (tolerância de R$ 0,05).</td><td>Preço diferente, item a mais, frete, nota cobrindo dois pedidos.</td></tr>
+        <tr><td><strong>CNPJ</strong></td><td>CNPJ da empresa no pedido contra o do destinatário na nota.</td><td>Nota emitida para outra filial ou empresa; dígito mal lido em foto ruim.</td></tr>
+        <tr><td><strong>Itens</strong></td><td>Produto, quantidade e valor unitário, item por item.</td><td>Preço unitário diferente, quantidade diferente, item que não estava no pedido.</td></tr>
+        <tr><td><strong>Condição de pagamento</strong></td><td>Prazo combinado no pedido contra as parcelas da nota (tolerância de 5 dias).</td><td>Boleto com prazo diferente do combinado.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Ferramentas do Histórico para casos comuns</h3>
+    <div class="tabela"><table>
+      <thead><tr><th>Caso</th><th>Ferramenta</th></tr></thead>
+      <tbody>
+        <tr><td>A nota cobre dois pedidos do mesmo fornecedor</td><td>Se o sistema reconhecer a mesma nota, aparece <em>🔗 Mesma nota… também no pedido Nº…</em> com o botão <span class="btn-nome">Juntar os dois</span> (dois toques). Se não, use <em>🔗 Essa nota também cobre outro pedido?</em>, busque o outro pedido e toque em <span class="btn-nome">Vincular e juntar</span>. A conferência é refeita com os pedidos somados, sem gastar IA.</td></tr>
+        <tr><td>Ver os pedidos juntos</td><td>Depois de juntar, o botão <span class="btn-nome">📎 todos os pedidos juntos (PDF)</span> abre um PDF único com os anexos dos pedidos da nota.</td></tr>
+        <tr><td>A foto da nota está errada ou ruim</td><td><em>🔄 Foto da nota errada? Trocar a nota e ler de novo</em>: escolha a(s) foto(s) certa(s) e confirme com o segundo toque. A IA lê de novo e as divergências são recalculadas. Vale para todos os pedidos da mesma nota. A decisão já escrita é mantida, então revise o texto.</td></tr>
+        <tr><td>Nota com várias fotos</td><td>As fotos extras aparecem como <em>📎 nota fiscal (foto 2)</em> e assim por diante.</td></tr>
+        <tr><td>Juntei o pedido errado, ou a conferência foi feita no pedido errado</td><td><span class="btn-nome">↩️ Desfazer e devolver ao recebimento</span> (ou <em>à fila do motorista</em>, se o frete é FOB): apaga a conclusão e devolve o pedido para pendente. Os outros pedidos da mesma nota são recalculados sem ele.</td></tr>
+        <tr><td>Qual a diferença entre Desfazer e Excluir?</td><td><strong>Desfazer</strong> devolve o pedido para ser conferido de novo. <strong>Excluir</strong> só tira o registro da lista do Histórico; o pedido continua como concluído e não volta para nenhuma fila.</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="aviso atencao"><strong>Atenção</strong>
+      <p>Nem toda divergência é culpa do fornecedor. Antes de cobrar, confira se a nota foi lida certa. Hoje, os erros mais frequentes são CNPJ com um dígito trocado em foto ruim e nota que traz desconto na linha do item (o sistema já considera o valor líquido).</p></div>
+
+    <h3>Indicadores</h3>
+    <p>A aba <em>Indicadores</em> mostra pedidos coletados por mês, lojas visitadas, divergências por tipo e por fornecedor, as divergências <strong>sem resposta por comprador</strong> (com os dias de espera) e o tempo médio de resposta. Use para acompanhar o que ainda está sem decisão.</p>
+
+    <h3>Se algo der errado</h3>
+    <div class="tabela"><table>
+      <thead><tr><th>Situação</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>O pedido não apareceu para o motorista</td><td>Confira se o arquivo tem FOB no nome. Sem FOB ele foi tratado como CIF e está em <em>Recebimento CIF</em>. Se não entrou de jeito nenhum, anexe manualmente.</td></tr>
+        <tr><td>Enviei um pedido duplicado</td><td>Cancele um deles em <em>Meus pedidos</em> (se ainda pendente) ou peça para o motorista excluir em <em>Pedidos disponíveis</em>.</td></tr>
+        <tr><td>Quero ver tudo de um pedido</td><td>No Histórico, busque pelo número do pedido ou pelo fornecedor, e filtre por data se precisar.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>
+    <p>Manual do Rotas de Compras. O app mostra a sua versão ao lado do título. Se uma tela estiver diferente do descrito aqui, atualize a página; se continuar, informe a versão a quem cuida do sistema.</p>
+  </footer>
+</div>
+
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
+  const escuro = document.documentElement.getAttribute("data-theme") === "dark" ||
+    (!document.documentElement.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+  mermaid.initialize({ startOnLoad: true, theme: escuro ? "dark" : "default" });
+</script>
+</body>
+</html>
