@@ -2887,6 +2887,35 @@ function renderResolucaoDivergencia(parada) {
 // juntando o outro pedido na mesma conferência já concluída. Não lê nada de
 // novo com IA: só reorganiza pedidos que já existem contra a nota que já foi
 // lida (ver vincularOutroPedidoHistorico).
+// Outro registro já concluído que tem o MESMO número de nota, mesmo valor e
+// fornecedor parecido, mas foto enviada separadamente (motorista fotografou a
+// nota de novo em cada parada) — quase certamente a mesma nota cobrindo dois
+// pedidos. Quem tem a MESMA foto (nota_arquivo_url) já é tratado como grupo
+// confirmado (ver pedidosIrmaos), então não entra aqui.
+function sugestoesMesmaNota(parada, pool) {
+  if (!parada.nota_numero) return [];
+  const ped = parada.rl_pedidos || {};
+  return (pool || []).filter(
+    (q) =>
+      q.id !== parada.id &&
+      !q.entrega_parcial &&
+      q.nota_arquivo_url !== parada.nota_arquivo_url &&
+      q.nota_numero === parada.nota_numero &&
+      Number(q.nota_valor_total) === Number(parada.nota_valor_total) &&
+      fornecedoresParecidos(ped.fornecedor_nome, (q.rl_pedidos || {}).fornecedor_nome)
+  );
+}
+
+function renderSugestaoMesmaNota(parada, pool) {
+  return sugestoesMesmaNota(parada, pool)
+    .map(
+      (q) => `<div class="sugestao-mesma-nota">🔗 Mesma nota (nº ${escapeHtml(parada.nota_numero)}) também no pedido Nº ${escapeHtml(
+        (q.rl_pedidos || {}).numero_pedido || "sem número"
+      )}. <button type="button" class="btn small" data-juntar-concluida="${parada.id}" data-parada-irma="${q.id}">Juntar os dois</button></div>`
+    )
+    .join("");
+}
+
 function renderVincularOutroPedido(parada) {
   return `<details class="vincular-outro-pedido">
     <summary>🔗 Essa nota também cobre outro pedido? Buscar e vincular</summary>
@@ -2902,6 +2931,10 @@ let somenteDivergentesHistorico = false;
 // o histórico inteiro. Assim a busca sempre alcança qualquer registro, não
 // importa o quão antigo ou quantos existam no total.
 let paginaAtualDados = [];
+// Página atual + registros de OUTRAS páginas que compartilham o número da nota
+// com algum deles — usado pra achar "pedidos irmãos" (mesma nota) mesmo quando
+// caem em páginas diferentes do Histórico.
+let poolParadasHistorico = [];
 let algumFiltroAtivoHistorico = false;
 
 function paradaEDivergente(p) {
@@ -2947,7 +2980,7 @@ function renderCardsHistorico(paradas) {
   el.innerHTML = paradas
     .map((p) => {
       const pedido = p.rl_pedidos || {};
-      const pedidoEfetivo = pedidoEfetivoParaExibicao(p, paradas);
+      const pedidoEfetivo = pedidoEfetivoParaExibicao(p, poolParadasHistorico);
       const motorista = (p.rl_rotas || {}).motorista_nome || "—";
       const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
       // "OK" só quando teve dado de verdade pra comparar — se a nota não foi
@@ -2979,8 +3012,8 @@ function renderCardsHistorico(paradas) {
           · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
         </div>
         ${
-          pedidosIrmaos(p, paradas).length
-            ? `<div class="card-meta">🔗 Nota também cobre: ${pedidosIrmaos(p, paradas)
+          pedidosIrmaos(p, poolParadasHistorico).length
+            ? `<div class="card-meta">🔗 Nota também cobre: ${pedidosIrmaos(p, poolParadasHistorico)
                 .map((q) => escapeHtml((q.rl_pedidos || {}).numero_pedido || "sem número"))
                 .join(", ")}</div>`
             : ""
@@ -2997,7 +3030,7 @@ function renderCardsHistorico(paradas) {
               ? `<div class="conferencia-box warn">${renderDivergenciasParada(p, pedidoEfetivo)}<a class="btn secondary small" href="${linkAvisoComprador(
                   p,
                   pedidoEfetivo
-                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderVincularOutroPedido(p)}</div>`
+                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderSugestaoMesmaNota(p, poolParadasHistorico)}${renderVincularOutroPedido(p)}</div>`
               : ""
         }
         <div class="card-meta">
@@ -3920,6 +3953,18 @@ async function loadHistorico() {
   if (digitandoNoHistorico) return;
 
   paginaAtualDados = data || [];
+  // Busca registros de outras páginas com o mesmo número de nota (pra achar
+  // pedidos irmãos mesmo quando caem em páginas diferentes).
+  const numerosNota = [...new Set(paginaAtualDados.map((p) => p.nota_numero).filter(Boolean))];
+  let extrasPool = [];
+  if (numerosNota.length) {
+    const { data: extras } = await comTimeout(
+      db.from("rl_rota_paradas").select("*, rl_pedidos(*), rl_rotas(motorista_nome)").eq("status", "concluida").in("nota_numero", numerosNota)
+    );
+    extrasPool = extras || [];
+  }
+  const idsNaPagina = new Set(paginaAtualDados.map((p) => p.id));
+  poolParadasHistorico = [...paginaAtualDados, ...extrasPool.filter((p) => !idsNaPagina.has(p.id))];
   renderPaginacaoHistorico(totalPaginas);
   renderHistorico();
 }
@@ -4106,6 +4151,104 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
   }
 });
 
+// Recalcula valor/itens/condição de pagamento de uma conferência contra o
+// pedido SOMADO (vários pedidos na mesma nota), usando só o que já está salvo
+// na parada (sem IA).
+function recalcularDivergenciasMescladas(pedidoMesclado, parada) {
+  const divergValor =
+    pedidoMesclado.valor_total != null && parada.nota_valor_total != null
+      ? Math.abs(Number(pedidoMesclado.valor_total) - Number(parada.nota_valor_total)) > TOLERANCIA_VALOR
+      : parada.divergencia_valor;
+  const itensDivergentes =
+    parada.nota_tipo_documento === "servico"
+      ? parada.divergencia_itens
+      : compararItens(pedidoMesclado.itens, parada.nota_itens).divergente;
+  const { divergCondicao } = compararCondicaoPagamento(pedidoMesclado, parada.nota_data_emissao, parada.nota_parcelas);
+  return { divergValor, itensDivergentes, divergCondicao };
+}
+
+// Junta dois registros JÁ CONCLUÍDOS que na verdade são a mesma nota cobrindo
+// dois pedidos (ex: motorista fotografou a mesma nota em duas paradas).
+// Reaproveita a nota lida do registro de onde se clicou — sem IA — e grava o
+// resultado recalculado (pedidos somados) nos dois, cada um mantendo seu
+// próprio horário de conclusão e dados de recebimento. Ao copiar a mesma foto
+// pros dois, eles passam a ser reconhecidos como grupo no Histórico.
+async function juntarParadasConcluidas(paradaAId, paradaBId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Juntando...";
+  }
+  try {
+    const { data: paradas, error } = await db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*)")
+      .in("id", [paradaAId, paradaBId]);
+    if (error) throw error;
+    const a = paradas.find((p) => p.id === paradaAId);
+    const b = paradas.find((p) => p.id === paradaBId);
+    if (!a || !b) throw new Error("Não achei um dos registros. Atualize a página e tente de novo.");
+    if (a.status !== "concluida" || b.status !== "concluida" || a.entrega_parcial || b.entrega_parcial) {
+      throw new Error("Os dois registros precisam estar concluídos (e não ser entrega parcial).");
+    }
+
+    const pedidoMesclado = mesclarPedidosParaConferencia([a.rl_pedidos, b.rl_pedidos]);
+    const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoMesclado, a);
+    const dadosNota = {
+      nota_arquivo_url: a.nota_arquivo_url,
+      nota_numero: a.nota_numero,
+      nota_valor_total: a.nota_valor_total,
+      nota_cnpj: a.nota_cnpj,
+      nota_itens: a.nota_itens,
+      nota_tipo_documento: a.nota_tipo_documento,
+      nota_emitente_nome: a.nota_emitente_nome,
+      nota_data_emissao: a.nota_data_emissao,
+      nota_parcelas: a.nota_parcelas,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: a.divergencia_cnpj,
+      divergencia_itens: itensDivergentes,
+      divergencia_condicao_pagamento: divergCondicao,
+    };
+    const quem = document.getElementById("almoxarife-select")?.value || null;
+    const agora = new Date().toISOString();
+    const nota = (p) => `Nota também cobre o pedido Nº ${p.rl_pedidos.numero_pedido || p.rl_pedidos.id} — conferência unificada.`;
+    for (const [alvo, outro] of [[a, b], [b, a]]) {
+      const { error: errUp } = await db
+        .from("rl_rota_paradas")
+        .update({
+          ...dadosNota,
+          resolucao_divergencia: [alvo.resolucao_divergencia, nota(outro)].filter(Boolean).join("\n\n"),
+          resolucao_por: alvo.resolucao_por || quem,
+          resolucao_em: alvo.resolucao_em || agora,
+        })
+        .eq("id", alvo.id);
+      if (errUp) throw errUp;
+    }
+    mostrarAviso("Pedidos juntados — conferência recalculada com os dois somados.");
+    await loadHistorico();
+  } catch (err) {
+    mostrarAviso("Erro ao juntar: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Juntar os dois";
+    }
+  }
+}
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-juntar-concluida]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo pra confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Juntar os dois";
+    }, 4000);
+    return;
+  }
+  await juntarParadasConcluidas(btn.dataset.juntarConcluida, btn.dataset.paradaIrma, btn);
+});
+
 // Junta um pedido pendente (que o comprador identificou como estando na MESMA
 // nota) a uma conferência já concluída — sem reler nada com IA: reaproveita a
 // nota já extraída (nota_itens, nota_valor_total etc. já salvos na parada
@@ -4150,17 +4293,7 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
     const pedidoOriginal = paradaOrigem.rl_pedidos || {};
     const pedidoMesclado = mesclarPedidosParaConferencia([pedidoOriginal, pedidoNovo]);
 
-    const divergValor =
-      pedidoMesclado.valor_total != null && paradaOrigem.nota_valor_total != null
-        ? Math.abs(Number(pedidoMesclado.valor_total) - Number(paradaOrigem.nota_valor_total)) > TOLERANCIA_VALOR
-        : paradaOrigem.divergencia_valor;
-
-    const itensDivergentes =
-      paradaOrigem.nota_tipo_documento === "servico"
-        ? paradaOrigem.divergencia_itens
-        : compararItens(pedidoMesclado.itens, paradaOrigem.nota_itens).divergente;
-
-    const { divergCondicao } = compararCondicaoPagamento(pedidoMesclado, paradaOrigem.nota_data_emissao, paradaOrigem.nota_parcelas);
+    const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoMesclado, paradaOrigem);
 
     const dadosConclusao = {
       status: "concluida",
