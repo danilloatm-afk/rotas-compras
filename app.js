@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "248";
+const VERSAO_APP = "250";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -3547,6 +3547,58 @@ async function carregarAvisosLiberadosPendentesConferencia() {
   renderAvisosLiberadosPendentesConferencia();
 }
 
+// Prévia da conferência ANTES de vincular: compara a nota que a portaria já
+// leu (valor, itens, CNPJ, fornecedor, guardados no aviso) com o(s) pedido(s)
+// candidato(s), sem gastar IA. Com vários pedidos, compara a SOMA deles (uma
+// nota pode cobrir mais de um). Sem nota anexada no aviso, não há prévia.
+function calcularPreviaConferencia(aviso, pedidos) {
+  const temItens = Array.isArray(aviso.nota_itens) && aviso.nota_itens.length;
+  if (!aviso.nota_arquivo_url || (aviso.nota_valor_total == null && !temItens) || !pedidos.length) return null;
+  const mesclado = mesclarPedidosParaConferencia(pedidos);
+  const msgs = [];
+  let ok = true;
+
+  const emitente = aviso.nota_emitente_nome || aviso.fornecedor_nome;
+  if (emitente && pedidos.every((p) => p.fornecedor_nome) && !pedidos.every((p) => fornecedoresParecidos(emitente, p.fornecedor_nome))) {
+    msgs.push("🚩 fornecedor diferente do da nota");
+    ok = false;
+  }
+
+  if (aviso.nota_valor_total != null && mesclado.valor_total != null) {
+    const dif = Math.abs(Number(aviso.nota_valor_total) - Number(mesclado.valor_total));
+    if (dif <= TOLERANCIA_VALOR) {
+      msgs.push(`✅ valor confere (${formatarMoeda(aviso.nota_valor_total)})`);
+    } else {
+      msgs.push(`⚠️ valor difere ${formatarMoeda(dif)} (pedido ${formatarMoeda(mesclado.valor_total)}, nota ${formatarMoeda(aviso.nota_valor_total)})`);
+      ok = false;
+    }
+  }
+
+  if (temItens && aviso.nota_tipo_documento !== "servico") {
+    const r = compararItens(mesclado.itens, aviso.nota_itens);
+    if (r.temDados) {
+      const batem = r.linhas.filter((l) => l.match && !l.divergente).length;
+      msgs.push(`${r.divergente ? "⚠️" : "✅"} itens: ${batem} de ${r.linhas.length} batem`);
+      if (r.divergente) ok = false;
+    }
+  }
+
+  const cnpjEsperado = apenasDigitos(mesclado.empresa_cnpj);
+  const cnpjNota = apenasDigitos(aviso.nota_cnpj);
+  if (cnpjEsperado && cnpjNota && cnpjEsperado !== cnpjNota) {
+    msgs.push("⚠️ CNPJ da nota é de outra empresa");
+    ok = false;
+  }
+
+  return msgs.length ? { ok, msgs } : null;
+}
+
+function renderPreviaConferencia(aviso, pedidos, rotulo) {
+  const previa = calcularPreviaConferencia(aviso, pedidos);
+  if (!previa) return "";
+  return `<span class="previa-conferencia ${previa.ok ? "previa-ok" : "previa-alerta"}">🔎 ${rotulo || "Prévia com a nota"}: ${previa.msgs.map(escapeHtml).join(" · ")}</span>`;
+}
+
 function renderAvisosLiberadosPendentesConferencia() {
   const el = document.getElementById("avisos-liberados-aguardando-conferencia");
   if (!el) return;
@@ -3598,6 +3650,7 @@ function renderAvisosLiberadosPendentesConferencia() {
             )}${resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""}
               <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
               <button type="button" class="link-btn" data-usar-sugestao="${a.id}" data-pedido-sugerido="${p.id}">é esse, conferir</button>
+              ${renderPreviaConferencia(a, [p])}
             </div>`;
           })
           .join("");
@@ -3608,6 +3661,7 @@ function renderAvisosLiberadosPendentesConferencia() {
           <label class="form-label">Vincular pedido manualmente</label>
           <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="🔎 Buscar por número, fornecedor ou produto...">
           <div class="resultado-busca-pedido" data-aviso-id="${a.id}"></div>
+          <div class="previa-selecionados" data-aviso-id="${a.id}"></div>
           <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>
           <details class="anexar-pedido-novo">
             <summary class="link-btn">📎 Não achou o pedido? Anexe o arquivo (foto ou PDF) dele aqui</summary>
@@ -3654,6 +3708,7 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
     return;
   }
   const candidatos = candidatosPorAvisoSemPedido[avisoId] || [];
+  const avisoDaBusca = avisosLiberadosPendentesCache.find((x) => x.id === avisoId) || {};
   const encontrados = candidatos.filter((p) => p._busca.includes(termo)).slice(0, MAX_RESULTADOS_BUSCA_PEDIDO);
   if (!encontrados.length) {
     resultadoEl.innerHTML = `<p class="hint">Nenhum pedido encontrado com "${escapeHtml(input.value.trim())}".</p>`;
@@ -3668,12 +3723,31 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
           <input type="checkbox" value="${p.id}">
           Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
         resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
-      }
+      }${renderPreviaConferencia(avisoDaBusca, [p])}
         </label>
         <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
       </div>`;
     })
     .join("");
+});
+
+// Ao marcar/desmarcar pedidos nos resultados da busca, mostra a prévia da
+// comparação com a nota considerando a SOMA dos marcados (nota que cobre mais
+// de um pedido).
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("change", (e) => {
+  const caixa = e.target.closest(".resultado-busca-pedido input[type=checkbox]");
+  if (!caixa) return;
+  const resultadoEl = caixa.closest(".resultado-busca-pedido");
+  const avisoId = resultadoEl.dataset.avisoId;
+  const destino = document.querySelector(`.previa-selecionados[data-aviso-id="${avisoId}"]`);
+  if (!destino) return;
+  const aviso = avisosLiberadosPendentesCache.find((x) => x.id === avisoId);
+  const marcados = Array.from(resultadoEl.querySelectorAll("input[type=checkbox]:checked")).map((c) => c.value);
+  const pedidos = (candidatosPorAvisoSemPedido[avisoId] || []).filter((p) => marcados.includes(p.id));
+  destino.innerHTML =
+    aviso && pedidos.length
+      ? renderPreviaConferencia(aviso, pedidos, pedidos.length > 1 ? `Prévia dos ${pedidos.length} marcados somados` : "Prévia do marcado")
+      : "";
 });
 
 // Grava o vínculo aviso -> pedido(s) e já abre a conferência — usado tanto
