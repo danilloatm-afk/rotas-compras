@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "251";
+const VERSAO_APP = "253";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -3506,7 +3506,7 @@ async function carregarAvisosLiberadosPendentesConferencia() {
   let comPedidosPendentes = [];
   const idsPedidos = [...new Set(comPedidos.flatMap((a) => a.pedido_ids || []))];
   if (idsPedidos.length) {
-    const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("id").eq("status", "pendente").in("id", idsPedidos));
+    const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").in("id", idsPedidos));
     const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
 
     // Se algum dos pedidos ainda pendentes já teve uma entrega PARCIAL
@@ -3520,7 +3520,11 @@ async function carregarAvisosLiberadosPendentesConferencia() {
 
     comPedidosPendentes = comPedidos
       .filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)))
-      .map((a) => ({ ...a, _temParcial: (a.pedido_ids || []).some((id) => idsComParcial.has(id)) }));
+      .map((a) => ({
+        ...a,
+        _temParcial: (a.pedido_ids || []).some((id) => idsComParcial.has(id)),
+        _pedidos: (pedidosPendentes || []).filter((p) => (a.pedido_ids || []).includes(p.id)),
+      }));
   }
 
   let semPedidosComCandidatos = [];
@@ -3685,10 +3689,19 @@ function renderAvisosLiberadosPendentesConferencia() {
         a._temParcial
           ? `<br><span class="hint">📦 Já teve uma entrega parcial registrada aqui — confira o restante quando chegar (anexe a nota nova, não reaproveite a antiga).</span>`
           : ""
+      }${
+        a._pedidos && a._pedidos.length
+          ? `<br><span class="hint">Pedido(s) vinculado(s): ${a._pedidos
+              .map((p) => `Nº ${escapeHtml(p.numero_pedido || "sem número")}`)
+              .join(", ")}</span>${renderPreviaConferencia(a, a._pedidos, "Prévia do vinculado")}`
+          : ""
       }</div>
-        <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
+        <div class="aviso-acoes">
+          <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
         a._temParcial ? "📦 Conferir o restante" : a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
       }</button>
+          <button type="button" class="link-btn" data-trocar-pedido-aviso="${a.id}" title="Desvincula o pedido deste aviso e volta pra escolha do pedido, com a prévia da comparação com a nota">🔁 Trocar o pedido vinculado</button>
+        </div>
       </div>`;
     })
     .join("");
@@ -3732,6 +3745,30 @@ document.getElementById("avisos-liberados-aguardando-conferencia").addEventListe
       </div>`;
     })
     .join("");
+});
+
+// Volta um aviso já vinculado pra etapa de ESCOLHER o pedido (pedido_ids =
+// null = "nunca vinculado"), onde aparecem as sugestões, a busca e a prévia da
+// comparação com a nota. Não mexe no pedido nem em nenhuma conferência.
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-trocar-pedido-aviso]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    const original = btn.textContent;
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo pra confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = original;
+    }, 4000);
+    return;
+  }
+  const { error } = await db.from("rl_avisos_portaria").update({ pedido_ids: null }).eq("id", btn.dataset.trocarPedidoAviso);
+  if (error) {
+    mostrarAviso("Erro ao desvincular: " + error.message);
+    return;
+  }
+  await carregarAvisosLiberadosPendentesConferencia();
 });
 
 // Ao marcar/desmarcar pedidos nos resultados da busca, mostra a prévia da
