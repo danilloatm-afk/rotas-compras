@@ -54,7 +54,7 @@ $ErrorActionPreference = "Stop"
 $Fontes = @(
     @{
         # Pasta principal: FOB e CIF, os dois são importados.
-        Pasta     = "W:\COMPRAS\ORDENS DE COMPRA\Processados"
+        Pasta     = "\\192.168.0.228\wehrmann\COMPRAS\ORDENS DE COMPRA\Processados"
         DataCorte = Get-Date "2026-08-26"
         SoCif     = $false
     },
@@ -65,7 +65,7 @@ $Fontes = @(
         # o histórico já acumulado nela, a pedido do Danilo) — depois disso
         # só sobra arquivo novo na raiz mesmo, já que o processado é movido
         # pra fora, então não precisa de corte pra frente.
-        Pasta     = "W:\COMPRAS\ORDENS DE COMPRA EMBALAGENS INSUMOS AGÍCOLAS"
+        Pasta     = "\\192.168.0.228\wehrmann\COMPRAS\ORDENS DE COMPRA EMBALAGENS INSUMOS AGÍCOLAS"
         DataCorte = Get-Date "2000-01-01"
         SoCif     = $true
     }
