@@ -311,6 +311,8 @@ input, select, textarea {
 .anexar-pedido-novo label { display: block; margin-top: 0.5rem; }
 .anexar-pedido-novo input[type="file"] { display: block; margin-top: 0.3rem; width: 100%; }
 .anexar-pedido-novo button { margin-top: 0.5rem; }
+a.btn { display: inline-block; text-decoration: none; }
+.ajuda-manual { margin: 0 0 0.5rem; font-size: 0.85rem; }
 .aviso-acoes {
   display: flex;
   flex-direction: column;
