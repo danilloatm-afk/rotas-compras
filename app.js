@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "245";
+const VERSAO_APP = "248";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -205,6 +205,25 @@ async function lerComIA(file, tipo) {
   if (!resp.ok || resultado.error) throw new Error(resultado.error || "Falha ao ler o documento.");
   if (resultado.versao_ia != null) mostrarVersaoIA(resultado.versao_ia);
   return resultado.data;
+}
+
+// A nota costuma citar o número do pedido de compra nas Informações
+// Complementares ("PEDIDO DE COMPRA: S52040"). Normaliza pra comparar com o
+// número do pedido no sistema: maiúsculas, só letras/números, sem zeros à
+// esquerda ("004568" = "4568").
+function normalizarNumeroPedido(texto) {
+  return String(texto || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/^0+/, "");
+}
+
+// A nota pode citar mais de um pedido (separados por vírgula/ponto e vírgula).
+function numerosPedidoCitados(texto) {
+  return String(texto || "")
+    .split(/[,;]/)
+    .map(normalizarNumeroPedido)
+    .filter(Boolean);
 }
 
 // Mostra, ao lado da versão do site, a versão da função de leitura por IA que
@@ -2550,6 +2569,12 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
     if (extraido.emitente_nome && !document.getElementById("portaria-fornecedor").value.trim()) {
       document.getElementById("portaria-fornecedor").value = extraido.emitente_nome;
     }
+    // Número do pedido que a própria nota cita — preenche o campo "Nº do
+    // pedido" (o almoxarifado usa ele depois pra sugerir o pedido certo).
+    const pedidoCitado = (extraido.pedido_referenciado || "").trim();
+    if (pedidoCitado && !document.getElementById("portaria-pedido-numero").value.trim()) {
+      document.getElementById("portaria-pedido-numero").value = pedidoCitado;
+    }
 
     // Sugere os pedidos CIF pendentes do mesmo fornecedor (por nome — a nota
     // não traz o CNPJ de quem emite, só de quem recebe) e da mesma empresa,
@@ -2559,18 +2584,35 @@ document.getElementById("btn-portaria-ler-nota").addEventListener("click", async
     let queryCandidatos = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
     if (empresaAlvo) queryCandidatos = queryCandidatos.eq("empresa_nome", empresaAlvo);
     const { data } = await comTimeout(queryCandidatos);
-    portariaPedidosCandidatos = extraido.emitente_nome
-      ? (data || []).filter((p) => fornecedoresParecidos(extraido.emitente_nome, p.fornecedor_nome))
-      : [];
+    // Também entra quem a nota cita pelo número, mesmo que o nome do
+    // fornecedor no pedido seja bem diferente do da nota.
+    const citadosNaNota = new Set(numerosPedidoCitados(extraido.pedido_referenciado));
+    portariaPedidosCandidatos = (data || []).filter(
+      (p) =>
+        (extraido.emitente_nome && fornecedoresParecidos(extraido.emitente_nome, p.fornecedor_nome)) ||
+        citadosNaNota.has(normalizarNumeroPedido(p.numero_pedido))
+    );
 
     const selPedido = document.getElementById("portaria-pedido-relacionado");
     const labelPedido = document.getElementById("label-portaria-pedido-relacionado");
     if (portariaPedidosCandidatos.length) {
+      // Pré-marca o(s) pedido(s) que a própria nota cita, se bater com algum.
+      const citados = new Set(numerosPedidoCitados(extraido.pedido_referenciado));
+      const jaMarcados = new Set(
+        portariaPedidosCandidatos.filter((p) => citados.has(normalizarNumeroPedido(p.numero_pedido))).map((p) => p.id)
+      );
       selPedido.innerHTML = portariaPedidosCandidatos
-        .map((p) => `<option value="${p.id}">Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(p.valor_total)}</option>`)
+        .map(
+          (p) =>
+            `<option value="${p.id}"${jaMarcados.has(p.id) ? " selected" : ""}>Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(
+              p.valor_total
+            )}${jaMarcados.has(p.id) ? " (citado na nota)" : ""}</option>`
+        )
         .join("");
       labelPedido.classList.remove("hidden");
-      feedback.textContent = `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — marque qual(is) é(são) esse(s) abaixo (a nota pode cobrir mais de um).`;
+      feedback.textContent = jaMarcados.size
+        ? `Nota lida! Ela cita o pedido ${extraido.pedido_referenciado} — já deixei marcado abaixo (confira).`
+        : `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — marque qual(is) é(são) esse(s) abaixo (a nota pode cobrir mais de um).`;
     } else {
       labelPedido.classList.add("hidden");
       feedback.textContent = `Nota lida! Não achamos pedido CIF pendente de "${extraido.emitente_nome || "fornecedor não identificado"}" — o almoxarifado escolhe manualmente depois.`;
@@ -3488,8 +3530,16 @@ async function carregarAvisosLiberadosPendentesConferencia() {
     const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
     semPedidosComCandidatos = semPedidos.map((a) => {
       const candidatos = a.empresa_nome ? (pendentesGeral || []).filter((p) => p.empresa_nome === a.empresa_nome) : pendentesGeral || [];
-      const sugestoes = a.fornecedor_nome ? candidatos.filter((p) => fornecedoresParecidos(a.fornecedor_nome, p.fornecedor_nome)).slice(0, 2) : [];
-      return { ...a, _candidatos: candidatos, _sugestoes: sugestoes };
+      // 1º: pedido que a própria nota cita (campo "Nº do pedido" do aviso,
+      // preenchido pela leitura da nota ou pela portaria) — match exato é a
+      // sugestão mais forte. Depois, os de fornecedor parecido.
+      const citados = new Set(numerosPedidoCitados(a.pedido_numero));
+      const citadosNaNota = citados.size ? candidatos.filter((p) => citados.has(normalizarNumeroPedido(p.numero_pedido))) : [];
+      const similares = a.fornecedor_nome
+        ? candidatos.filter((p) => fornecedoresParecidos(a.fornecedor_nome, p.fornecedor_nome) && !citadosNaNota.includes(p))
+        : [];
+      const sugestoes = [...citadosNaNota, ...similares].slice(0, Math.max(2, citadosNaNota.length));
+      return { ...a, _candidatos: candidatos, _sugestoes: sugestoes, _idsCitados: citadosNaNota.map((p) => p.id) };
     });
   }
 
@@ -3540,9 +3590,10 @@ function renderAvisosLiberadosPendentesConferencia() {
           .map((pSemResumo) => {
             const p = idsResumo.get(pSemResumo.id) || pSemResumo;
             const resumoCurto = p._resumoItens && p._resumoItens.length > 80 ? `${p._resumoItens.slice(0, 80)}…` : p._resumoItens;
+            const citado = (a._idsCitados || []).includes(p.id);
             return `
-            <div class="sugestao-pedido-aviso">
-              💡 Pode ser o pedido Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(
+            <div class="sugestao-pedido-aviso${citado ? " sugestao-citada" : ""}">
+              ${citado ? "🎯 A nota cita o pedido" : "💡 Pode ser o pedido"} Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(
               p.valor_total
             )}${resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""}
               <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
