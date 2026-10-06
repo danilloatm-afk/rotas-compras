@@ -311,6 +311,9 @@ input, select, textarea {
 .anexar-pedido-novo label { display: block; margin-top: 0.5rem; }
 .anexar-pedido-novo input[type="file"] { display: block; margin-top: 0.3rem; width: 100%; }
 .anexar-pedido-novo button { margin-top: 0.5rem; }
+.sugestao-pedido-aviso.sugestao-citada {
+  font-weight: 600;
+}
 .versao-app {
   font-size: 0.7rem;
   font-weight: 400;
