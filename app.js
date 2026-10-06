@@ -1406,7 +1406,7 @@ function abrirModalConcluir(parada, notaPreLida) {
     blocoPedidoAnexo.classList.add("hidden");
   }
 
-  const inputNota = document.getElementById("nota-arquivo");
+  resetarFotosNota();
   if (notaPreLida) {
     document.getElementById("nota-valor").value = notaPreLida.valor_total ?? "";
     document.getElementById("nota-cnpj").value = notaPreLida.cnpj || "";
@@ -1414,12 +1414,10 @@ function abrirModalConcluir(parada, notaPreLida) {
     document.getElementById("link-nota-pre-lida").href = notaPreLida.arquivo_url;
     document.getElementById("bloco-nota-pre-lida").classList.remove("hidden");
     document.getElementById("bloco-upload-nota").classList.add("hidden");
-    inputNota.required = false;
     atualizarConferencia();
   } else {
     document.getElementById("bloco-nota-pre-lida").classList.add("hidden");
     document.getElementById("bloco-upload-nota").classList.remove("hidden");
-    inputNota.required = true;
   }
 
   document.getElementById("modal-overlay").classList.remove("hidden");
@@ -1429,7 +1427,6 @@ document.getElementById("btn-reler-nota").addEventListener("click", () => {
   notaArquivoUrlPreLido = null;
   document.getElementById("bloco-nota-pre-lida").classList.add("hidden");
   document.getElementById("bloco-upload-nota").classList.remove("hidden");
-  document.getElementById("nota-arquivo").required = true;
 });
 
 document.getElementById("lista-rota").addEventListener("click", (e) => {
@@ -1454,47 +1451,156 @@ let notaParcelasExtraidas = null;
 // — nesse caso não faz sentido pedir upload de novo, só reaproveitar a URL.
 let notaArquivoUrlPreLido = null;
 
-async function lerNotaComIA() {
-  const input = document.getElementById("nota-arquivo");
+// Junta a leitura de várias fotos da MESMA nota (nota com muitos itens, uma
+// foto por parte): itens somam; valor total = o MAIOR lido (a página com os
+// totais traz o valor cheio, e uma página só de itens pode vir com uma soma
+// parcial); CNPJ/número/emitente/data/parcelas = o primeiro que tiver.
+function mesclarLeiturasNota(leituras) {
+  if (!leituras.length) return null;
+  const primeiro = (campo) => {
+    for (const l of leituras) if (l[campo] != null && l[campo] !== "") return l[campo];
+    return undefined;
+  };
+  const valores = leituras.map((l) => l.valor_total).filter((v) => v != null);
+  return {
+    tipo_documento: primeiro("tipo_documento"),
+    numero_nota: primeiro("numero_nota"),
+    valor_total: valores.length ? Math.max(...valores) : undefined,
+    destinatario_cnpj: primeiro("destinatario_cnpj"),
+    emitente_nome: primeiro("emitente_nome"),
+    data_emissao: primeiro("data_emissao"),
+    parcelas_pagamento: primeiro("parcelas_pagamento"),
+    itens: leituras.flatMap((l) => (Array.isArray(l.itens) ? l.itens : [])),
+  };
+}
+
+// Fotos da nota anexadas no modal (cada uma lida pela IA ao ser adicionada).
+let notaFotos = []; // { file, leitura, status: "lendo" | "ok" | "erro", erroMsg }
+
+function resetarFotosNota() {
+  notaFotos = [];
+  renderFotosNota();
+}
+
+function renderFotosNota() {
+  const el = document.getElementById("nota-fotos-lista");
+  el.innerHTML = notaFotos
+    .map((f, i) => {
+      const situacao = f.status === "lendo" ? "lendo..." : f.status === "ok" ? "✅ lida" : `⚠️ não lida${f.erroMsg ? ` (${escapeHtml(f.erroMsg)})` : ""}`;
+      return `<div class="nota-foto-item">📷 Foto ${i + 1}: ${escapeHtml(f.file.name || "foto")} — ${situacao}
+        <button type="button" class="link-btn danger" data-remover-foto-nota="${i}">remover</button></div>`;
+    })
+    .join("");
+}
+
+// Preenche os campos do modal com a leitura juntada de todas as fotos.
+function aplicarLeituraMescladaNota() {
   const feedback = document.getElementById("nota-ia-feedback");
-  const file = input.files && input.files[0];
-  if (!file) {
+  const lidas = notaFotos.filter((f) => f.leitura);
+  const extraido = mesclarLeiturasNota(lidas.map((f) => f.leitura));
+  if (!extraido) {
+    notaItensExtraidos = null;
+    notaTipoDocumento = null;
+    notaEmitenteExtraido = null;
+    notaDataEmissaoExtraida = null;
+    notaParcelasExtraidas = null;
+    const erro = notaFotos.find((f) => f.status === "erro");
+    feedback.textContent = erro ? "Erro: " + erro.erroMsg : notaFotos.length ? "" : "Selecione/tire a foto da nota primeiro.";
+    feedback.className = erro || !notaFotos.length ? "feedback error" : "feedback";
+    atualizarConferencia();
+    return;
+  }
+  if (extraido.valor_total != null) document.getElementById("nota-valor").value = extraido.valor_total;
+  if (extraido.destinatario_cnpj) document.getElementById("nota-cnpj").value = extraido.destinatario_cnpj;
+  if (extraido.numero_nota) document.getElementById("nota-numero").value = extraido.numero_nota;
+  notaItensExtraidos = extraido.itens.length ? extraido.itens : null;
+  notaTipoDocumento = extraido.tipo_documento || null;
+  notaEmitenteExtraido = extraido.emitente_nome || null;
+  notaDataEmissaoExtraida = extraido.data_emissao || null;
+  notaParcelasExtraidas =
+    Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null;
+  const naoLidas = notaFotos.filter((f) => f.status === "erro").length;
+  feedback.textContent =
+    (notaTipoDocumento === "servico"
+      ? "Nota de serviço lida. Confira o tomador, a prestadora e o valor abaixo."
+      : lidas.length > 1
+        ? `${lidas.length} fotos lidas e juntadas. Confira os valores abaixo.`
+        : "Nota lida. Confira os valores abaixo.") + (naoLidas ? ` ⚠️ ${naoLidas} foto(s) não foram lidas — remova e tire de novo.` : "");
+  feedback.className = naoLidas ? "feedback error" : "feedback success";
+  atualizarConferencia();
+}
+
+// Adiciona uma ou mais fotos e lê cada uma com IA (uma chamada por foto).
+async function adicionarFotosNota(files) {
+  const feedback = document.getElementById("nota-ia-feedback");
+  const novas = files.map((file) => ({ file, leitura: null, status: "lendo", erroMsg: "" }));
+  if (!novas.length) return;
+  notaFotos.push(...novas);
+  renderFotosNota();
+  for (const foto of novas) {
+    feedback.textContent = `Lendo foto ${notaFotos.indexOf(foto) + 1} de ${notaFotos.length} com IA...`;
+    feedback.className = "feedback";
+    try {
+      foto.leitura = await lerComIA(foto.file, "nota");
+      foto.status = "ok";
+    } catch (err) {
+      foto.status = "erro";
+      foto.erroMsg = err.message;
+    }
+    renderFotosNota();
+  }
+  aplicarLeituraMescladaNota();
+}
+
+// Botão "Ler nota com IA": relê TODAS as fotos já anexadas.
+async function lerNotaComIA() {
+  const feedback = document.getElementById("nota-ia-feedback");
+  if (!notaFotos.length) {
     feedback.textContent = "Selecione/tire a foto da nota primeiro.";
     feedback.className = "feedback error";
     return;
   }
-  feedback.textContent = "Lendo nota com IA...";
-  feedback.className = "feedback";
-  try {
-    const extraido = await lerComIA(file, "nota");
-    if (extraido.valor_total != null) document.getElementById("nota-valor").value = extraido.valor_total;
-    if (extraido.destinatario_cnpj) document.getElementById("nota-cnpj").value = extraido.destinatario_cnpj;
-    if (extraido.numero_nota) document.getElementById("nota-numero").value = extraido.numero_nota;
-    notaItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
-    notaTipoDocumento = extraido.tipo_documento || null;
-    notaEmitenteExtraido = extraido.emitente_nome || null;
-    notaDataEmissaoExtraida = extraido.data_emissao || null;
-    notaParcelasExtraidas =
-      Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null;
-    feedback.textContent =
-      notaTipoDocumento === "servico"
-        ? "Nota de serviço lida. Confira o tomador, a prestadora e o valor abaixo."
-        : "Nota lida. Confira os valores abaixo.";
-    feedback.className = "feedback success";
-    atualizarConferencia();
-  } catch (err) {
-    feedback.textContent = "Erro: " + err.message;
-    feedback.className = "feedback error";
+  for (const foto of notaFotos) {
+    foto.status = "lendo";
+    foto.leitura = null;
   }
+  renderFotosNota();
+  for (const foto of notaFotos) {
+    feedback.textContent = `Lendo foto ${notaFotos.indexOf(foto) + 1} de ${notaFotos.length} com IA...`;
+    feedback.className = "feedback";
+    try {
+      foto.leitura = await lerComIA(foto.file, "nota");
+      foto.status = "ok";
+    } catch (err) {
+      foto.status = "erro";
+      foto.erroMsg = err.message;
+    }
+    renderFotosNota();
+  }
+  aplicarLeituraMescladaNota();
 }
 
 document.getElementById("btn-ler-nota").addEventListener("click", lerNotaComIA);
 // Roda sozinho assim que a foto é escolhida — sem depender do motorista
 // lembrar de clicar em "Ler nota com IA" (na prática, quando ele esquecia,
 // a conferência ficava toda em branco e ele acabava marcando qualquer coisa
-// como "Entrega parcial" só pra conseguir enviar). O botão continua aqui
-// pra reler manualmente se precisar.
-document.getElementById("nota-arquivo").addEventListener("change", lerNotaComIA);
+// como "Entrega parcial" só pra conseguir enviar). Cada foto escolhida é
+// ACRESCENTADA às anteriores (nota com muitos itens = uma foto por parte), e
+// o campo é limpo pra permitir tirar a próxima.
+for (const idInput of ["nota-arquivo", "nota-arquivo-galeria"]) {
+  document.getElementById(idInput).addEventListener("change", (e) => {
+    const arquivos = Array.from(e.target.files || []);
+    e.target.value = "";
+    adicionarFotosNota(arquivos);
+  });
+}
+document.getElementById("nota-fotos-lista").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-remover-foto-nota]");
+  if (!btn) return;
+  notaFotos.splice(Number(btn.dataset.removerFotoNota), 1);
+  renderFotosNota();
+  aplicarLeituraMescladaNota();
+});
 
 // Casa os itens do pedido com os da nota pelo nome do produto (a ordem pode
 // mudar de um documento pro outro). Tenta igualdade exata primeiro, depois
@@ -2030,8 +2136,8 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   if (!paradaEmEdicao) return;
   const rotaId = paradaEmEdicao.rota_id;
   const feedback = document.getElementById("modal-feedback");
-  const file = document.getElementById("nota-arquivo").files[0];
-  if (!file && !notaArquivoUrlPreLido) {
+  const fotosNota = notaFotos.map((f) => f.file);
+  if (!fotosNota.length && !notaArquivoUrlPreLido) {
     feedback.textContent = "Anexe a foto da nota fiscal.";
     feedback.className = "feedback error";
     return;
@@ -2067,7 +2173,10 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
   feedback.textContent = "Salvando...";
   feedback.className = "feedback";
   try {
-    const url = file ? (await uploadArquivo(file, "rl_notas")).url : notaArquivoUrlPreLido;
+    const urlsNota = [];
+    for (const foto of fotosNota) urlsNota.push((await uploadArquivo(foto, "rl_notas")).url);
+    const url = urlsNota[0] || notaArquivoUrlPreLido;
+    const urlsExtras = urlsNota.slice(1);
     const entregaParcial = document.getElementById("nota-parcial").checked;
     const notaValor = document.getElementById("nota-valor").value;
     const notaCnpj = document.getElementById("nota-cnpj").value.trim();
@@ -2114,6 +2223,10 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       divergencia_condicao_pagamento: divergCondicao,
       concluido_em: new Date().toISOString(),
     };
+    // Só manda a coluna quando de fato há fotos extras — assim nota de uma
+    // foto só (o caso comum) continua funcionando mesmo antes da migração
+    // que cria a coluna nota_arquivos_extras.
+    if (urlsExtras.length) dadosConclusao.nota_arquivos_extras = urlsExtras;
 
     const { error: errParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaEmEdicao.id);
     if (errParada) throw errParada;
@@ -2916,6 +3029,18 @@ function renderSugestaoMesmaNota(parada, pool) {
     .join("");
 }
 
+// Motorista anexou a foto errada (ou foto ruim): quem confere (comprador) troca
+// a nota aqui e o sistema lê de novo e recalcula as divergências.
+function renderTrocarNota(parada) {
+  return `<details class="vincular-outro-pedido">
+    <summary>🔄 Foto da nota errada? Trocar a nota e ler de novo</summary>
+    <p class="hint">Anexe a(s) foto(s) certa(s) — se a nota tem muitas páginas, escolha todas de uma vez. Cada foto é lida pela IA e substitui a nota atual.</p>
+    <input type="file" class="input-nota-troca" data-parada-id="${parada.id}" accept="image/*,application/pdf" multiple>
+    <button type="button" class="btn small" data-trocar-nota="${parada.id}">Trocar e ler de novo</button>
+    <p class="feedback" data-troca-feedback="${parada.id}"></p>
+  </details>`;
+}
+
 function renderVincularOutroPedido(parada) {
   return `<details class="vincular-outro-pedido">
     <summary>🔗 Essa nota também cobre outro pedido? Buscar e vincular</summary>
@@ -3021,6 +3146,9 @@ function renderCardsHistorico(paradas) {
         ${pedido.observacao ? `<div class="card-meta">💬 Observação do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
         ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
         ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
+        ${(Array.isArray(p.nota_arquivos_extras) ? p.nota_arquivos_extras : [])
+          .map((u, i) => `<a class="arquivo-link" href="${u}" target="_blank" rel="noopener">📎 nota fiscal (foto ${i + 2})</a>`)
+          .join(" ")}
         ${
           p.entrega_parcial
             ? `<div class="conferencia-box ok">📦 Entrega parcial — o pedido voltou pra fila de disponíveis pra buscar o restante. Confira aqui os dados desta parcial: valor ${formatarMoeda(
@@ -3030,8 +3158,10 @@ function renderCardsHistorico(paradas) {
               ? `<div class="conferencia-box warn">${renderDivergenciasParada(p, pedidoEfetivo)}<a class="btn secondary small" href="${linkAvisoComprador(
                   p,
                   pedidoEfetivo
-                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderSugestaoMesmaNota(p, poolParadasHistorico)}${renderVincularOutroPedido(p)}</div>`
-              : ""
+                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderSugestaoMesmaNota(p, poolParadasHistorico)}${renderVincularOutroPedido(p)}${renderTrocarNota(p)}</div>`
+              : notaSemLeitura && !p.recebido_por_terceiro
+                ? `<div class="conferencia-box warn">${renderTrocarNota(p)}</div>`
+                : ""
         }
         <div class="card-meta">
           ${
@@ -3879,7 +4009,7 @@ async function carregarFiltrosHistorico() {
 // histórico inteiro. Por isso qualquer filtro (número, empresa, comprador,
 // fornecedor, data, só-divergentes) sempre alcança TODO o histórico, não
 // importa o quão antigo o registro seja nem quantos existam no total.
-async function loadHistorico() {
+async function loadHistorico(opcoes) {
   const el = document.getElementById("lista-historico");
   const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim();
   const fornecedorFiltro = document.getElementById("filtro-fornecedor-historico").value.trim();
@@ -3939,7 +4069,7 @@ async function loadHistorico() {
   const totalPaginas = Math.max(1, Math.ceil((count || 0) / ITENS_POR_PAGINA_HISTORICO));
   if (paginaHistoricoAtual > totalPaginas) {
     paginaHistoricoAtual = totalPaginas;
-    return loadHistorico();
+    return loadHistorico(opcoes);
   }
 
   // Não redesenha a tela se alguém estiver digitando algo no Histórico agora
@@ -3950,7 +4080,13 @@ async function loadHistorico() {
   const elementoAtivo = document.activeElement;
   const digitandoNoHistorico =
     elementoAtivo && elementoAtivo.matches && elementoAtivo.matches(".input-resolucao, .input-obs-recebimento");
-  if (digitandoNoHistorico) return;
+  // No refresh AUTOMÁTICO (1 em 1 minuto), também não redesenha com um bloco
+  // "vincular outro pedido"/"trocar nota" aberto — redesenhar fecharia o bloco
+  // e apagaria a foto já escolhida. Ações manuais (filtro, botões) sempre
+  // redesenham.
+  const refreshAutomatico = !!(opcoes && opcoes.automatico === true);
+  const blocoAbertoNoHistorico = refreshAutomatico && !!document.querySelector("#lista-historico details[open]");
+  if (digitandoNoHistorico || blocoAbertoNoHistorico) return;
 
   paginaAtualDados = data || [];
   // Busca registros de outras páginas com o mesmo número de nota (pra achar
@@ -4234,7 +4370,98 @@ async function juntarParadasConcluidas(paradaAId, paradaBId, btn) {
   }
 }
 
+// Troca a(s) foto(s) da nota de um registro já concluído e lê tudo de novo
+// com a IA (1 chamada por foto). Se o registro faz parte de um grupo de
+// pedidos na mesma nota (mesma foto), a nota nova vale pro grupo todo e a
+// comparação usa os pedidos somados. A decisão (justificativa) já escrita é
+// mantida — pode ficar desatualizada se a nota nova resolver a divergência,
+// então vale conferir/editar depois.
+async function trocarNotaHistorico(paradaId, btn) {
+  const card = btn.closest(".historico-parada-card");
+  const input = card.querySelector(`.input-nota-troca[data-parada-id="${paradaId}"]`);
+  const feedback = card.querySelector(`[data-troca-feedback="${paradaId}"]`);
+  const arquivos = Array.from((input && input.files) || []);
+  if (!arquivos.length) {
+    feedback.textContent = "Selecione a(s) foto(s) da nota certa primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const parada = poolParadasHistorico.find((p) => p.id === paradaId) || paginaAtualDados.find((p) => p.id === paradaId);
+    if (!parada) throw new Error("Registro não encontrado. Atualize a página.");
+    const grupo = [parada, ...pedidosIrmaos(parada, poolParadasHistorico)];
+
+    const urls = [];
+    const leituras = [];
+    for (let i = 0; i < arquivos.length; i++) {
+      feedback.textContent = `Enviando e lendo foto ${i + 1} de ${arquivos.length}...`;
+      feedback.className = "feedback";
+      urls.push((await uploadArquivo(arquivos[i], "rl_notas")).url);
+      leituras.push(await lerComIA(arquivos[i], "nota"));
+    }
+    const lido = mesclarLeiturasNota(leituras);
+    const dadosNota = {
+      nota_arquivo_url: urls[0],
+      nota_numero: lido.numero_nota || null,
+      nota_valor_total: lido.valor_total != null ? lido.valor_total : null,
+      nota_cnpj: lido.destinatario_cnpj || null,
+      nota_itens: lido.itens.length ? lido.itens : null,
+      nota_tipo_documento: lido.tipo_documento || null,
+      nota_emitente_nome: lido.emitente_nome || null,
+      nota_data_emissao: lido.data_emissao || null,
+      nota_parcelas: Array.isArray(lido.parcelas_pagamento) && lido.parcelas_pagamento.length ? lido.parcelas_pagamento : null,
+    };
+
+    const pedidoMesclado = mesclarPedidosParaConferencia(grupo.map((g) => g.rl_pedidos));
+    const paradaNova = { ...dadosNota, divergencia_valor: false, divergencia_itens: false };
+    const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoMesclado, paradaNova);
+    const itensFinal =
+      dadosNota.nota_tipo_documento === "servico"
+        ? compararPrestador(pedidoMesclado, dadosNota.nota_emitente_nome).divergPrestador
+        : itensDivergentes;
+    const cnpjEsperado = apenasDigitos(pedidoMesclado.empresa_cnpj);
+    const cnpjNota = apenasDigitos(dadosNota.nota_cnpj);
+    const divergCnpj = !!(cnpjEsperado && cnpjNota && cnpjEsperado !== cnpjNota);
+
+    const payload = {
+      ...dadosNota,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: divergCnpj,
+      divergencia_itens: itensFinal,
+      divergencia_condicao_pagamento: divergCondicao,
+    };
+    if (urls.length > 1) payload.nota_arquivos_extras = urls.slice(1);
+    for (const g of grupo) {
+      const temExtrasAntigas = Array.isArray(g.nota_arquivos_extras) && g.nota_arquivos_extras.length;
+      const corpo = urls.length > 1 ? payload : temExtrasAntigas ? { ...payload, nota_arquivos_extras: null } : payload;
+      const { error } = await db.from("rl_rota_paradas").update(corpo).eq("id", g.id);
+      if (error) throw error;
+    }
+    mostrarAviso(`Nota trocada e lida de novo${grupo.length > 1 ? ` (valeu pros ${grupo.length} pedidos da mesma nota)` : ""}.`);
+    await loadHistorico();
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+    btn.disabled = false;
+  }
+}
+
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btnTroca = e.target.closest("button[data-trocar-nota]");
+  if (btnTroca) {
+    if (!btnTroca.dataset.confirmando) {
+      btnTroca.dataset.confirmando = "1";
+      btnTroca.textContent = "Clique de novo pra confirmar (gasta leitura de IA)";
+      setTimeout(() => {
+        delete btnTroca.dataset.confirmando;
+        btnTroca.textContent = "Trocar e ler de novo";
+      }, 5000);
+      return;
+    }
+    await trocarNotaHistorico(btnTroca.dataset.trocarNota, btnTroca);
+    return;
+  }
   const btn = e.target.closest("button[data-juntar-concluida]");
   if (!btn) return;
   if (!btn.dataset.confirmando) {
@@ -4417,6 +4644,6 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
     verificarDivergenciasNovas();
     carregarAvisosPortariaPendentes();
     carregarAvisosLiberadosPendentesConferencia();
-    loadHistorico();
+    loadHistorico({ automatico: true });
   }, 60000);
 })();
