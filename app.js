@@ -3159,8 +3159,8 @@ function renderCardsHistorico(paradas) {
                   p,
                   pedidoEfetivo
                 )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderSugestaoMesmaNota(p, poolParadasHistorico)}${renderVincularOutroPedido(p)}${renderTrocarNota(p)}</div>`
-              : notaSemLeitura && !p.recebido_por_terceiro
-                ? `<div class="conferencia-box warn">${renderTrocarNota(p)}</div>`
+              : !p.recebido_por_terceiro
+                ? `<div class="${notaSemLeitura ? "conferencia-box warn" : ""}">${renderTrocarNota(p)}</div>`
                 : ""
         }
         <div class="card-meta">
