@@ -311,6 +311,11 @@ input, select, textarea {
 .anexar-pedido-novo label { display: block; margin-top: 0.5rem; }
 .anexar-pedido-novo input[type="file"] { display: block; margin-top: 0.3rem; width: 100%; }
 .anexar-pedido-novo button { margin-top: 0.5rem; }
+.nota-foto-item {
+  font-size: 0.85rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
 .sugestao-mesma-nota {
   margin-top: 0.5rem;
   padding: 0.4rem 0.6rem;
