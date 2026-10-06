@@ -13,6 +13,12 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Versão desta função (instruções/schema da IA) = número de commits que
+// mexeram neste arquivo no GitHub, contando o do próprio deploy. O app mostra
+// esse número ao lado da versão do site, pra saber se a colagem no Supabase
+// pegou. Subir a cada alteração deste arquivo.
+const VERSAO_IA = 24;
+
 const SCHEMA_PEDIDO = {
   type: "object",
   properties: {
@@ -293,6 +299,9 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { tipo, file_base64, media_type } = await req.json();
+    // Consulta só da versão (sem custo, não chama a IA) — usada pelo app pra
+    // mostrar qual versão desta função está no ar.
+    if (tipo === "versao") return jsonResponse({ versao_ia: VERSAO_IA }, 200);
     if (!file_base64 || typeof file_base64 !== "string") {
       return jsonResponse({ error: "Campo file_base64 ausente ou inválido." }, 400);
     }
@@ -430,7 +439,7 @@ Deno.serve(async (req: Request) => {
     // "usage" vai junto só pra dar pra acompanhar o efeito do cache de prompt
     // (cache_read_input_tokens/cache_creation_input_tokens) sem precisar
     // abrir o painel da Anthropic — o app não usa esse campo pra nada.
-    return jsonResponse({ data: extraido, usage: data.usage }, 200);
+    return jsonResponse({ data: extraido, usage: data.usage, versao_ia: VERSAO_IA }, 200);
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : "Erro desconhecido." }, 500);
   }
