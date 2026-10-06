@@ -2889,6 +2889,67 @@ function pedidosIrmaos(parada, todasParadas) {
   return todasParadas.filter((q) => q.id !== parada.id && q.nota_arquivo_url === parada.nota_arquivo_url);
 }
 
+// Junta os anexos de vários pedidos (PDFs e fotos) num PDF só, montado aqui no
+// navegador com a biblioteca pdf-lib (carregada só na primeira vez que alguém
+// pede, pra não pesar o site).
+let pdfLibPromise = null;
+function carregarPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  if (!pdfLibPromise) {
+    pdfLibPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
+      s.onload = () => resolve(window.PDFLib);
+      s.onerror = () => {
+        pdfLibPromise = null;
+        reject(new Error("Não consegui carregar a biblioteca de PDF (sem internet?)."));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return pdfLibPromise;
+}
+
+async function montarPdfJunto(urls) {
+  const { PDFDocument } = await carregarPdfLib();
+  const saida = await PDFDocument.create();
+  for (const url of urls) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Não consegui baixar um dos anexos (${resp.status}).`);
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    const tipo = (resp.headers.get("content-type") || "").toLowerCase();
+    const ehPdf = tipo.includes("pdf") || /\.pdf($|\?)/i.test(url) || String.fromCharCode(...bytes.slice(0, 4)) === "%PDF";
+    if (ehPdf) {
+      const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const paginas = await saida.copyPages(doc, doc.getPageIndices());
+      paginas.forEach((p) => saida.addPage(p));
+    } else {
+      const ehPng = tipo.includes("png") || /\.png($|\?)/i.test(url);
+      const img = ehPng ? await saida.embedPng(bytes) : await saida.embedJpg(bytes);
+      const escala = Math.min(1, 595 / img.width);
+      const pagina = saida.addPage([img.width * escala, img.height * escala]);
+      pagina.drawImage(img, { x: 0, y: 0, width: img.width * escala, height: img.height * escala });
+    }
+  }
+  return saida.save();
+}
+
+// Abre o PDF junto numa aba nova. A aba é aberta ANTES de baixar/montar (senão
+// o navegador bloqueia o pop-up, já que a montagem demora alguns segundos).
+async function abrirPedidosJuntos(urls) {
+  const aba = window.open("", "_blank");
+  if (aba) aba.document.write("<p style='font-family:sans-serif'>Montando o PDF com os pedidos juntos...</p>");
+  try {
+    const bytes = await montarPdfJunto(urls);
+    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    if (aba) aba.location.href = blobUrl;
+    else window.open(blobUrl, "_blank");
+  } catch (err) {
+    if (aba) aba.close();
+    mostrarAviso("Erro ao montar o PDF: " + err.message);
+  }
+}
+
 function pedidoEfetivoParaExibicao(parada, todasParadas) {
   const irmas = pedidosIrmaos(parada, todasParadas || []);
   if (!irmas.length) return parada.rl_pedidos || {};
@@ -3145,6 +3206,11 @@ function renderCardsHistorico(paradas) {
         }
         ${pedido.observacao ? `<div class="card-meta">💬 Observação do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
         ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
+        ${
+          pedidosIrmaos(p, poolParadasHistorico).length
+            ? `<button type="button" class="link-btn" data-abrir-pedidos-juntos="${p.id}">📎 todos os pedidos juntos (PDF)</button>`
+            : ""
+        }
         ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
         ${(Array.isArray(p.nota_arquivos_extras) ? p.nota_arquivos_extras : [])
           .map((u, i) => `<a class="arquivo-link" href="${u}" target="_blank" rel="noopener">📎 nota fiscal (foto ${i + 2})</a>`)
@@ -4446,6 +4512,17 @@ async function trocarNotaHistorico(paradaId, btn) {
     btn.disabled = false;
   }
 }
+
+document.getElementById("lista-historico").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-abrir-pedidos-juntos]");
+  if (!btn) return;
+  const parada = poolParadasHistorico.find((p) => p.id === btn.dataset.abrirPedidosJuntos);
+  if (!parada) return;
+  const urls = [parada, ...pedidosIrmaos(parada, poolParadasHistorico)]
+    .map((g) => (g.rl_pedidos || {}).arquivo_url)
+    .filter((u, i, todos) => u && todos.indexOf(u) === i);
+  abrirPedidosJuntos(urls);
+});
 
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
   const btnTroca = e.target.closest("button[data-trocar-nota]");
