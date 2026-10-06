@@ -10,6 +10,13 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_4fZ0DlFJq1ec5xTXurwGSQ_Ke3JELGZ
 // function "rapid-action" do Avanço para Contratos).
 const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 
+// Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
+// app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
+// versão exibida também fica antiga, o que avisa que precisa recarregar.
+const VERSAO_APP = "1.0";
+const elVersaoApp = document.getElementById("versao-app");
+if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
+
 const TOLERANCIA_VALOR = 0.05;
 
 // ---------- tema claro/escuro ----------
