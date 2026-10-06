@@ -17,7 +17,7 @@ const CORS_HEADERS = {
 // mexeram neste arquivo no GitHub, contando o do próprio deploy. O app mostra
 // esse número ao lado da versão do site, pra saber se a colagem no Supabase
 // pegou. Subir a cada alteração deste arquivo.
-const VERSAO_IA = 24;
+const VERSAO_IA = 25;
 
 const SCHEMA_PEDIDO = {
   type: "object",
@@ -155,13 +155,9 @@ const SCHEMA_NOTA = {
         "Nota de PRODUTO: cópia literal do campo 'VALOR TOTAL DA NOTA' (não confundir com 'VALOR TOTAL DOS PRODUTOS' — ver " +
         "instruções). Omita em nota de SERVIÇO ou se ilegível.",
     },
-    valor_produtos: {
-      type: "number",
-      description: "Nota de PRODUTO: reserva, só se valor_total_nota_impresso não puder ser lido. Cópia de 'VALOR TOTAL DOS PRODUTOS'.",
-    },
-    desconto: {
-      type: "number",
-      description: "Nota de PRODUTO: reserva (junto com valor_produtos). Cópia de 'DESCONTO'. Omita se não houver.",
+    pedido_referenciado: {
+      type: "string",
+      description: "Nº do pedido de compra citado nas Informações Complementares (ver instruções), ex: 'S52040'. Vários: separe por vírgula. Omita se não houver.",
     },
     destinatario_nome: {
       type: "string",
@@ -270,10 +266,15 @@ const PROMPT_NOTA =
   "fáceis de confundir — são frequentemente IGUAIS (quando não há desconto real aplicado no total, mesmo que exista um " +
   "campo 'DESCONTO' preenchido do lado — nem todo desconto impresso é realmente abatido do total, então NÃO assuma que " +
   "'VALOR TOTAL DA NOTA' é sempre menor), mas leia cada um da sua própria caixa, nunca copie o número de um campo pro " +
-  "outro por parecerem relacionados. Só se a caixa 'VALOR TOTAL DA NOTA' estiver ilegível, preencha valor_produtos e " +
-  "desconto (cópia literal de cada um) como alternativa. Numa nota de SERVIÇO (sem essa seção), preencha valor_total " +
-  "diretamente com 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço', e omita valor_total_nota_impresso/valor_produtos/" +
-  "desconto.\n\n" +
+  "outro por parecerem relacionados. Se a caixa 'VALOR TOTAL DA NOTA' estiver ilegível, omita valor_total_nota_impresso " +
+  "(o total será calculado depois pela soma dos itens). Numa nota de SERVIÇO (sem essa seção), preencha valor_total " +
+  "diretamente com 'VALOR TOTAL DA NFS-e'/'Valor da Operação/Serviço', e omita valor_total_nota_impresso.\n\n" +
+  "PEDIDO DE COMPRA CITADO NA NOTA: muitas notas citam o número do pedido de compra do comprador nas 'INFORMAÇÕES " +
+  "COMPLEMENTARES' / 'DADOS ADICIONAIS' (rodapé), com rótulos como 'PEDIDO DE COMPRA: S52040', 'PEDIDO Nº', 'OC', " +
+  "'SEU PEDIDO'. Copie só o número/código, exatamente como impresso (ex: 'S52040'), em pedido_referenciado; se a nota " +
+  "cita mais de um pedido, separe por vírgula. Não confunda com o número do PRÓPRIO DANFE/nota nem com o número de " +
+  "pedido interno do fornecedor impresso no cabeçalho (ex: 'Ped.: 756917' ao lado da data de emissão) — esse não é o " +
+  "pedido do comprador. Se a nota não citar nenhum pedido de compra, omita o campo.\n\n" +
   "Em qualquer um dos dois casos: o CNPJ e nome de quem RECEBE (destinatário/tomador) são os mais importantes de extrair " +
   "corretamente, não confunda com o de quem emitiu/prestou. ATENÇÃO AO CNPJ DO DESTINATÁRIO: o DANFE tem DOIS CNPJs na " +
   "parte de cima — o do EMITENTE fica no cabeçalho (na linha de 'Inscrição Estadual', logo ANTES do título " +
@@ -426,13 +427,14 @@ Deno.serve(async (req: Request) => {
               return soma + (linha || 0);
             }, 0)
           : null;
-        const produtos = extraido.valor_produtos || somaItensNota;
-        if (produtos != null) {
-          extraido.valor_total = produtos - (extraido.desconto || 0);
+        // Sem a leitura direta do total, usa a soma dos itens. (Os campos de
+        // reserva "valor_produtos"/"desconto" saíram do schema pra abrir espaço
+        // pra pedido_referenciado sem estourar o limite de complexidade.)
+        if (somaItensNota != null && somaItensNota > 0) {
+          extraido.valor_total = somaItensNota;
         }
-        // Sem valor_total_nota_impresso, valor_produtos nem itens (ex: nota
-        // de serviço) — mantém o valor_total que a IA já leu direto do
-        // documento.
+        // Sem itens (ex: nota de serviço sem tabela) — mantém o valor_total que
+        // a IA já leu direto do documento.
       }
     }
 
