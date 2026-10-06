@@ -227,6 +227,24 @@ function Processar-Fonte($fonte) {
         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null }
     }
 
+    # Recupera arquivos presos em "Processando": se um computador caiu/foi
+    # desligado no meio de um arquivo, ele ficaria preso aqui pra sempre. O nome
+    # reivindicado começa com a data/hora da reivindicação
+    # (yyyyMMddHHmmss__COMPUTADOR__nome); passou de 30 min, devolve pra pasta
+    # principal com o nome original. Se o pedido chegou a ser salvo antes da
+    # queda, o teste de duplicado manda o arquivo pra Roteirizados-Duplicados.
+    Get-ChildItem -Path $pastaProcessando -File -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -match '^(\d{14})__(.+?)__(.+)$') {
+            $quando = [datetime]::ParseExact($Matches[1], "yyyyMMddHHmmss", $null)
+            if ($quando -lt (Get-Date).AddMinutes(-30)) {
+                try {
+                    Move-Item -Path $_.FullName -Destination (Join-Path $pastaMonitorada $Matches[3]) -ErrorAction Stop
+                    Write-Log "Recuperado arquivo preso em Processando (reivindicado por $($Matches[2])): $($Matches[3])"
+                } catch { }
+            }
+        }
+    }
+
     # Nota: -Include só funciona corretamente com -Path terminando em "\*"
     # (sem isso, o PowerShell silenciosamente retorna 0 arquivos mesmo
     # havendo arquivos que baterim com o filtro).
@@ -239,32 +257,47 @@ function Processar-Fonte($fonte) {
         return
     }
 
+    # 1) Reivindica TODOS os arquivos de uma vez, movendo pra "Processando"
+    # ANTES de gastar tempo/dinheiro com IA. O nome reivindicado leva a
+    # data/hora e o computador na frente (usado pra recuperar arquivo preso);
+    # o nome ORIGINAL é o que vale pro resto.
+    # Atenção: pela rede, se duas máquinas pegam o MESMO arquivo no mesmo
+    # milissegundo, o Windows pode dar "ok" pras duas (o arquivo é renomeado
+    # em cadeia e fica com quem renomeou por último) — por isso a etapa 2
+    # confirma quem realmente ficou com ele.
+    $reivindicados = @()
     foreach ($arquivoOriginal in $arquivos) {
         # Frete CIF x FOB é decidido pelo NOME DO ARQUIVO (mesmo padrão do
         # robô do Avanço para Contratos, que decide spot x contrato do mesmo
         # jeito).
-        $ehFob = $arquivoOriginal.Name -imatch "FOB"
-
-        if ($fonte.SoCif -and $ehFob) {
+        $ehFobArquivo = $arquivoOriginal.Name -imatch "FOB"
+        if ($fonte.SoCif -and $ehFobArquivo) {
             Write-Log "Pulando '$($arquivoOriginal.Name)' (tem FOB no nome - essa pasta so importa CIF; arquivo nao foi movido)."
             continue
         }
-
-        # Reivindica o arquivo movendo pra pasta "Processando" ANTES de
-        # gastar tempo/dinheiro com IA — um Move-Item é atômico no Windows,
-        # então se outra máquina já pegou esse arquivo no mesmo instante,
-        # este Move-Item falha aqui e a gente simplesmente pula ele (sem
-        # log de erro — é o funcionamento normal esperado da redundância,
-        # não uma falha).
-        $caminhoReivindicado = Join-Path $pastaProcessando $arquivoOriginal.Name
+        $nomeReivindicado = "{0}__{1}__{2}" -f (Get-Date -Format "yyyyMMddHHmmss"), $env:COMPUTERNAME, $arquivoOriginal.Name
+        $caminhoReivindicado = Join-Path $pastaProcessando $nomeReivindicado
         try {
-            Move-Item -Path $arquivoOriginal.FullName -Destination $caminhoReivindicado -ErrorAction Stop
+            [System.IO.File]::Move($arquivoOriginal.FullName, $caminhoReivindicado)
+            $reivindicados += [pscustomobject]@{ Nome = $arquivoOriginal.Name; Caminho = $caminhoReivindicado }
         } catch {
-            continue
+            # outra máquina já pegou este — normal na redundância, não é falha
         }
-        $arquivo = Get-Item $caminhoReivindicado
+    }
 
-        Write-Log "Processando: $($arquivo.Name)"
+    # 2) Espera e confirma: só é DONO quem ainda tem o seu arquivo depois da
+    # espera (quem foi "ultrapassado" por outra máquina vê o seu sumir e pula).
+    # Testado com 3 máquinas simuladas disparando juntas: sempre um único dono
+    # por arquivo, sem perda nem duplicata.
+    Start-Sleep -Seconds 3
+    $meusArquivos = @($reivindicados | Where-Object { Test-Path -LiteralPath $_.Caminho })
+
+    foreach ($item in $meusArquivos) {
+        $nomeOriginal = $item.Nome
+        $ehFob = $nomeOriginal -imatch "FOB"
+        $arquivo = Get-Item -LiteralPath $item.Caminho
+
+        Write-Log "Processando: $nomeOriginal"
         try {
             $extensao = $arquivo.Extension.TrimStart(".")
             $mediaType = MediaTypePorExtensao $extensao
@@ -297,14 +330,14 @@ function Processar-Fonte($fonte) {
             # identificados pelo nome do arquivo — vão pra uma tela
             # separada, já que o motorista passa na transportadora todo dia
             # sem saber de antemão o que já chegou.
-            $retirarTransportadora = $arquivo.Name -imatch "transportadora"
+            $retirarTransportadora = $nomeOriginal -imatch "transportadora"
 
             # Segunda camada de segurança contra duplicata (além da
             # reivindicação por Move-Item acima) — cobre o caso raro de o
             # MESMO pedido vir em dois arquivos/pastas diferentes.
             if (Test-PedidoJaImportado $dados.numero_pedido) {
                 Write-Log "  Pedido Nº $($dados.numero_pedido) já importado antes — pulando (movido para Roteirizados-Duplicados)."
-                Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDuplicados $arquivo.Name) -Force
+                Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDuplicados $nomeOriginal) -Force
                 continue
             }
 
@@ -329,7 +362,7 @@ function Processar-Fonte($fonte) {
                 numero_pedido   = if ($dados.numero_pedido) { $dados.numero_pedido } else { $null }
                 local_retirada  = if ($dados.local_retirada) { $dados.local_retirada } else { $null }
                 arquivo_url     = $arquivoUrl
-                arquivo_nome    = $arquivo.Name
+                arquivo_nome    = $nomeOriginal
                 valor_total     = if ($null -ne $dados.valor_total) { $dados.valor_total } else { $null }
                 # "@(...)" força virar lista mesmo com 1 item só — sem isso, o
                 # PowerShell "destrói" uma lista de 1 elemento vinda da API e
@@ -346,16 +379,20 @@ function Processar-Fonte($fonte) {
 
             $pastaDestino = if ($ehFob) { $pastaRoteirizados } else { $pastaCif }
             Write-Log "  OK ($(if ($ehFob) { 'FOB' } else { 'CIF' })$(if ($retirarTransportadora) { ', transportadora' })): comprador '$compradorNome', empresa '$($dados.empresa_compradora_nome)', valor=$($dados.valor_total), pedido=$($dados.numero_pedido)"
-            Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDestino $arquivo.Name) -Force
+            Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaDestino $nomeOriginal) -Force
         }
         catch {
             Write-Log "  ERRO: $(Detalhe-Erro $_)"
             if (Test-Path $arquivo.FullName) {
-                Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaErros $arquivo.Name) -Force -ErrorAction SilentlyContinue
+                Move-Item -Path $arquivo.FullName -Destination (Join-Path $pastaErros $nomeOriginal) -Force -ErrorAction SilentlyContinue
             }
         }
     }
 }
+
+# Pequena espera aleatória: se as tarefas de duas máquinas estiverem
+# sincronizadas (disparando no mesmo segundo), isso espalha as duas.
+Start-Sleep -Seconds (Get-Random -Minimum 0 -Maximum 20)
 
 foreach ($fonte in $Fontes) {
     Processar-Fonte $fonte
