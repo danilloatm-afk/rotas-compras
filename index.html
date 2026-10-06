@@ -14,6 +14,7 @@
   <div class="topbar-title-row">
     <h1>🚚 Rotas de Compras <span id="versao-app" class="versao-app" title="Versão do site"></span><span id="versao-ia" class="versao-app" title="Versão da leitura por IA (função no Supabase)"></span></h1>
     <div class="topbar-actions">
+      <a href="manual.html" target="_blank" rel="noopener" class="btn secondary small" title="Manual de uso de cada função (portaria, almoxarife, motorista e comprador)">📖 Manual</a>
       <button id="btn-ativar-som" type="button" class="btn secondary small" title="Ativa o alerta sonoro de divergência nesta tela (precisa de 1 toque por causa do navegador)">🔊 Ativar som</button>
       <button id="btn-theme-toggle" type="button" class="btn secondary small theme-toggle" title="Alternar modo claro/escuro">🌙</button>
     </div>
@@ -36,6 +37,7 @@
 
   <!-- COMPRADOR -->
   <section id="tab-comprador" class="tab-content active">
+    <p class="hint ajuda-manual"><a href="manual.html#comprador" target="_blank" rel="noopener">📖 Manual do comprador</a></p>
     <div class="quem-sou-eu">
       <label>
         Meu nome (comprador)
@@ -100,6 +102,7 @@
 
   <!-- MOTORISTA -->
   <section id="tab-motorista" class="tab-content">
+    <p class="hint ajuda-manual"><a href="manual.html#motorista" target="_blank" rel="noopener">📖 Manual do motorista</a></p>
     <div class="quem-sou-eu">
       <label>
         Meu nome (motorista)
@@ -206,6 +209,7 @@
 
   <!-- PORTARIA -->
   <section id="tab-portaria" class="tab-content">
+    <p class="hint ajuda-manual"><a href="manual.html#portaria" target="_blank" rel="noopener">📖 Manual da portaria</a></p>
     <h2>Avisar chegada de entrega</h2>
     <p class="hint">Pra entregas que o fornecedor traz até aqui (frete CIF) — avisa o almoxarifado na hora, com som, sem precisar ligar ou ir até lá.</p>
     <div class="card-pedido">
@@ -260,6 +264,7 @@
 
   <!-- RECEBIMENTO CIF -->
   <section id="tab-recebimento-cif" class="tab-content">
+    <p class="hint ajuda-manual"><a href="manual.html#almoxarife" target="_blank" rel="noopener">📖 Manual do almoxarife</a></p>
     <div class="section-head">
       <h2>Recebimento CIF</h2>
       <button id="btn-atualizar-recebimento-cif" type="button" class="btn secondary small">🔄 Atualizar</button>
@@ -304,6 +309,7 @@
 
   <!-- HISTÓRICO -->
   <section id="tab-historico" class="tab-content">
+    <p class="hint ajuda-manual">📖 Manual: <a href="manual.html#almoxarife-recebimento" target="_blank" rel="noopener">confirmar o recebimento (almoxarife)</a> · <a href="manual.html#comprador-divergencias" target="_blank" rel="noopener">resolver divergências (comprador)</a></p>
     <div class="section-head">
       <h2>Paradas concluídas</h2>
       <button id="btn-atualizar-historico" type="button" class="btn secondary small">🔄 Atualizar</button>
