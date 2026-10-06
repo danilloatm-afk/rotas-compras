@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "242";
+const VERSAO_APP = "245";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -203,8 +203,37 @@ async function lerComIA(file, tipo) {
   });
   const resultado = await resp.json();
   if (!resp.ok || resultado.error) throw new Error(resultado.error || "Falha ao ler o documento.");
+  if (resultado.versao_ia != null) mostrarVersaoIA(resultado.versao_ia);
   return resultado.data;
 }
+
+// Mostra, ao lado da versão do site, a versão da função de leitura por IA que
+// está NO AR no Supabase. "IA antiga" = a função no ar ainda não tem a
+// consulta de versão (a colagem do arquivo novo no Supabase não foi feita).
+function mostrarVersaoIA(versao) {
+  const el = document.getElementById("versao-ia");
+  if (!el) return;
+  el.textContent = versao == null ? "· IA antiga" : `· IA ${versao}`;
+}
+
+async function consultarVersaoIA() {
+  try {
+    const resp = await fetch(EXTRACT_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ tipo: "versao" }),
+    });
+    const r = await resp.json();
+    mostrarVersaoIA(r.versao_ia);
+  } catch {
+    // sem conexão agora — deixa em branco, a próxima leitura preenche
+  }
+}
+consultarVersaoIA();
 
 async function checarPedidoDuplicado(numeroPedido) {
   const aviso = document.getElementById("pedido-duplicado-aviso");
