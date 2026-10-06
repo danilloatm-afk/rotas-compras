@@ -1,0 +1,57 @@
+ROBOS DE IMPORTACAO DE PEDIDOS - SEGUNDO COMPUTADOR (REDUNDANCIA)
+=================================================================
+
+Objetivo: instalar os 2 robos num SEGUNDO computador, para rodarem em paralelo
+com o computador original. Se um estiver desligado, o outro continua importando.
+Nada e movido nem desativado no computador original.
+
+Como funciona (resumo): cada arquivo de pedido e "reivindicado" por uma maquina
+so antes de ser processado, e depois de um teste de 3 segundos so a maquina que
+realmente ficou com o arquivo trabalha nele. Cada maquina grava seu proprio log.
+Se uma maquina cair no meio, o arquivo preso volta sozinho pra fila em 30 min.
+
+O QUE TEM NESTA PASTA
+- importar-pedidos-rotas.ps1   robo do Rotas de Compras
+- importar-pedidos-avanco.ps1  robo do Avanco para Contratos
+- instalar-robos.ps1           instala tudo e cria as tarefas agendadas
+
+ANTES DE COMECAR
+- O computador precisa abrir a pasta  \\192.168.0.228\wehrmann\COMPRAS\ORDENS DE COMPRA
+- Precisa de internet.
+- Use um usuario que tenha acesso a essa pasta (o mesmo que voce usa no seu PC).
+
+PASSO A PASSO (uns 5 minutos)
+1) Copie esta pasta inteira (robos-servidor) para o segundo computador.
+
+2) Nele, abra o PowerShell como ADMINISTRADOR:
+   Menu Iniciar > digite "PowerShell" > botao direito > Executar como administrador.
+
+3) Entre na pasta e libere a execucao so desta janela:
+      cd C:\caminho\onde\voce\copiou\robos-servidor
+      Set-ExecutionPolicy -Scope Process Bypass
+
+4) Rode o instalador:
+      .\instalar-robos.ps1
+   Ele confere a rede e a internet, copia os robos para C:\Robos, pede o usuario
+   e a senha (para a tarefa rodar mesmo sem ninguem logado), cria as 2 tarefas
+   LIGADAS (a cada 15 min), roda uma vez e mostra o resultado e o final dos logs.
+   Resultado 0 = ok.
+
+COMO SABER SE ESTA FUNCIONANDO
+- Agendador de Tarefas > "Importar Pedidos - ..." > "Resultado da ultima
+  execucao" = 0 (ou 0x0).
+- Logs na pasta de rede (um por computador):
+    ...\ORDENS DE COMPRA\importacao_log_<NOME-DO-PC>.txt            (Avanco)
+    ...\ORDENS DE COMPRA\Processados\importacao_rotas_log_<NOME-DO-PC>.txt (Rotas)
+- E normal um computador registrar "Nenhum PDF novo para esta maquina": significa
+  que o outro ja pegou o arquivo.
+
+QUANDO O CLAUDE ALTERAR UM ROBO
+- Copie o arquivo novo para C:\Robos deste computador (mesmo nome:
+  importar-pedidos-rotas.ps1 ou importar-pedidos-avanco.ps1) e, no computador
+  original, ele ja e atualizado no lugar. Os dois precisam estar na mesma versao.
+- Se mudar a senha do usuario da tarefa, rode o passo 4 de novo.
+
+ATENCAO
+- Nao rode os robos ANTIGOS (sem a reserva de arquivo) em um dos computadores
+  junto com os novos no outro: so a versao nova dos DOIS e segura em paralelo.
