@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "273";
+const VERSAO_APP = "275";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -3119,7 +3119,18 @@ function linkAvisoObservacaoRecebimento(parada) {
 // que só existia na tela no momento em que o motorista concluiu a parada.
 function renderDivergenciasParada(parada, pedidoEfetivo) {
   const pedido = pedidoEfetivo || parada.rl_pedidos || {};
-  let html = "";
+  // Etiquetas no topo com TODOS os tipos de divergência deste registro — a
+  // mensagem de prazo de pagamento, por exemplo, é só uma linha no meio de um
+  // cartão grande e passava despercebida.
+  const tipos = [
+    parada.divergencia_valor && "💰 Valor",
+    parada.divergencia_cnpj && "🏢 CNPJ",
+    parada.divergencia_itens && (parada.nota_tipo_documento === "servico" ? "🧾 Prestadora" : "📦 Itens"),
+    parada.divergencia_condicao_pagamento && "🗓️ Prazo de pagamento",
+  ].filter(Boolean);
+  let html = tipos.length
+    ? `<div class="chips-divergencia">${tipos.map((t) => `<span class="chip-divergencia">${t}</span>`).join("")}</div>`
+    : "";
   if (parada.divergencia_valor) {
     html += `<div>⚠️ Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.</div>`;
   }
