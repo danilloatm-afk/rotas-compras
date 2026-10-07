@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "270";
+const VERSAO_APP = "272";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -4342,9 +4342,20 @@ async function loadHistorico(opcoes) {
   if (empresaFiltro) query = query.eq("rl_pedidos.empresa_nome", empresaFiltro);
   if (compradorFiltro) query = query.eq("rl_pedidos.comprador_nome", compradorFiltro);
   if (somenteDivergentesHistorico) {
-    query = query
-      .eq("entrega_parcial", false)
-      .or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true");
+    query = query.eq("entrega_parcial", false);
+    // Tipo de divergência: um específico, ou qualquer um dos quatro.
+    const colunaPorTipo = {
+      valor: "divergencia_valor",
+      cnpj: "divergencia_cnpj",
+      itens: "divergencia_itens",
+      condicao: "divergencia_condicao_pagamento",
+    };
+    const tipoSelecionado = document.getElementById("filtro-tipo-divergencia").value;
+    if (colunaPorTipo[tipoSelecionado]) {
+      query = query.eq(colunaPorTipo[tipoSelecionado], true);
+    } else {
+      query = query.or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true");
+    }
     // "Justificada" = alguém já registrou a decisão sobre a divergência.
     const filtroJustificativa = document.getElementById("filtro-justificativa-historico").value;
     if (filtroJustificativa === "sem") query = query.is("resolucao_divergencia", null);
@@ -4431,10 +4442,17 @@ document.getElementById("btn-somente-divergentes").addEventListener("click", (e)
   const selJustificativa = document.getElementById("filtro-justificativa-historico");
   selJustificativa.classList.toggle("hidden", !somenteDivergentesHistorico);
   if (!somenteDivergentesHistorico) selJustificativa.value = "";
+  const selTipoDivergencia = document.getElementById("filtro-tipo-divergencia");
+  selTipoDivergencia.classList.toggle("hidden", !somenteDivergentesHistorico);
+  if (!somenteDivergentesHistorico) selTipoDivergencia.value = "";
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
 document.getElementById("filtro-justificativa-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-tipo-divergencia").addEventListener("change", () => {
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
@@ -4450,6 +4468,9 @@ document.getElementById("btn-limpar-filtros-historico").addEventListener("click"
   const selJustificativaLimpar = document.getElementById("filtro-justificativa-historico");
   selJustificativaLimpar.value = "";
   selJustificativaLimpar.classList.add("hidden");
+  const selTipoLimpar = document.getElementById("filtro-tipo-divergencia");
+  selTipoLimpar.value = "";
+  selTipoLimpar.classList.add("hidden");
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
