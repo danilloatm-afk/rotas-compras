@@ -392,9 +392,9 @@ a.btn { display: inline-block; text-decoration: none; }
 
 /* Listas de cartões mais largos (Histórico e avisos do Recebimento CIF):
    várias colunas em tela grande, uma só no celular. */
-#lista-historico { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 0.9rem; align-items: start; }
+#lista-historico { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 600px), 1fr)); gap: 0.9rem; align-items: stretch; }
 #avisos-portaria-pendentes,
-#avisos-liberados-aguardando-conferencia { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 0.75rem; align-items: start; }
+#avisos-liberados-aguardando-conferencia { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 0.75rem; align-items: stretch; }
 
 .card-pedido {
   background: var(--surface);
