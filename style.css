@@ -122,7 +122,9 @@ body {
 
 .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 
-main { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+/* Usa a largura toda da tela (monitor grande): os cartões se espalham em
+   várias colunas; só os formulários continuam estreitos pra ficarem legíveis. */
+main { max-width: none; margin: 0; padding: 1.5rem clamp(1rem, 2.5vw, 2.5rem); }
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
@@ -386,7 +388,13 @@ a.btn { display: inline-block; text-decoration: none; }
 }
 .cadastro-lista .cadastro-meta { color: var(--text-muted); font-size: 0.78rem; }
 
-.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; }
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.9rem; }
+
+/* Listas de cartões mais largos (Histórico e avisos do Recebimento CIF):
+   várias colunas em tela grande, uma só no celular. */
+#lista-historico { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 0.9rem; align-items: start; }
+#avisos-portaria-pendentes,
+#avisos-liberados-aguardando-conferencia { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 0.75rem; align-items: start; }
 
 .card-pedido {
   background: var(--surface);
@@ -491,7 +499,7 @@ a.btn { display: inline-block; text-decoration: none; }
 .tabela-itens tr.linha-divergente { background: var(--atrasado-bg); }
 .tabela-itens tr.linha-atrasada td { color: var(--atrasado); font-weight: 600; }
 
-.historico-parada-card { max-width: 640px; margin-bottom: 0.9rem; }
+.historico-parada-card { max-width: none; margin-bottom: 0; }
 .recebimento-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.3rem; }
 .recebimento-form textarea { width: 100%; resize: vertical; font-family: inherit; }
 .resolucao-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
