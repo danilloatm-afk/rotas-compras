@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "272";
+const VERSAO_APP = "273";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -3126,19 +3126,21 @@ function renderDivergenciasParada(parada, pedidoEfetivo) {
   if (parada.divergencia_cnpj) {
     html += `<div>⚠️ CNPJ: pedido esperava ${escapeHtml(pedido.empresa_cnpj || "—")}, nota trouxe ${escapeHtml(parada.nota_cnpj || "—")}.</div>`;
   }
-  if (parada.divergencia_itens) {
-    if (parada.nota_tipo_documento === "servico") {
-      html += `<div>⚠️ Prestadora do serviço: pedido esperava ${escapeHtml(pedido.fornecedor_nome || "—")}, nota trouxe ${escapeHtml(
-        parada.nota_emitente_nome || "—"
-      )}.</div>`;
-    } else {
-      const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
-      html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
-    }
+  // As mensagens de UMA linha (valor, CNPJ, prestadora, prazo de pagamento)
+  // ficam juntas no topo; a tabela de itens, que é grande, vai por último —
+  // senão o prazo de pagamento aparecia depois da tabela, longe das outras.
+  if (parada.divergencia_itens && parada.nota_tipo_documento === "servico") {
+    html += `<div>⚠️ Prestadora do serviço: pedido esperava ${escapeHtml(pedido.fornecedor_nome || "—")}, nota trouxe ${escapeHtml(
+      parada.nota_emitente_nome || "—"
+    )}.</div>`;
   }
   if (parada.divergencia_condicao_pagamento) {
     const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
     if (msgCondicao) html += `<div>${msgCondicao}</div>`;
+  }
+  if (parada.divergencia_itens && parada.nota_tipo_documento !== "servico") {
+    const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
+    html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
   }
   return html;
 }
