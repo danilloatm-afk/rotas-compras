@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "276";
+const VERSAO_APP = "281";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -2130,7 +2130,30 @@ const TOLERANCIA_DIAS_PAGAMENTO = 5; // absorve vencimento caindo em fim de sema
 // compartilhada com o Avanço para Contratos). Quando há mais de uma parcela,
 // usa a média ponderada pelo valor de cada uma, do mesmo jeito que os dias
 // da própria tabela foram calculados.
+// Nota que cobre mais de um pedido tem UM prazo só, mas os pedidos podem ter
+// condições de pagamento diferentes. Aí a nota é conferida contra a condição de
+// CADA pedido (uma linha por pedido, com o número), e conta como divergência
+// se ficar abaixo do prazo de qualquer um deles. Se todos têm a mesma
+// condição, é uma conferência só, como sempre. O card tem uma decisão só pro
+// prazo, não uma por pedido.
 function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
+  const origem = Array.isArray(pedido._origem) ? pedido._origem : null;
+  if (origem && origem.length > 1) {
+    const codigosDistintos = new Set(origem.map((p) => normalizarCodigoCondicao(p.condicao_pagamento_codigo || "")).filter(Boolean));
+    if (codigosDistintos.size > 1) {
+      const linhas = origem
+        .map((p) => ({ numero: p.numero_pedido || "sem número", ...compararCondicaoPagamentoUnico(p, dataEmissao, parcelas) }))
+        .filter((l) => l.msgCondicao);
+      return {
+        msgCondicao: linhas.map((l) => `<strong>Pedido ${escapeHtml(l.numero)}:</strong> ${l.msgCondicao}`).join("<br>"),
+        divergCondicao: linhas.some((l) => l.divergCondicao),
+      };
+    }
+  }
+  return compararCondicaoPagamentoUnico(pedido, dataEmissao, parcelas);
+}
+
+function compararCondicaoPagamentoUnico(pedido, dataEmissao, parcelas) {
   const codigo = pedido.condicao_pagamento_codigo;
   if (!codigo) return { msgCondicao: null, divergCondicao: false };
   // Se a tabela nunca carregou de verdade (conexão ruim na hora que o app
@@ -2767,7 +2790,7 @@ async function loadIndicadores() {
     db
       .from("rl_rota_paradas")
       .select(
-        "concluido_em, entrega_parcial, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_divergencia, resolucao_em, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome, frete_fob)"
+        "concluido_em, entrega_parcial, nota_tipo_documento, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_valor, resolucao_cnpj, resolucao_itens, resolucao_condicao, resolucoes_meta, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome, frete_fob)"
       )
       .eq("status", "concluida")
       .not("concluido_em", "is", null)
@@ -2838,7 +2861,8 @@ async function loadIndicadores() {
         const fornecedor = (p.rl_pedidos || {}).fornecedor_nome || "—";
         divergenciasPorFornecedor.set(fornecedor, (divergenciasPorFornecedor.get(fornecedor) || 0) + 1);
 
-        if (!p.resolucao_divergencia) {
+        // "Sem resposta" = falta decisão em pelo menos um dos tipos que divergiram.
+        if (!divergenciaJustificada(p)) {
           const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
           const numero = (p.rl_pedidos || {}).numero_pedido || "—";
           const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
@@ -2847,9 +2871,9 @@ async function loadIndicadores() {
           atual.diasMax = Math.max(atual.diasMax, dias);
           atual.pedidos.push({ numero, dias });
           semRespostaPorComprador.set(comprador, atual);
-        } else if (p.resolucao_em) {
+        } else if (quandoJustificou(p)) {
           const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
-          const diasResposta = Math.max(0, (new Date(p.resolucao_em).getTime() - new Date(p.concluido_em).getTime()) / 86400000);
+          const diasResposta = Math.max(0, (new Date(quandoJustificou(p)).getTime() - new Date(p.concluido_em).getTime()) / 86400000);
           const atual = tempoRespostaPorComprador.get(comprador) || { comprador, soma: 0, total: 0 };
           atual.soma += diasResposta;
           atual.total++;
@@ -3086,7 +3110,9 @@ function resumoDivergenciasTexto(parada, pedidoEfetivo) {
   }
   if (parada.divergencia_condicao_pagamento) {
     const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
-    if (msgCondicao) linhas.push(msgCondicao.replace(/^[⚠️✅]\s*/, ""));
+    // Com vários pedidos há uma linha por pedido ("<br>" + negrito) — vira
+    // texto puro, uma linha por pedido, pro WhatsApp.
+    if (msgCondicao) linhas.push(msgCondicao.replace(/<br>/g, "\n").replace(/<\/?strong>/g, "").replace(/^[⚠️✅]\s*/, ""));
   }
   return linhas.join("\n");
 }
@@ -3159,20 +3185,66 @@ function renderDivergenciasParada(parada, pedidoEfetivo) {
 // Registra o que foi decidido sobre uma divergência (ex: "fornecedor vai
 // reemitir a nota", "confirmado, é a filial certa mesmo") — fica visível
 // pra quem olhar o Histórico depois, sem precisar perguntar de novo.
-let resolucoesEmEdicao = new Set();
+// Cada TIPO de divergência tem a sua própria decisão (uma caixinha por tipo):
+// o card tem às vezes valor + itens + prazo errados, e uma justificativa só
+// não cobre os três. O card só vale como "justificado" quando TODOS os tipos
+// que divergiram têm decisão.
+const TIPOS_DIVERGENCIA = [
+  { chave: "valor", flag: "divergencia_valor", coluna: "resolucao_valor", rotulo: "💰 Valor" },
+  { chave: "cnpj", flag: "divergencia_cnpj", coluna: "resolucao_cnpj", rotulo: "🏢 CNPJ" },
+  { chave: "itens", flag: "divergencia_itens", coluna: "resolucao_itens", rotulo: "📦 Itens" },
+  { chave: "condicao", flag: "divergencia_condicao_pagamento", coluna: "resolucao_condicao", rotulo: "🗓️ Prazo de pagamento" },
+];
+
+function tiposAtivosDaParada(parada) {
+  return TIPOS_DIVERGENCIA.filter((t) => parada[t.flag]).map((t) =>
+    t.chave === "itens" && parada.nota_tipo_documento === "servico" ? { ...t, rotulo: "🧾 Prestadora" } : t
+  );
+}
+
+function decisaoDoTipo(parada, tipo) {
+  return String(parada[tipo.coluna] || "").trim();
+}
+
+function divergenciaJustificada(parada) {
+  const ativos = tiposAtivosDaParada(parada);
+  return ativos.length > 0 && ativos.every((t) => decisaoDoTipo(parada, t));
+}
+
+// Quando ficou 100% justificada = a data da ÚLTIMA decisão que faltava.
+function quandoJustificou(parada) {
+  const meta = parada.resolucoes_meta || {};
+  const datas = tiposAtivosDaParada(parada)
+    .map((t) => meta[t.chave] && meta[t.chave].em)
+    .filter(Boolean)
+    .map((d) => new Date(d).getTime());
+  return datas.length ? new Date(Math.max(...datas)).toISOString() : null;
+}
+
+let resolucoesEmEdicao = new Set(); // chaves "paradaId:tipo"
 function renderResolucaoDivergencia(parada) {
-  const jaTemResolucao = !!parada.resolucao_divergencia;
-  if (jaTemResolucao && !resolucoesEmEdicao.has(parada.id)) {
-    return `<div class="card-meta">💬 Decisão: ${escapeHtml(parada.resolucao_divergencia)}${
-      parada.resolucao_por ? ` — ${escapeHtml(parada.resolucao_por)}` : ""
-    }${parada.resolucao_em ? `, ${formatarDataHora(parada.resolucao_em)}` : ""} <button class="link-btn" type="button" data-editar-resolucao="${parada.id}">Editar</button></div>`;
-  }
-  return `<div class="resolucao-form">
-    <label class="form-label">⚠️ Decisão sobre a divergência acima (o que foi combinado com fornecedor/comprador)</label>
-    <textarea class="input-resolucao" data-parada-id="${parada.id}" rows="2" placeholder="Ex: fornecedor vai reemitir a nota">${escapeHtml(
-      parada.resolucao_divergencia || ""
-    )}</textarea>
-    <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}">Salvar decisão</button>
+  const ativos = tiposAtivosDaParada(parada);
+  if (!ativos.length) return "";
+  const meta = parada.resolucoes_meta || {};
+  const feitas = ativos.filter((t) => decisaoDoTipo(parada, t)).length;
+  const blocos = ativos.map((t) => {
+    const texto = decisaoDoTipo(parada, t);
+    const chaveEdicao = `${parada.id}:${t.chave}`;
+    if (texto && !resolucoesEmEdicao.has(chaveEdicao)) {
+      const m = meta[t.chave] || {};
+      return `<div class="card-meta decisao-tipo decisao-ok">✅ <strong>${t.rotulo}</strong> — ${escapeHtml(texto)}${
+        m.por ? ` — ${escapeHtml(m.por)}` : ""
+      }${m.em ? `, ${formatarDataHora(m.em)}` : ""} <button class="link-btn" type="button" data-editar-resolucao="${parada.id}" data-tipo="${t.chave}">Editar</button></div>`;
+    }
+    return `<div class="resolucao-form decisao-tipo">
+      <label class="form-label">⚠️ ${t.rotulo}: o que foi decidido/combinado?</label>
+      <textarea class="input-resolucao" data-parada-id="${parada.id}" data-tipo="${t.chave}" rows="2" placeholder="Ex: fornecedor vai reemitir a nota">${escapeHtml(texto)}</textarea>
+      <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}" data-tipo="${t.chave}">Salvar decisão (${t.rotulo})</button>
+    </div>`;
+  });
+  return `<div class="decisoes-por-tipo">
+    <div class="form-label">Decisões por tipo: ${feitas} de ${ativos.length} registrada${ativos.length === 1 ? "" : "s"}</div>
+    ${blocos.join("")}
   </div>`;
 }
 
@@ -4107,6 +4179,9 @@ function mesclarPedidosParaConferencia(pedidos) {
     numero_pedido: pedidos.map((p) => p.numero_pedido || "s/ nº").join(" + "),
     valor_total: pedidos.reduce((soma, p) => soma + (Number(p.valor_total) || 0), 0),
     itens: pedidos.flatMap((p) => itensComoArray(p.itens)),
+    // Pedidos originais, pra conferir a condição de pagamento de CADA um
+    // (ver compararCondicaoPagamento).
+    _origem: pedidos,
   };
 }
 
@@ -4371,8 +4446,18 @@ async function loadHistorico(opcoes) {
     }
     // "Justificada" = alguém já registrou a decisão sobre a divergência.
     const filtroJustificativa = document.getElementById("filtro-justificativa-historico").value;
-    if (filtroJustificativa === "sem") query = query.is("resolucao_divergencia", null);
-    if (filtroJustificativa === "com") query = query.not("resolucao_divergencia", "is", null);
+    // "Não justificada" = algum tipo que divergiu ainda sem decisão.
+    // "Justificada" = todos os tipos que divergiram já têm decisão.
+    if (filtroJustificativa === "sem") {
+      query = query.or(
+        TIPOS_DIVERGENCIA.map((t) => `and(${t.flag}.eq.true,${t.coluna}.is.null)`).join(",")
+      );
+    }
+    if (filtroJustificativa === "com") {
+      TIPOS_DIVERGENCIA.forEach((t) => {
+        query = query.or(`${t.flag}.eq.false,${t.coluna}.not.is.null`);
+      });
+    }
   }
 
   query = query.order("concluido_em", { ascending: false });
@@ -4952,19 +5037,13 @@ async function desfazerParadaHistorico(paradaId, btn) {
     if (irmas.length) {
       const pedidoRestante = mesclarPedidosParaConferencia(irmas.map((i) => i.rl_pedidos));
       const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoRestante, irmas[0]);
-      const numero = pedido.numero_pedido || pedido.id;
-      const fraseJuncao = new RegExp(`\\n*Nota também cobre o pedido Nº ${String(numero).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} — conferência unificada\\.`, "g");
       for (const irma of irmas) {
-        const texto = (irma.resolucao_divergencia || "").replace(fraseJuncao, "").trim();
         const { error: errIrma } = await db
           .from("rl_rota_paradas")
           .update({
             divergencia_valor: divergValor,
             divergencia_itens: itensDivergentes,
             divergencia_condicao_pagamento: divergCondicao,
-            resolucao_divergencia: texto || null,
-            resolucao_por: texto ? irma.resolucao_por : null,
-            resolucao_em: texto ? irma.resolucao_em : null,
           })
           .eq("id", irma.id);
         if (errIrma) throw errIrma;
@@ -5005,29 +5084,40 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
 document.getElementById("lista-historico").addEventListener("click", async (e) => {
   const btnEditar = e.target.closest("button[data-editar-resolucao]");
   if (btnEditar) {
-    resolucoesEmEdicao.add(btnEditar.dataset.editarResolucao);
+    resolucoesEmEdicao.add(`${btnEditar.dataset.editarResolucao}:${btnEditar.dataset.tipo}`);
     renderHistorico();
     return;
   }
   const btnSalvar = e.target.closest("button[data-salvar-resolucao]");
   if (btnSalvar) {
     const paradaId = btnSalvar.dataset.salvarResolucao;
-    const textarea = document.querySelector(`.input-resolucao[data-parada-id="${paradaId}"]`);
+    const chaveTipo = btnSalvar.dataset.tipo;
+    const tipo = TIPOS_DIVERGENCIA.find((t) => t.chave === chaveTipo);
+    const textarea = document.querySelector(`.input-resolucao[data-parada-id="${paradaId}"][data-tipo="${chaveTipo}"]`);
+    if (!tipo || !textarea) return;
     const texto = textarea.value.trim();
     if (!texto) {
       mostrarAviso("Escreva o que foi decidido antes de salvar.");
       return;
     }
     const quemRegistrou = document.getElementById("almoxarife-select").value || null;
+    // O meta (quem/quando) é um JSON com uma entrada por tipo — lê o atual
+    // do banco pra não apagar o dos outros tipos.
+    const { data: atual, error: errLeitura } = await db.from("rl_rota_paradas").select("resolucoes_meta").eq("id", paradaId).single();
+    if (errLeitura) {
+      mostrarAviso("Erro ao salvar: " + errLeitura.message);
+      return;
+    }
+    const meta = { ...(atual.resolucoes_meta || {}), [chaveTipo]: { por: quemRegistrou, em: new Date().toISOString() } };
     const { error } = await db
       .from("rl_rota_paradas")
-      .update({ resolucao_divergencia: texto, resolucao_por: quemRegistrou, resolucao_em: new Date().toISOString() })
+      .update({ [tipo.coluna]: texto, resolucoes_meta: meta })
       .eq("id", paradaId);
     if (error) {
       mostrarAviso("Erro ao salvar: " + error.message);
       return;
     }
-    resolucoesEmEdicao.delete(paradaId);
+    resolucoesEmEdicao.delete(`${paradaId}:${chaveTipo}`);
     await loadHistorico();
   }
 });
