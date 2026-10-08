@@ -343,6 +343,10 @@ a.btn { display: inline-block; text-decoration: none; }
   margin-left: 0.3rem;
   vertical-align: middle;
 }
+.decisoes-por-tipo { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
+.decisoes-por-tipo > .form-label { margin-bottom: 0.1rem; }
+.decisao-tipo { padding: 0.4rem 0.6rem; border: 1px dashed var(--border); border-radius: 8px; margin-top: 0; }
+.decisao-tipo.decisao-ok { border-style: solid; }
 .chips-divergencia { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
 .chip-divergencia {
   font-size: 0.78rem;
