@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "281";
+const VERSAO_APP = "283";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -183,7 +183,31 @@ function extensaoArquivo(file) {
   return "jpg";
 }
 
-async function uploadArquivo(file, bucket) {
+// Foto de celular tem 2 a 6 MB e o plano gratuito do Supabase só dá 1 GB de
+// armazenamento pra todos os apps juntos — as fotos de nota sozinhas estouraram
+// a cota. Reduz a foto ANTES de guardar: lado maior até 2400 px, JPEG 85%
+// (~400 KB). Testado com a leitura da IA: com 2000 px ela confundiu "10,000"
+// com "10000" numa nota; com 2400 px leu igual ao original. A IA lê a foto
+// ORIGINAL (antes do envio), então isso só afeta o arquivo guardado.
+async function comprimirImagemParaGuardar(file) {
+  if (!file.type || !file.type.startsWith("image/") || file.size < 800 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const escala = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * escala);
+    canvas.height = Math.round(bmp.height * escala);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], (file.name || "foto").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file; // sem suporte ou erro: guarda a original, como antes
+  }
+}
+
+async function uploadArquivo(fileOriginal, bucket) {
+  const file = await comprimirImagemParaGuardar(fileOriginal);
   const nome = `${crypto.randomUUID()}.${extensaoArquivo(file)}`;
   const { error } = await db.storage.from(bucket).upload(nome, file, { contentType: file.type || "application/octet-stream" });
   if (error) throw error;
