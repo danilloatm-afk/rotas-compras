@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "275";
+const VERSAO_APP = "276";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -4675,19 +4675,10 @@ async function juntarParadasConcluidas(paradaAId, paradaBId, btn) {
       divergencia_itens: itensDivergentes,
       divergencia_condicao_pagamento: divergCondicao,
     };
-    const quem = document.getElementById("almoxarife-select")?.value || null;
-    const agora = new Date().toISOString();
-    const nota = (p) => `Nota também cobre o pedido Nº ${p.rl_pedidos.numero_pedido || p.rl_pedidos.id} — conferência unificada.`;
-    for (const [alvo, outro] of [[a, b], [b, a]]) {
-      const { error: errUp } = await db
-        .from("rl_rota_paradas")
-        .update({
-          ...dadosNota,
-          resolucao_divergencia: [alvo.resolucao_divergencia, nota(outro)].filter(Boolean).join("\n\n"),
-          resolucao_por: alvo.resolucao_por || quem,
-          resolucao_em: alvo.resolucao_em || agora,
-        })
-        .eq("id", alvo.id);
+    // Não escreve nada no campo "Decisão": ele é do comprador. A informação de
+    // que a nota cobre outro pedido já aparece na linha "🔗 Nota também cobre".
+    for (const alvo of [a, b]) {
+      const { error: errUp } = await db.from("rl_rota_paradas").update(dadosNota).eq("id", alvo.id);
       if (errUp) throw errUp;
     }
     mostrarAviso("Pedidos juntados — conferência recalculada com os dois somados.");
@@ -4882,32 +4873,12 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
       divergencia_condicao_pagamento: divergCondicao,
       concluido_em: paradaOrigem.concluido_em,
     };
-    // Cada card cita o OUTRO pedido na decisão. No registro original,
-    // acrescenta à decisão já escrita (se tinha) em vez de apagar — a nota
-    // original pode ter contexto que vale a pena manter.
-    const quem = document.getElementById("almoxarife-select")?.value || null;
-    const agora = new Date().toISOString();
-    const resolucaoOrigem = {
-      resolucao_divergencia: [
-        paradaOrigem.resolucao_divergencia,
-        `Nota também cobre o pedido Nº ${pedidoNovo.numero_pedido || pedidoNovo.id} — conferência unificada.`,
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-      resolucao_por: paradaOrigem.resolucao_por || quem,
-      resolucao_em: paradaOrigem.resolucao_em || agora,
-    };
-    const resolucaoNovo = {
-      resolucao_divergencia: `Nota também cobre o pedido Nº ${pedidoOriginal.numero_pedido || pedidoOriginal.id} — conferência unificada.`,
-      resolucao_por: quem,
-      resolucao_em: agora,
-    };
-
+    // Não escreve nada no campo "Decisão" (ele é do comprador, e uma frase
+    // automática ali faria a divergência parecer justificada e sumir de "sem
+    // resposta"). A informação de que a nota cobre outro pedido já aparece na
+    // linha "🔗 Nota também cobre" do card.
     if (paradaExistente) {
-      const { error: errAtualizaParada } = await db
-        .from("rl_rota_paradas")
-        .update({ ...dadosConclusao, ...resolucaoNovo })
-        .eq("id", paradaExistente.id);
+      const { error: errAtualizaParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaExistente.id);
       if (errAtualizaParada) throw errAtualizaParada;
     } else {
       const { error: errNovaParada } = await db.from("rl_rota_paradas").insert({
@@ -4915,15 +4886,11 @@ async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
         pedido_id: pedidoNovo.id,
         ordem: (paradaOrigem.ordem || 0) + 1,
         ...dadosConclusao,
-        ...resolucaoNovo,
       });
       if (errNovaParada) throw errNovaParada;
     }
 
-    const { error: errUpdateOrigem } = await db
-      .from("rl_rota_paradas")
-      .update({ ...dadosConclusao, ...resolucaoOrigem })
-      .eq("id", paradaOrigemId);
+    const { error: errUpdateOrigem } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaOrigemId);
     if (errUpdateOrigem) throw errUpdateOrigem;
 
     const { error: errUpdatePedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedidoNovo.id);
