@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>try{var t=localStorage.getItem("rl_tema");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+
 <title>Manual Rotas de Compras</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -158,10 +159,11 @@ body { margin: 0; }
 </style>
 </head>
 <body>
+
 <div class="wrap">
   <p><a class="voltar" href="index.html">← Voltar ao sistema</a></p>
   <header class="capa">
-    <span class="tag">Grupo Wehrmann · treinamento da equipe · atualizado em 06/10/2026</span>
+    <span class="tag">Grupo Wehrmann · treinamento da equipe · atualizado em 08/10/2026</span>
     <h1>Manual do Rotas de Compras</h1>
     <p>Como cada pessoa usa o sistema no dia a dia: portaria, almoxarife, motorista e comprador. Cada função tem o passo a passo da sua parte e o que fazer quando algo não bate.</p>
     <ul class="indice">
@@ -425,15 +427,15 @@ flowchart TD
     <h3 id="comprador-divergencias">Passo a passo: resolver uma divergência</h3>
     <ol class="passos">
       <li><strong>Encontre as divergências</strong>
-        No <em>Histórico</em>, toque em <span class="btn-nome">⚠️ Somente divergentes</span>. Ao lado aparece um seletor: <em>Só as NÃO justificadas</em> mostra o que ainda precisa da sua decisão.</li>
+        No <em>Histórico</em>, toque em <span class="btn-nome">⚠️ Somente divergentes</span>. Aparecem dois seletores: um por <strong>tipo de divergência</strong> (só valor, só CNPJ, só itens ou só prazo de pagamento) e outro de <strong>justificativa</strong> — <em>Só as NÃO justificadas</em> mostra o que ainda precisa da sua decisão. Eles se combinam. No topo de cada caixa de divergência, etiquetas mostram todos os tipos que ocorreram naquele registro.</li>
       <li><strong>Entenda o que divergiu</strong>
         O card lista cada divergência (tabela abaixo). Abra <em>📎 pedido</em> e <em>📎 nota fiscal</em> para conferir os documentos.</li>
       <li><strong>Decida se é erro de leitura ou divergência real</strong>
         Se a nota está certa e a IA leu errado, troque a nota (veja abaixo). Se o fornecedor errou, é divergência real.</li>
       <li><strong>Fale com o fornecedor, se for real</strong>
         Toque em <span class="btn-nome">📱 Avisar comprador</span>: abre o WhatsApp com o resumo das divergências já escrito.</li>
-      <li><strong>Registre a decisão</strong>
-        Escreva o que foi combinado (por exemplo, "fornecedor vai reemitir a nota") e toque em <span class="btn-nome">Salvar decisão</span>. Isso marca a divergência como justificada e alimenta os indicadores.</li>
+      <li><strong>Registre uma decisão para CADA tipo de divergência</strong>
+        O registro tem uma caixinha para cada tipo que divergiu (💰 Valor, 🏢 CNPJ, 📦 Itens ou 🧾 Prestadora, 🗓️ Prazo de pagamento). Em cada uma, escreva o que foi combinado (por exemplo, "fornecedor vai reemitir a nota") e toque em <span class="btn-nome">Salvar decisão</span>. O título mostra o andamento: <em>Decisões por tipo: 2 de 3 registradas</em>. O registro só conta como <strong>justificado</strong> quando todos os tipos têm decisão, e é isso que alimenta os filtros e os indicadores. Cada decisão guarda quem registrou e quando, com <em>Editar</em>.</li>
     </ol>
 
     <div class="tabela"><table>
@@ -442,7 +444,7 @@ flowchart TD
         <tr><td><strong>Valor</strong></td><td>Total do pedido contra o total da nota (tolerância de R$ 0,05).</td><td>Preço diferente, item a mais, frete, nota cobrindo dois pedidos.</td></tr>
         <tr><td><strong>CNPJ</strong></td><td>CNPJ da empresa no pedido contra o do destinatário na nota.</td><td>Nota emitida para outra filial ou empresa; dígito mal lido em foto ruim.</td></tr>
         <tr><td><strong>Itens</strong></td><td>Produto, quantidade e valor unitário, item por item.</td><td>Preço unitário diferente, quantidade diferente, item que não estava no pedido.</td></tr>
-        <tr><td><strong>Condição de pagamento</strong></td><td>Prazo combinado no pedido contra as parcelas da nota (tolerância de 5 dias).</td><td>Boleto com prazo diferente do combinado.</td></tr>
+        <tr><td><strong>Condição de pagamento</strong></td><td>Prazo combinado no pedido contra as parcelas da nota (tolerância de 5 dias). Só é divergência quando a nota dá <em>menos</em> prazo que o combinado; prazo maior é bom. Quando a nota cobre dois pedidos com condições diferentes, aparece uma linha por pedido ("Pedido S100: confere", "Pedido S200: menor que o esperado"), mas a decisão é uma só.</td><td>Boleto com prazo diferente do combinado; nota única cobrindo pedidos de prazos diferentes.</td></tr>
       </tbody>
     </table></div>
 
