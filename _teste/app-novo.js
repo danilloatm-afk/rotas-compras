@@ -1,0 +1,5132 @@
+const SUPABASE_URL = "https://jvfyqvefznkpcvjaerta.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2ZnlxdmVmem5rcGN2amFlcnRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMTQ4NjgsImV4cCI6MjEwMTc5MDg2OH0.2Ef6LpZ61WM8myHBYeQGo3TuGqk5C3x36ER_sWRNPS4";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Chave publicável do mesmo projeto Supabase, usada só pra chamar a Edge
+// Function (mesma chave já usada no app Avanço para Contratos).
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_4fZ0DlFJq1ec5xTXurwGSQ_Ke3JELGZ";
+// Nome real no Supabase é "rapid-service" (o campo de nome não pegou
+// "extract-documento" ao publicar pela primeira vez — mesma situação da
+// function "rapid-action" do Avanço para Contratos).
+const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
+
+// Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
+// app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
+// versão exibida também fica antiga, o que avisa que precisa recarregar.
+const VERSAO_APP = "276";
+const elVersaoApp = document.getElementById("versao-app");
+if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
+
+const TOLERANCIA_VALOR = 0.05;
+
+// ---------- tema claro/escuro ----------
+const LS_TEMA = "rl_tema";
+
+function temaEfetivoEscuro(tema) {
+  if (tema === "dark") return true;
+  if (tema === "light") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function aplicarTema(tema) {
+  if (tema === "light" || tema === "dark") {
+    document.documentElement.setAttribute("data-theme", tema);
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  document.getElementById("btn-theme-toggle").textContent = temaEfetivoEscuro(tema) ? "☀️" : "🌙";
+}
+
+let temaAtual = localStorage.getItem(LS_TEMA) || "auto";
+aplicarTema(temaAtual);
+
+document.getElementById("btn-theme-toggle").addEventListener("click", () => {
+  temaAtual = temaEfetivoEscuro(temaAtual) ? "light" : "dark";
+  localStorage.setItem(LS_TEMA, temaAtual);
+  aplicarTema(temaAtual);
+});
+
+// Toque manual pra "destravar" o som nesta aba — importante numa TV que fica
+// ligada o dia todo sem ninguém tocar na tela (ver falarAlerta mais abaixo).
+// Dá retorno visual IMEDIATO ao apertar (mesmo antes de saber se o som vai
+// funcionar) porque em navegadores de TV (ex: o "Browser" da própria Samsung)
+// às vezes o speak() simplesmente não faz nada — nem toca, nem dá erro — daí
+// sem esse retorno a pessoa acha que o botão "não fez nada" ao apertar.
+document.getElementById("btn-ativar-som").addEventListener("click", () => {
+  const btn = document.getElementById("btn-ativar-som");
+  if (somAlertaDesbloqueado) return;
+  if (!("speechSynthesis" in window)) {
+    btn.textContent = "⚠️ Som não suportado aqui";
+    btn.classList.add("som-indisponivel");
+    return;
+  }
+  btn.textContent = "🔄 Testando som...";
+  falarAlerta("Som ativado", 1);
+  setTimeout(() => {
+    if (!somAlertaDesbloqueado) {
+      btn.textContent = "⚠️ Som não funcionou aqui";
+      btn.classList.add("som-indisponivel");
+    }
+  }, 2500);
+});
+
+// ---------- helpers ----------
+// alert()/prompt() nativos não são confiáveis em vários navegadores/webviews
+// (já vimos prompt() falhar em produção) — este toast substitui os avisos.
+function mostrarAviso(mensagem) {
+  const toast = document.createElement("div");
+  toast.className = "toast-aviso";
+  toast.textContent = mensagem;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// O Chrome só toca som (inclusive voz sintetizada) numa aba depois de um
+// toque/clique real do usuário nela — antes disso, speak() falha em
+// silêncio com erro "not-allowed". Numa TV que fica ligada o dia todo sem
+// ninguém tocar na tela, isso significa que NENHUM alerta toca depois de
+// uma recarga de página. Por isso avisamos visualmente quando isso acontece,
+// pra alguém saber que precisa tocar no botão "🔊 Ativar som" uma vez.
+let somAlertaDesbloqueado = false;
+
+function marcarSomDesbloqueado() {
+  somAlertaDesbloqueado = true;
+  const btn = document.getElementById("btn-ativar-som");
+  if (btn && !btn.classList.contains("som-ativo")) {
+    btn.textContent = "🔊 Som ativo";
+    btn.classList.remove("som-indisponivel");
+    btn.classList.add("som-ativo");
+  }
+  const aviso = document.getElementById("aviso-som-bloqueado");
+  if (aviso) aviso.hidden = true;
+}
+
+function mostrarAvisoSomBloqueado() {
+  const aviso = document.getElementById("aviso-som-bloqueado");
+  if (aviso) aviso.hidden = false;
+}
+
+// Fala em voz alta usando a síntese de voz do próprio navegador — sem custo,
+// sem chave de API. Nem todo navegador/dispositivo suporta, então falha em
+// silêncio se não tiver (o alerta visual normal continua funcionando igual).
+function falarAlerta(texto, vezes = 2) {
+  if (!("speechSynthesis" in window)) return;
+  try {
+    // Fala mais de uma vez de propósito — num ambiente barulhento (pátio,
+    // oficina) um aviso só, uma vez, passa despercebido fácil. As falas
+    // entram na fila do navegador e tocam uma depois da outra sozinhas.
+    for (let i = 0; i < vezes; i++) {
+      const utterance = new SpeechSynthesisUtterance(texto);
+      utterance.lang = "pt-BR";
+      utterance.onstart = marcarSomDesbloqueado;
+      utterance.onerror = (e) => {
+        if (e.error === "not-allowed") mostrarAvisoSomBloqueado();
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+  } catch (e) {
+    // silencioso de propósito — alerta sonoro é um extra, nunca deve travar o fluxo
+  }
+}
+
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function comTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), ms)),
+  ]);
+}
+
+// Espera a pessoa parar de digitar antes de buscar de novo — sem isso, um
+// campo de busca (ex: filtro por fornecedor) dispararia uma consulta ao
+// banco a cada letra digitada.
+function debounce(fn, ms) {
+  let temporizador;
+  return (...args) => {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function apenasDigitos(str) {
+  return String(str || "").replace(/\D/g, "");
+}
+
+function formatarMoeda(v) {
+  if (v == null || v === "") return "—";
+  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatarDataHora(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function arquivoParaBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo"));
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.readAsDataURL(file);
+  });
+}
+
+function extensaoArquivo(file) {
+  const porNome = (file.name || "").split(".").pop();
+  if (porNome && porNome.length <= 5) return porNome.toLowerCase();
+  if (file.type === "application/pdf") return "pdf";
+  if (file.type === "image/png") return "png";
+  return "jpg";
+}
+
+async function uploadArquivo(file, bucket) {
+  const nome = `${crypto.randomUUID()}.${extensaoArquivo(file)}`;
+  const { error } = await db.storage.from(bucket).upload(nome, file, { contentType: file.type || "application/octet-stream" });
+  if (error) throw error;
+  return { path: nome, url: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${nome}` };
+}
+
+async function lerComIA(file, tipo) {
+  const base64 = await arquivoParaBase64(file);
+  const resp = await fetch(EXTRACT_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({ tipo, file_base64: base64, media_type: file.type || "application/pdf" }),
+  });
+  const resultado = await resp.json();
+  if (!resp.ok || resultado.error) throw new Error(resultado.error || "Falha ao ler o documento.");
+  if (resultado.versao_ia != null) mostrarVersaoIA(resultado.versao_ia);
+  return resultado.data;
+}
+
+// A nota costuma citar o número do pedido de compra nas Informações
+// Complementares ("PEDIDO DE COMPRA: S52040"). Normaliza pra comparar com o
+// número do pedido no sistema: maiúsculas, só letras/números, sem zeros à
+// esquerda ("004568" = "4568").
+function normalizarNumeroPedido(texto) {
+  return String(texto || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/^0+/, "");
+}
+
+// A nota pode citar mais de um pedido (separados por vírgula/ponto e vírgula).
+function numerosPedidoCitados(texto) {
+  return String(texto || "")
+    .split(/[,;]/)
+    .map(normalizarNumeroPedido)
+    .filter(Boolean);
+}
+
+// Mostra, ao lado da versão do site, a versão da função de leitura por IA que
+// está NO AR no Supabase. "IA antiga" = a função no ar ainda não tem a
+// consulta de versão (a colagem do arquivo novo no Supabase não foi feita).
+function mostrarVersaoIA(versao) {
+  const el = document.getElementById("versao-ia");
+  if (!el) return;
+  el.textContent = versao == null ? "· IA antiga" : `· IA ${versao}`;
+}
+
+async function consultarVersaoIA() {
+  try {
+    const resp = await fetch(EXTRACT_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ tipo: "versao" }),
+    });
+    const r = await resp.json();
+    mostrarVersaoIA(r.versao_ia);
+  } catch {
+    // sem conexão agora — deixa em branco, a próxima leitura preenche
+  }
+}
+consultarVersaoIA();
+
+async function checarPedidoDuplicado(numeroPedido) {
+  const aviso = document.getElementById("pedido-duplicado-aviso");
+  if (!numeroPedido) {
+    aviso.classList.add("hidden");
+    return;
+  }
+  const { data } = await comTimeout(db.from("rl_pedidos").select("criado_em").eq("numero_pedido", numeroPedido).limit(1));
+  if (data && data.length) {
+    aviso.textContent = `⚠️ O pedido Nº ${numeroPedido} já foi importado antes (em ${formatarDataHora(data[0].criado_em)}). Confira se não é duplicado antes de enviar.`;
+    aviso.classList.remove("hidden");
+  } else {
+    aviso.classList.add("hidden");
+  }
+}
+
+document.getElementById("pedido-numero").addEventListener("change", (e) => checarPedidoDuplicado(e.target.value.trim()));
+
+// ---------- tabs ----------
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach((s) => s.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+    if (btn.dataset.tab === "comprador") loadMeusPedidos();
+    if (btn.dataset.tab === "motorista") {
+      loadDisponiveis();
+      loadRotaAtual();
+    }
+    if (btn.dataset.tab === "indicadores") loadIndicadores();
+    if (btn.dataset.tab === "portaria") carregarAvisosPortariaEnviados();
+    if (btn.dataset.tab === "recebimento-cif") {
+      carregarAvisosPortariaPendentes();
+      carregarAvisosLiberadosPendentesConferencia();
+      carregarPedidosCifPendentes();
+    }
+    if (btn.dataset.tab === "historico") {
+      carregarFiltrosHistorico();
+      loadHistorico();
+    }
+    if (btn.dataset.tab === "config") renderCadastros();
+  });
+});
+
+// ---------- caches ----------
+let compradoresCache = [];
+let motoristasCache = [];
+let empresasCache = [];
+let almoxarifesCache = [];
+
+async function loadCompradores() {
+  const { data, error } = await comTimeout(db.from("rl_compradores").select("*").order("ativo", { ascending: false }).order("nome"));
+  compradoresCache = error ? compradoresCache : data || [];
+  const sel = document.getElementById("comprador-select");
+  const atual = localStorage.getItem("rl_comprador_atual") || sel.value;
+  sel.innerHTML =
+    `<option value="">— selecione —</option>` +
+    compradoresCache.filter((c) => c.ativo).map((c) => `<option value="${escapeHtml(c.nome)}">${escapeHtml(c.nome)}</option>`).join("");
+  if (atual) sel.value = atual;
+}
+
+async function loadMotoristas() {
+  const { data, error } = await comTimeout(db.from("rl_motoristas").select("*").order("ativo", { ascending: false }).order("nome"));
+  motoristasCache = error ? motoristasCache : data || [];
+  const sel = document.getElementById("motorista-select");
+  const atual = localStorage.getItem("rl_motorista_atual") || sel.value;
+  sel.innerHTML =
+    `<option value="">— selecione —</option>` +
+    motoristasCache.filter((m) => m.ativo).map((m) => `<option value="${escapeHtml(m.nome)}">${escapeHtml(m.nome)}</option>`).join("");
+  if (atual) sel.value = atual;
+}
+
+async function loadAlmoxarifes() {
+  const { data, error } = await comTimeout(db.from("rl_almoxarifes").select("*").order("ativo", { ascending: false }).order("nome"));
+  almoxarifesCache = error ? almoxarifesCache : data || [];
+  const opcoes =
+    `<option value="">— selecione —</option>` +
+    almoxarifesCache.filter((a) => a.ativo).map((a) => `<option value="${escapeHtml(a.nome)}">${escapeHtml(a.nome)}</option>`).join("");
+  const atual = localStorage.getItem("rl_almoxarife_atual");
+
+  // Dois seletores independentes (Histórico e Recebimento CIF), sincronizados
+  // pelo mesmo nome guardado no localStorage — a pessoa escolhe o nome uma
+  // vez em qualquer um dos dois e ele já aparece certo no outro também.
+  const sel = document.getElementById("almoxarife-select");
+  sel.innerHTML = opcoes;
+  if (atual || sel.value) sel.value = atual || sel.value;
+
+  const selCif = document.getElementById("almoxarife-select-cif");
+  if (selCif) {
+    selCif.innerHTML = opcoes;
+    if (atual || selCif.value) selCif.value = atual || selCif.value;
+  }
+}
+
+// Tabela cs_condicoes_pagamento já existe no mesmo Supabase, criada pelo
+// app "Avanço para Contratos" (de-para código -> dias médios, baseado na
+// planilha "cond pag.xlsx" do ERP) — reaproveitada aqui só de leitura, sem
+// duplicar o cadastro.
+let condicoesPagamentoCache = new Map();
+// A tabela sempre guarda o código com 3 dígitos (ex: "035"), mas o pedido às
+// vezes vem sem o zero à esquerda (ex: "35", quando o ERP imprime assim no
+// documento) — sem normalizar os dois lados, a busca falhava e toda
+// condição "curta" aparecia como "não encontrada na tabela", mesmo existindo.
+function normalizarCodigoCondicao(codigo) {
+  const digitos = String(codigo ?? "").trim().replace(/^0+(?=\d)/, "");
+  return digitos;
+}
+
+// Muita gente do pedido não imprime um código de tabela — imprime o prazo
+// já por extenso (ex: "28 DIAS", "30 60 DIAS" pra duas parcelas, "30 60 90
+// DIAS" pra três). Quando o código não bate com nenhuma linha da tabela,
+// tenta ler os dias direto do texto em vez de desistir — só aceita quando o
+// que sobra depois de tirar a palavra "DIAS" é só números e espaço (evita
+// interpretar algo tipo "PROX 30-04", que é uma data, não uma lista de
+// prazos, como se fosse 30 e 4 dias).
+function diasEsperadosDeTexto(codigo) {
+  const semPalavraDias = String(codigo ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\bDIAS?\b/g, "")
+    .trim();
+  if (!semPalavraDias || !/^[\d\s]+$/.test(semPalavraDias)) return null;
+  const numeros = semPalavraDias
+    .split(/\s+/)
+    .map(Number)
+    .filter((n) => !isNaN(n) && n >= 0);
+  if (!numeros.length) return null;
+  return numeros.reduce((soma, n) => soma + n, 0) / numeros.length;
+}
+// Tenta algumas vezes com espera entre elas — sem isso, uma conexão ruim no
+// exato momento em que o app abre (comum pro motorista no campo) fazia essa
+// tabela ficar vazia pro resto da sessão inteira, mesmo a internet
+// melhorando alguns segundos depois, e toda condição de pagamento aparecia
+// como "não encontrada na tabela" sem motivo real.
+async function loadCondicoesPagamento(tentativas = 3) {
+  for (let i = 0; i < tentativas; i++) {
+    const { data, error } = await comTimeout(db.from("cs_condicoes_pagamento").select("codigo, dias"));
+    if (!error && data && data.length) {
+      condicoesPagamentoCache = new Map(data.map((c) => [normalizarCodigoCondicao(c.codigo), c.dias]));
+      return;
+    }
+    if (i < tentativas - 1) await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+}
+
+async function loadEmpresas() {
+  const { data, error } = await comTimeout(db.from("rl_empresas").select("*").order("ativo", { ascending: false }).order("nome"));
+  empresasCache = error ? empresasCache : data || [];
+  const sel = document.getElementById("pedido-empresa");
+  const atual = sel.value;
+  sel.innerHTML =
+    `<option value="">— selecione —</option>` +
+    empresasCache
+      .filter((e) => e.ativo)
+      .map((e) => `<option value="${e.id}">${escapeHtml(e.nome)}${e.cnpj ? ` — ${escapeHtml(e.cnpj)}` : ""}</option>`)
+      .join("");
+  if (atual) sel.value = atual;
+
+  const selPortaria = document.getElementById("portaria-empresa");
+  const atualPortaria = selPortaria.value;
+  selPortaria.innerHTML =
+    `<option value="">— selecione —</option>` +
+    empresasCache.filter((e) => e.ativo).map((e) => `<option value="${escapeHtml(e.nome)}">${escapeHtml(e.nome)}</option>`).join("");
+  if (atualPortaria) selPortaria.value = atualPortaria;
+}
+
+document.getElementById("comprador-select").addEventListener("change", (e) => {
+  localStorage.setItem("rl_comprador_atual", e.target.value);
+  loadMeusPedidos();
+});
+
+document.getElementById("motorista-select").addEventListener("change", (e) => {
+  localStorage.setItem("rl_motorista_atual", e.target.value);
+  rotaAtualId = null;
+  loadRotaAtual();
+});
+
+// window.prompt() não é confiável em vários navegadores/webviews (em
+// especial no celular, onde o motorista vai usar) — por isso usamos um
+// campo de texto normal na tela em vez de uma caixa de diálogo nativa.
+document.getElementById("btn-novo-comprador").addEventListener("click", () => {
+  document.getElementById("form-novo-comprador").classList.remove("hidden");
+  const input = document.getElementById("novo-comprador-nome");
+  input.value = "";
+  input.focus();
+});
+
+document.getElementById("btn-cancelar-novo-comprador").addEventListener("click", () => {
+  document.getElementById("form-novo-comprador").classList.add("hidden");
+});
+
+async function confirmarNovoComprador() {
+  const nome = document.getElementById("novo-comprador-nome").value.trim();
+  if (!nome) return;
+  const existente = compradoresCache.find((c) => c.nome.toLowerCase() === nome.toLowerCase());
+  if (!existente) {
+    const { error } = await db.from("rl_compradores").insert({ nome });
+    if (error) {
+      mostrarAviso("Erro ao cadastrar: " + error.message);
+      return;
+    }
+  }
+  await loadCompradores();
+  document.getElementById("comprador-select").value = nome;
+  localStorage.setItem("rl_comprador_atual", nome);
+  document.getElementById("form-novo-comprador").classList.add("hidden");
+  loadMeusPedidos();
+}
+
+document.getElementById("btn-confirmar-novo-comprador").addEventListener("click", confirmarNovoComprador);
+document.getElementById("novo-comprador-nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarNovoComprador();
+});
+
+document.getElementById("btn-novo-motorista").addEventListener("click", () => {
+  document.getElementById("form-novo-motorista").classList.remove("hidden");
+  const input = document.getElementById("novo-motorista-nome");
+  input.value = "";
+  input.focus();
+});
+
+document.getElementById("btn-cancelar-novo-motorista").addEventListener("click", () => {
+  document.getElementById("form-novo-motorista").classList.add("hidden");
+});
+
+async function confirmarNovoMotorista() {
+  const nome = document.getElementById("novo-motorista-nome").value.trim();
+  if (!nome) return;
+  const existente = motoristasCache.find((m) => m.nome.toLowerCase() === nome.toLowerCase());
+  if (!existente) {
+    const { error } = await db.from("rl_motoristas").insert({ nome });
+    if (error) {
+      mostrarAviso("Erro ao cadastrar: " + error.message);
+      return;
+    }
+  }
+  await loadMotoristas();
+  document.getElementById("motorista-select").value = nome;
+  localStorage.setItem("rl_motorista_atual", nome);
+  document.getElementById("form-novo-motorista").classList.add("hidden");
+  rotaAtualId = null;
+  loadRotaAtual();
+}
+
+document.getElementById("btn-confirmar-novo-motorista").addEventListener("click", confirmarNovoMotorista);
+document.getElementById("novo-motorista-nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarNovoMotorista();
+});
+
+document.getElementById("btn-novo-almoxarife").addEventListener("click", () => {
+  document.getElementById("form-novo-almoxarife").classList.remove("hidden");
+  const input = document.getElementById("novo-almoxarife-nome");
+  input.value = "";
+  input.focus();
+});
+
+document.getElementById("btn-cancelar-novo-almoxarife").addEventListener("click", () => {
+  document.getElementById("form-novo-almoxarife").classList.add("hidden");
+});
+
+async function confirmarNovoAlmoxarife() {
+  const nome = document.getElementById("novo-almoxarife-nome").value.trim();
+  if (!nome) return;
+  const existente = almoxarifesCache.find((a) => a.nome.toLowerCase() === nome.toLowerCase());
+  if (!existente) {
+    const { error } = await db.from("rl_almoxarifes").insert({ nome });
+    if (error) {
+      mostrarAviso("Erro ao cadastrar: " + error.message);
+      return;
+    }
+  }
+  await loadAlmoxarifes();
+  document.getElementById("almoxarife-select").value = nome;
+  localStorage.setItem("rl_almoxarife_atual", nome);
+  document.getElementById("form-novo-almoxarife").classList.add("hidden");
+}
+
+document.getElementById("btn-confirmar-novo-almoxarife").addEventListener("click", confirmarNovoAlmoxarife);
+document.getElementById("novo-almoxarife-nome").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") confirmarNovoAlmoxarife();
+});
+
+document.getElementById("almoxarife-select").addEventListener("change", (e) => {
+  localStorage.setItem("rl_almoxarife_atual", e.target.value);
+  const selCif = document.getElementById("almoxarife-select-cif");
+  if (selCif) selCif.value = e.target.value;
+});
+document.getElementById("almoxarife-select-cif").addEventListener("change", (e) => {
+  localStorage.setItem("rl_almoxarife_atual", e.target.value);
+  document.getElementById("almoxarife-select").value = e.target.value;
+  // Troca de almoxarife pode mudar o filtro por empresa/setor — reconfere.
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
+  carregarPedidosCifPendentes();
+});
+
+// Filtro manual de setor — só afeta os avisos (que têm setor); a lista geral
+// de pedidos não tem esse campo, então não muda com esse filtro.
+document.getElementById("filtro-setor-cif").addEventListener("change", () => {
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
+});
+
+// O nome de quem pediu já vem escrito no próprio documento (campo
+// "Comprador:") — não faz sentido pedir de novo pra pessoa que só está
+// anexando o arquivo. Acha o cadastro pelo nome (ignorando maiúscula/
+// espaço) ou cria um novo automaticamente, igual o robô faz.
+async function selecionarOuCriarComprador(nomeLido) {
+  const nome = (nomeLido || "").trim();
+  if (!nome) return;
+  const existente = compradoresCache.find((c) => c.nome.trim().toLowerCase() === nome.toLowerCase());
+  if (!existente) {
+    const { error } = await db.from("rl_compradores").insert({ nome });
+    if (error) return;
+    await loadCompradores();
+  }
+  const nomeFinal = existente ? existente.nome : nome;
+  document.getElementById("comprador-select").value = nomeFinal;
+  localStorage.setItem("rl_comprador_atual", nomeFinal);
+  loadMeusPedidos();
+}
+
+// ---------- comprador: ler pedido com IA ----------
+let pedidoItensExtraidos = null;
+let pedidoFornecedorExtraido = null;
+let pedidoCondicaoPagamentoExtraida = null;
+let pedidoCnpjExtraido = null;
+
+document.getElementById("btn-ler-pedido").addEventListener("click", async () => {
+  const input = document.getElementById("pedido-arquivo");
+  const feedback = document.getElementById("pedido-ia-feedback");
+  const file = input.files && input.files[0];
+  if (!file) {
+    feedback.textContent = "Selecione um arquivo primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  feedback.textContent = "Lendo documento com IA (pode levar alguns segundos)...";
+  feedback.className = "feedback";
+  try {
+    const extraido = await lerComIA(file, "pedido");
+    pedidoItensExtraidos = Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null;
+    pedidoFornecedorExtraido = extraido.fornecedor_nome || null;
+    pedidoCondicaoPagamentoExtraida = extraido.condicao_pagamento_codigo || null;
+    if (extraido.valor_total != null) document.getElementById("pedido-valor").value = extraido.valor_total;
+    if (extraido.numero_pedido) document.getElementById("pedido-numero").value = extraido.numero_pedido;
+    if (extraido.local_retirada) document.getElementById("pedido-local").value = extraido.local_retirada;
+    await checarPedidoDuplicado(extraido.numero_pedido);
+    await selecionarOuCriarComprador(extraido.solicitante_nome);
+
+    // Guarda o CNPJ REALMENTE impresso neste pedido — a Wehrmann tem mais de
+    // uma filial (CNPJs diferentes) sob o mesmo nome no cadastro, então usar
+    // o CNPJ genérico do cadastro em vez do que foi lido aqui causava
+    // divergência falsa na conferência com a nota (a nota vem da filial
+    // certa, mas o pedido ficava salvo com o CNPJ errado da matriz).
+    pedidoCnpjExtraido = extraido.empresa_compradora_cnpj || null;
+
+    const cnpjLido = apenasDigitos(extraido.empresa_compradora_cnpj);
+    let empresaEncontrada = null;
+    if (cnpjLido) empresaEncontrada = empresasCache.find((e) => apenasDigitos(e.cnpj) === cnpjLido);
+    if (!empresaEncontrada && extraido.empresa_compradora_nome) {
+      const nomeAlvo = extraido.empresa_compradora_nome.trim().toLowerCase();
+      empresaEncontrada = empresasCache.find((e) => e.nome.trim().toLowerCase() === nomeAlvo);
+    }
+
+    const info = document.getElementById("pedido-empresa-info");
+    if (empresaEncontrada) {
+      document.getElementById("pedido-empresa").value = String(empresaEncontrada.id);
+      info.textContent =
+        cnpjLido && cnpjLido !== apenasDigitos(empresaEncontrada.cnpj)
+          ? `⚠️ CNPJ lido (${extraido.empresa_compradora_cnpj}) é diferente do cadastrado pra "${empresaEncontrada.nome}" — provavelmente outra filial. O CNPJ lido será usado na conferência.`
+          : "";
+    } else {
+      info.textContent = `IA leu: "${extraido.empresa_compradora_nome || "?"}"${
+        extraido.empresa_compradora_cnpj ? ` (CNPJ ${extraido.empresa_compradora_cnpj})` : ""
+      } — não encontrada no cadastro. Selecione manualmente ou cadastre em Configurações.`;
+    }
+    // Frete CIF x FOB é decidido pelo nome do arquivo (mesmo padrão do robô e
+    // do Avanço para Contratos, que decide spot x contrato do mesmo jeito).
+    if (/fob/i.test(file.name)) {
+      feedback.textContent = "Documento lido (nome do arquivo indica frete FOB — precisa de coleta). Confira os campos abaixo antes de enviar.";
+      feedback.className = "feedback success";
+    } else {
+      feedback.textContent =
+        '⚠️ O nome do arquivo não tem "FOB" — parece ser frete CIF (fornecedor entrega), que normalmente não precisa de ' +
+        "coleta. Confira antes de enviar; envie mesmo assim só se tiver certeza que precisa de rota (ou renomeie o arquivo " +
+        'incluindo "FOB" antes de anexar).';
+      feedback.className = "feedback error";
+    }
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+  }
+});
+
+// ---------- comprador: enviar pedido ----------
+document.getElementById("form-pedido").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const feedback = document.getElementById("pedido-feedback");
+  const compradorNome = document.getElementById("comprador-select").value;
+  const file = document.getElementById("pedido-arquivo").files[0];
+  if (!compradorNome) {
+    feedback.textContent = "Selecione seu nome (comprador) primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  if (!file) {
+    feedback.textContent = "Anexe o arquivo do pedido.";
+    feedback.className = "feedback error";
+    return;
+  }
+  feedback.textContent = "Enviando...";
+  feedback.className = "feedback";
+  try {
+    const { url } = await uploadArquivo(file, "rl_pedidos");
+    const empresaId = document.getElementById("pedido-empresa").value || null;
+    const empresa = empresaId ? empresasCache.find((e) => String(e.id) === empresaId) : null;
+    const valor = document.getElementById("pedido-valor").value;
+
+    const { error } = await db.from("rl_pedidos").insert({
+      comprador_nome: compradorNome,
+      empresa_id: empresaId,
+      empresa_nome: empresa ? empresa.nome : null,
+      // Prefere o CNPJ REALMENTE lido no pedido (pode ser de uma filial
+      // diferente da cadastrada) — só cai pro CNPJ do cadastro se a IA não
+      // conseguiu ler nenhum.
+      empresa_cnpj: pedidoCnpjExtraido || (empresa ? empresa.cnpj : null),
+      numero_pedido: document.getElementById("pedido-numero").value.trim() || null,
+      local_retirada: document.getElementById("pedido-local").value.trim() || null,
+      arquivo_url: url,
+      arquivo_nome: file.name,
+      observacao: document.getElementById("pedido-observacao").value.trim() || null,
+      // Mesmo padrão do FOB: decide pelo nome do arquivo, sem exigir campo
+      // manual — a maioria dos pedidos chega pelo robô, não por este formulário.
+      retirar_transportadora: /transportadora/i.test(file.name),
+      // Sem "FOB" no nome do arquivo, entende-se que o frete é CIF (o
+      // fornecedor entrega) — esse pedido não entra na tela do motorista,
+      // fica disponível pro almoxarifado conferir quando a entrega chegar.
+      frete_fob: /fob/i.test(file.name),
+      valor_total: valor ? Number(valor) : null,
+      itens: pedidoItensExtraidos,
+      fornecedor_nome: pedidoFornecedorExtraido,
+      condicao_pagamento_codigo: pedidoCondicaoPagamentoExtraida,
+    });
+    if (error) throw error;
+
+    feedback.textContent = "Pedido enviado com sucesso!";
+    feedback.className = "feedback success";
+    document.getElementById("form-pedido").reset();
+    document.getElementById("pedido-empresa-info").textContent = "";
+    document.getElementById("pedido-ia-feedback").textContent = "";
+    document.getElementById("pedido-duplicado-aviso").classList.add("hidden");
+    pedidoItensExtraidos = null;
+    pedidoFornecedorExtraido = null;
+    pedidoCondicaoPagamentoExtraida = null;
+    pedidoCnpjExtraido = null;
+    loadMeusPedidos();
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+  }
+});
+
+function badgeStatus(status) {
+  const label = { pendente: "Pendente", na_rota: "Na rota", concluido: "Concluído", cancelado: "Cancelado" }[status] || status;
+  return `<span class="badge status-${status}">${label}</span>`;
+}
+
+async function loadMeusPedidos() {
+  const el = document.getElementById("lista-meus-pedidos");
+  const compradorNome = document.getElementById("comprador-select").value;
+  if (!compradorNome) {
+    el.innerHTML = `<p class="empty-state">Selecione seu nome acima para ver seus pedidos.</p>`;
+    return;
+  }
+  const { data, error } = await comTimeout(
+    db.from("rl_pedidos").select("*").eq("comprador_nome", compradorNome).order("criado_em", { ascending: false }).limit(50)
+  );
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos.</p>`;
+    return;
+  }
+  if (!data.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum pedido enviado ainda.</p>`;
+    return;
+  }
+  el.innerHTML = data
+    .map(
+      (p) => `
+    <div class="card-pedido">
+      <div class="card-pedido-head">
+        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        ${badgeStatus(p.status)}
+      </div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+      ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+      <div class="card-meta">${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
+      <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
+      ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      ${
+        p.status === "pendente"
+          ? `<button class="link-btn danger" data-cancelar="${p.id}" type="button">Cancelar pedido</button>`
+          : ""
+      }
+    </div>`
+    )
+    .join("");
+}
+
+// confirm() nativo tem o mesmo problema do prompt() em alguns navegadores —
+// exige clicar duas vezes no próprio botão em vez de abrir um diálogo.
+document.getElementById("lista-meus-pedidos").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-cancelar]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Cancelar pedido";
+    }, 4000);
+    return;
+  }
+  await db.from("rl_pedidos").update({ status: "cancelado" }).eq("id", btn.dataset.cancelar);
+  loadMeusPedidos();
+});
+
+// ---------- motorista: pedidos disponíveis ----------
+// A cidade não é um campo separado — vem embutida no texto de local_retirada
+// (ex: "AV X, BAIRRO Y, GOIANIA, GO, CEP 74463-330"). Extrai o nome da
+// cidade procurando o trecho logo antes da sigla de 2 letras do estado.
+function extrairCidade(local) {
+  if (!local) return null;
+  const m = local.match(/,\s*([^,]+?)\s*,\s*[A-Z]{2}\b/);
+  return m ? m[1].trim() : null;
+}
+
+let disponiveisCache = [];
+let cidadesSelecionadas = new Set();
+
+async function loadDisponiveis() {
+  const el = document.getElementById("lista-disponiveis");
+  // Só frete FOB precisa de coleta — pedidos CIF (fornecedor entrega) não
+  // entram nessa tela, ficam disponíveis pro almoxarifado conferir na
+  // aba Portaria/Histórico quando a entrega chegar.
+  const { data, error } = await comTimeout(
+    db
+      .from("rl_pedidos")
+      .select("*")
+      .eq("status", "pendente")
+      .eq("frete_fob", true)
+      .order("urgente", { ascending: false })
+      .order("criado_em")
+  );
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos.</p>`;
+    return;
+  }
+  disponiveisCache = data;
+
+  const cidades = [
+    ...new Set(data.filter((p) => !p.retirar_transportadora).map((p) => extrairCidade(p.local_retirada)).filter(Boolean)),
+  ].sort();
+  // Descarta da seleção qualquer cidade que não existe mais na lista atual.
+  cidadesSelecionadas = new Set([...cidadesSelecionadas].filter((c) => cidades.includes(c)));
+  const opcoesCidade = document.getElementById("opcoes-filtro-cidade");
+  opcoesCidade.innerHTML = cidades
+    .map(
+      (c) => `
+    <label class="filtro-multiplo-item">
+      <input type="checkbox" class="filtro-cidade-check" value="${escapeHtml(c)}" ${cidadesSelecionadas.has(c) ? "checked" : ""}>
+      ${escapeHtml(c)}
+    </label>`
+    )
+    .join("");
+  atualizarBotaoFiltroCidade();
+
+  const naoTransportadora = data.filter((p) => !p.retirar_transportadora);
+
+  const selComprador = document.getElementById("filtro-comprador");
+  const compradorAtual = selComprador.value;
+  const compradores = [...new Set(naoTransportadora.map((p) => p.comprador_nome).filter(Boolean))].sort();
+  selComprador.innerHTML = `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
+
+  const selFornecedor = document.getElementById("filtro-fornecedor");
+  const fornecedorAtual = selFornecedor.value;
+  const fornecedores = [...new Set(naoTransportadora.map((p) => p.fornecedor_nome).filter(Boolean))].sort();
+  selFornecedor.innerHTML =
+    `<option value="">Todos os fornecedores</option>` + fornecedores.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+  if (fornecedores.includes(fornecedorAtual)) selFornecedor.value = fornecedorAtual;
+
+  renderDisponiveis();
+  renderTransportadora();
+}
+
+function atualizarBotaoFiltroCidade() {
+  const btn = document.getElementById("btn-filtro-cidade");
+  if (cidadesSelecionadas.size === 0) btn.textContent = "Todas as cidades";
+  else if (cidadesSelecionadas.size === 1) btn.textContent = [...cidadesSelecionadas][0];
+  else btn.textContent = `${cidadesSelecionadas.size} cidades ▾`;
+}
+
+document.getElementById("btn-filtro-cidade").addEventListener("click", (e) => {
+  e.stopPropagation();
+  document.getElementById("opcoes-filtro-cidade").classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".filtro-multiplo")) document.getElementById("opcoes-filtro-cidade").classList.add("hidden");
+});
+document.getElementById("opcoes-filtro-cidade").addEventListener("change", (e) => {
+  const chk = e.target.closest(".filtro-cidade-check");
+  if (!chk) return;
+  if (chk.checked) cidadesSelecionadas.add(chk.value);
+  else cidadesSelecionadas.delete(chk.value);
+  atualizarBotaoFiltroCidade();
+  renderDisponiveis();
+});
+
+function renderDisponiveis() {
+  const el = document.getElementById("lista-disponiveis");
+  const compradorFiltro = document.getElementById("filtro-comprador").value;
+  const fornecedorFiltro = document.getElementById("filtro-fornecedor").value;
+  let data = disponiveisCache.filter((p) => !p.retirar_transportadora);
+  if (cidadesSelecionadas.size > 0) data = data.filter((p) => cidadesSelecionadas.has(extrairCidade(p.local_retirada)));
+  if (compradorFiltro) data = data.filter((p) => p.comprador_nome === compradorFiltro);
+  if (fornecedorFiltro) data = data.filter((p) => p.fornecedor_nome === fornecedorFiltro);
+
+  const totalEl = document.getElementById("total-disponiveis");
+  totalEl.textContent = `${data.length} pedido${data.length === 1 ? "" : "s"}`;
+
+  if (!data.length) {
+    el.innerHTML = `<p class="empty-state">${
+      disponiveisCache.length ? "Nenhum pedido pendente com esse filtro." : "Nenhum pedido pendente no momento."
+    }</p>`;
+    return;
+  }
+  el.innerHTML = data
+    .map(
+      (p) => `
+    <div class="card-pedido">
+      <div class="card-pedido-head">
+        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+        ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+      </div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      ${p.local_retirada ? `<div class="card-meta">📍 ${escapeHtml(p.local_retirada)}</div>` : ""}
+      <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
+      ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      <label class="selecionar"><input type="checkbox" class="pedido-check" data-id="${p.id}"> Incluir na rota</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-urgente" data-id="${p.id}" ${p.urgente ? "checked" : ""}> Urgente</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> 📦 Pode vir parcial</label>
+      <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
+    </div>`
+    )
+    .join("");
+}
+
+document.getElementById("filtro-comprador").addEventListener("change", renderDisponiveis);
+document.getElementById("filtro-fornecedor").addEventListener("change", renderDisponiveis);
+document.getElementById("btn-limpar-filtros").addEventListener("click", () => {
+  cidadesSelecionadas.clear();
+  document.getElementById("filtro-comprador").value = "";
+  document.getElementById("filtro-fornecedor").value = "";
+  document.querySelectorAll(".filtro-cidade-check").forEach((c) => (c.checked = false));
+  atualizarBotaoFiltroCidade();
+  renderDisponiveis();
+});
+
+// ---------- motorista: retirada em transportadora (sem rota fixa — o
+// motorista passa lá todo dia sem saber de antemão o que já chegou, então
+// aqui ele conclui direto, sem passar pelo fluxo de "montar rota") ----------
+function renderTransportadora() {
+  const el = document.getElementById("lista-transportadora");
+  const data = disponiveisCache.filter((p) => p.retirar_transportadora);
+
+  if (!data.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum pedido aguardando retirada em transportadora.</p>`;
+    return;
+  }
+  el.innerHTML = data
+    .map(
+      (p) => `
+    <div class="card-pedido">
+      <div class="card-pedido-head">
+        <strong>${escapeHtml(p.empresa_nome || "Empresa não informada")}</strong>
+        ${p.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+        ${p.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+      </div>
+      ${p.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(p.fornecedor_nome)}</div>` : ""}
+      <div class="card-meta">Comprador: ${escapeHtml(p.comprador_nome)} · ${formatarDataHora(p.criado_em)}${p.numero_pedido ? ` · Nº ${escapeHtml(p.numero_pedido)}` : ""}</div>
+      <div class="card-linha"><span>Valor esperado</span><strong>${formatarMoeda(p.valor_total)}</strong></div>
+      ${p.observacao ? `<div class="card-meta">${escapeHtml(p.observacao)}</div>` : ""}
+      <a class="arquivo-link" href="${p.arquivo_url}" target="_blank" rel="noopener">📎 ${escapeHtml(p.arquivo_nome || "arquivo")}</a>
+      <label class="selecionar"><input type="checkbox" class="toggle-urgente" data-id="${p.id}" ${p.urgente ? "checked" : ""}> Urgente</label>
+      <label class="selecionar"><input type="checkbox" class="toggle-parcial" data-id="${p.id}" ${p.parcial_esperado ? "checked" : ""}> 📦 Pode vir parcial</label>
+      <button class="btn primary small" type="button" data-concluir-transportadora="${p.id}">📦 Encontrei — concluir</button>
+      <button class="link-btn danger" data-cancelar-disponivel="${p.id}" type="button">Excluir pedido</button>
+    </div>`
+    )
+    .join("");
+}
+
+document.getElementById("lista-transportadora").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-concluir-transportadora]");
+  if (!btn) return;
+  const motoristaNome = document.getElementById("motorista-select").value;
+  if (!motoristaNome) return mostrarAviso("Selecione seu nome (motorista) primeiro.");
+  const pedidoId = btn.dataset.concluirTransportadora;
+  btn.disabled = true;
+  try {
+    const rotaId = await getOrCreateRotaAtiva(motoristaNome);
+    const baseOrdem = paradasCache.length;
+    const { error: errParada } = await db.from("rl_rota_paradas").insert({ rota_id: rotaId, pedido_id: pedidoId, ordem: baseOrdem });
+    if (errParada) throw errParada;
+    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "na_rota" }).eq("id", pedidoId);
+    if (errPedido) throw errPedido;
+
+    await Promise.all([loadDisponiveis(), loadRotaAtual()]);
+    const parada = paradasCache.find((p) => p.pedido_id === pedidoId);
+    if (parada) abrirModalConcluir(parada);
+  } catch (err) {
+    mostrarAviso("Erro: " + err.message);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-atualizar-transportadora").addEventListener("click", loadDisponiveis);
+
+// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos" —
+// compartilhado entre "Pedidos disponíveis" e "Retirada em transportadora".
+async function excluirPedidoDisponivelClick(e) {
+  const btn = e.target.closest("button[data-cancelar-disponivel]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir pedido";
+    }, 4000);
+    return;
+  }
+  await db.from("rl_pedidos").update({ status: "cancelado" }).eq("id", btn.dataset.cancelarDisponivel);
+  loadDisponiveis();
+}
+document.getElementById("lista-disponiveis").addEventListener("click", excluirPedidoDisponivelClick);
+document.getElementById("lista-transportadora").addEventListener("click", excluirPedidoDisponivelClick);
+
+// Urgente/parcial marcados aqui (não no formulário de anexar) porque a
+// maioria dos pedidos chega pelo robô, sem ninguém preenchendo formulário.
+async function toggleUrgentePartialChange(e) {
+  const chkUrgente = e.target.closest("input.toggle-urgente");
+  const chkParcial = e.target.closest("input.toggle-parcial");
+  if (chkUrgente) {
+    await db.from("rl_pedidos").update({ urgente: chkUrgente.checked }).eq("id", chkUrgente.dataset.id);
+    await loadDisponiveis();
+  }
+  if (chkParcial) {
+    await db.from("rl_pedidos").update({ parcial_esperado: chkParcial.checked }).eq("id", chkParcial.dataset.id);
+    await loadDisponiveis();
+  }
+}
+document.getElementById("lista-disponiveis").addEventListener("change", toggleUrgentePartialChange);
+document.getElementById("lista-transportadora").addEventListener("change", (e) => {
+  toggleUrgentePartialChange(e);
+});
+
+document.getElementById("btn-montar-rota").addEventListener("click", async () => {
+  const motoristaNome = document.getElementById("motorista-select").value;
+  if (!motoristaNome) return mostrarAviso("Selecione seu nome (motorista) primeiro.");
+  const ids = Array.from(document.querySelectorAll(".pedido-check:checked")).map((c) => c.dataset.id);
+  if (!ids.length) return mostrarAviso("Selecione ao menos um pedido.");
+
+  const btn = document.getElementById("btn-montar-rota");
+  btn.disabled = true;
+  try {
+    const rotaId = await getOrCreateRotaAtiva(motoristaNome);
+    const baseOrdem = paradasCache.length;
+    const novasParadas = ids.map((pedido_id, i) => ({ rota_id: rotaId, pedido_id, ordem: baseOrdem + i }));
+    const { error: errParadas } = await db.from("rl_rota_paradas").insert(novasParadas);
+    if (errParadas) throw errParadas;
+
+    const { error: errPedidos } = await db.from("rl_pedidos").update({ status: "na_rota" }).in("id", ids);
+    if (errPedidos) throw errPedidos;
+
+    await loadDisponiveis();
+    await loadRotaAtual();
+  } catch (err) {
+    mostrarAviso("Erro ao montar rota: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- motorista: rota do dia ----------
+let rotaAtualId = null;
+let paradasCache = [];
+let dragIndex = null;
+let paradaEmEdicao = null;
+let cidadesSelecionadasRota = new Set();
+
+function atualizarBotaoFiltroCidadeRota() {
+  const btn = document.getElementById("btn-filtro-cidade-rota");
+  if (cidadesSelecionadasRota.size === 0) btn.textContent = "Todas as cidades";
+  else if (cidadesSelecionadasRota.size === 1) btn.textContent = [...cidadesSelecionadasRota][0];
+  else btn.textContent = `${cidadesSelecionadasRota.size} cidades ▾`;
+}
+
+document.getElementById("btn-filtro-cidade-rota").addEventListener("click", (e) => {
+  e.stopPropagation();
+  document.getElementById("opcoes-filtro-cidade-rota").classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".filtro-multiplo")) document.getElementById("opcoes-filtro-cidade-rota").classList.add("hidden");
+});
+document.getElementById("opcoes-filtro-cidade-rota").addEventListener("change", (e) => {
+  const chk = e.target.closest(".filtro-cidade-check-rota");
+  if (!chk) return;
+  if (chk.checked) cidadesSelecionadasRota.add(chk.value);
+  else cidadesSelecionadasRota.delete(chk.value);
+  atualizarBotaoFiltroCidadeRota();
+  renderRota();
+});
+document.getElementById("filtro-comprador-rota").addEventListener("change", renderRota);
+document.getElementById("filtro-fornecedor-rota").addEventListener("change", renderRota);
+document.getElementById("btn-limpar-filtros-rota").addEventListener("click", () => {
+  cidadesSelecionadasRota.clear();
+  document.getElementById("filtro-comprador-rota").value = "";
+  document.getElementById("filtro-fornecedor-rota").value = "";
+  document.querySelectorAll(".filtro-cidade-check-rota").forEach((c) => (c.checked = false));
+  atualizarBotaoFiltroCidadeRota();
+  renderRota();
+});
+
+async function getOrCreateRotaAtiva(motoristaNome) {
+  if (rotaAtualId) return rotaAtualId;
+  const { data } = await comTimeout(
+    db.from("rl_rotas").select("*").eq("motorista_nome", motoristaNome).eq("status", "em_andamento").order("criado_em", { ascending: false }).limit(1)
+  );
+  if (data && data.length) {
+    rotaAtualId = data[0].id;
+    return rotaAtualId;
+  }
+  const { data: nova, error } = await db.from("rl_rotas").insert({ motorista_nome: motoristaNome }).select().single();
+  if (error) throw error;
+  rotaAtualId = nova.id;
+  return rotaAtualId;
+}
+
+// paradasCache guarda só as paradas AINDA PENDENTES da rota atual — assim
+// que uma parada é concluída, ela sai daqui e some da tela "Minha rota de
+// hoje" (vai aparecer no Histórico). O contador de progresso usa uma
+// contagem à parte, já que as concluídas não ficam mais no array.
+let rotaProgresso = { concluidas: 0, total: 0 };
+
+async function loadRotaAtual() {
+  const motoristaNome = document.getElementById("motorista-select").value;
+  const progresso = document.getElementById("rota-progresso");
+  const lista = document.getElementById("lista-rota");
+  if (!motoristaNome) {
+    progresso.textContent = "";
+    lista.innerHTML = `<li class="empty-state">Selecione seu nome acima.</li>`;
+    return;
+  }
+  const { data: rotas } = await comTimeout(
+    db.from("rl_rotas").select("*").eq("motorista_nome", motoristaNome).eq("status", "em_andamento").order("criado_em", { ascending: false }).limit(1)
+  );
+  const btnExcluir = document.getElementById("btn-excluir-rota");
+  const btnExcluirSelecionadas = document.getElementById("btn-excluir-selecionadas");
+  if (!rotas || !rotas.length) {
+    rotaAtualId = null;
+    paradasCache = [];
+    progresso.textContent = "";
+    lista.innerHTML = `<li class="empty-state">Nenhuma rota em andamento. Selecione pedidos acima e clique em "Montar rota".</li>`;
+    btnExcluir.classList.add("hidden");
+    btnExcluirSelecionadas.classList.add("hidden");
+    document.getElementById("btn-abrir-maps").classList.add("hidden");
+    return;
+  }
+  rotaAtualId = rotas[0].id;
+  btnExcluir.classList.remove("hidden");
+
+  const { data: todasParadas } = await comTimeout(
+    db.from("rl_rota_paradas").select("id, status, rl_pedidos(fornecedor_nome)").eq("rota_id", rotaAtualId)
+  );
+  // "Parada" de verdade é por fornecedor (mesmo endereço) — vários pedidos
+  // do mesmo fornecedor contam como uma parada só. Uma parada só conta como
+  // concluída quando TODOS os pedidos daquele fornecedor já foram concluídos.
+  const gruposPorFornecedor = new Map();
+  (todasParadas || []).forEach((p) => {
+    const chave = (p.rl_pedidos || {}).fornecedor_nome || `pedido-${p.id}`;
+    if (!gruposPorFornecedor.has(chave)) gruposPorFornecedor.set(chave, []);
+    gruposPorFornecedor.get(chave).push(p.status);
+  });
+  rotaProgresso = {
+    total: gruposPorFornecedor.size,
+    concluidas: [...gruposPorFornecedor.values()].filter((statuses) => statuses.every((s) => s === "concluida")).length,
+  };
+
+  const { data: paradas, error } = await comTimeout(
+    db.from("rl_rota_paradas").select("*, rl_pedidos(*)").eq("rota_id", rotaAtualId).eq("status", "pendente").order("ordem")
+  );
+  if (error) {
+    lista.innerHTML = `<li class="empty-state">Erro ao carregar rota.</li>`;
+    return;
+  }
+  paradasCache = paradas || [];
+
+  const cidadesRota = [
+    ...new Set(paradasCache.map((p) => extrairCidade((p.rl_pedidos || {}).local_retirada)).filter(Boolean)),
+  ].sort();
+  cidadesSelecionadasRota = new Set([...cidadesSelecionadasRota].filter((c) => cidadesRota.includes(c)));
+  document.getElementById("opcoes-filtro-cidade-rota").innerHTML = cidadesRota
+    .map(
+      (c) => `
+    <label class="filtro-multiplo-item">
+      <input type="checkbox" class="filtro-cidade-check-rota" value="${escapeHtml(c)}" ${cidadesSelecionadasRota.has(c) ? "checked" : ""}>
+      ${escapeHtml(c)}
+    </label>`
+    )
+    .join("");
+  atualizarBotaoFiltroCidadeRota();
+
+  const selCompradorRota = document.getElementById("filtro-comprador-rota");
+  const compradorRotaAtual = selCompradorRota.value;
+  const compradoresRota = [...new Set(paradasCache.map((p) => (p.rl_pedidos || {}).comprador_nome).filter(Boolean))].sort();
+  selCompradorRota.innerHTML =
+    `<option value="">Todos os compradores</option>` + compradoresRota.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradoresRota.includes(compradorRotaAtual)) selCompradorRota.value = compradorRotaAtual;
+
+  const selFornecedorRota = document.getElementById("filtro-fornecedor-rota");
+  const fornecedorRotaAtual = selFornecedorRota.value;
+  const fornecedoresRota = [...new Set(paradasCache.map((p) => (p.rl_pedidos || {}).fornecedor_nome).filter(Boolean))].sort();
+  selFornecedorRota.innerHTML =
+    `<option value="">Todos os fornecedores</option>` + fornecedoresRota.map((f) => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+  if (fornecedoresRota.includes(fornecedorRotaAtual)) selFornecedorRota.value = fornecedorRotaAtual;
+
+  renderRota();
+}
+
+// Paradas ainda pendentes voltam pro estoque de "pedidos disponíveis" (o
+// motorista pode ter errado a seleção ou precisa recomeçar). Paradas já
+// concluídas (com nota fiscal já registrada) NÃO são mexidas — a coleta já
+// aconteceu de verdade, apagar isso destruiria a conferência feita e o
+// indicador de "coletados por mês". A rota em si vira "cancelada" (some da
+// tela) em vez de apagada, preservando o histórico.
+document.getElementById("btn-excluir-rota").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  if (!rotaAtualId) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir rota";
+    }, 4000);
+    return;
+  }
+  delete btn.dataset.confirmando;
+  btn.disabled = true;
+  try {
+    const pendentesIds = paradasCache.map((p) => p.pedido_id);
+    if (pendentesIds.length) {
+      const { error: errPedidos } = await db.from("rl_pedidos").update({ status: "pendente" }).in("id", pendentesIds);
+      if (errPedidos) throw errPedidos;
+    }
+    const { error: errRota } = await db.from("rl_rotas").update({ status: "cancelada" }).eq("id", rotaAtualId);
+    if (errRota) throw errRota;
+
+    btn.textContent = "Excluir rota";
+    rotaAtualId = null;
+    paradasCache = [];
+    await Promise.all([loadDisponiveis(), loadRotaAtual()]);
+  } catch (err) {
+    mostrarAviso("Erro ao excluir rota: " + err.message);
+    btn.textContent = "Excluir rota";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Remove só as paradas marcadas (o pedido delas volta pra fila de
+// disponíveis) — diferente de "Excluir rota", que mexe em todas de uma vez.
+document.getElementById("btn-excluir-selecionadas").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const marcadas = Array.from(document.querySelectorAll(".parada-check:checked")).map((c) => c.dataset.paradaId);
+  if (!marcadas.length) {
+    mostrarAviso("Marque ao menos uma parada pra excluir.");
+    return;
+  }
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = `Clique de novo pra confirmar (${marcadas.length})`;
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir selecionadas";
+    }, 4000);
+    return;
+  }
+  delete btn.dataset.confirmando;
+  btn.disabled = true;
+  try {
+    const paradasSelecionadas = paradasCache.filter((p) => marcadas.includes(String(p.id)));
+    const pedidoIds = paradasSelecionadas.map((p) => p.pedido_id);
+    if (pedidoIds.length) {
+      const { error: errPedidos } = await db.from("rl_pedidos").update({ status: "pendente" }).in("id", pedidoIds);
+      if (errPedidos) throw errPedidos;
+    }
+    const { error: errParadas } = await db.from("rl_rota_paradas").delete().in("id", marcadas);
+    if (errParadas) throw errParadas;
+
+    btn.textContent = "Excluir selecionadas";
+    await Promise.all([loadDisponiveis(), loadRotaAtual()]);
+  } catch (err) {
+    mostrarAviso("Erro ao excluir selecionadas: " + err.message);
+    btn.textContent = "Excluir selecionadas";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Deep link do Google Maps — abre direto no app de navegação do celular,
+// sem precisar de nenhuma chave de API. Sem "origin" definido, o próprio
+// Maps usa a localização atual do motorista como ponto de partida.
+//
+// O endereço completo (rua/quadra/lote + bairro + cidade + UF + CEP num
+// texto só) às vezes tem termos que o Maps não reconhece — testamos e
+// confirmamos que usar só o CEP é bem mais confiável (encontra certo até
+// em endereços de quadra/lote de Brasília que o texto completo não achava),
+// então preferimos o CEP quando ele existir no texto.
+function extrairCEP(local) {
+  if (!local) return null;
+  const m = local.match(/\d{5}-?\d{3}/);
+  return m ? m[0] : null;
+}
+
+function enderecoParaMaps(endereco) {
+  const cep = extrairCEP(endereco);
+  return cep ? `${cep}, Brasil` : endereco;
+}
+
+function linkMapsDestino(endereco) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(enderecoParaMaps(endereco))}&travelmode=driving`;
+}
+
+function linkMapsRota(enderecos) {
+  const convertidos = enderecos.map(enderecoParaMaps);
+  const destino = convertidos[convertidos.length - 1];
+  const waypoints = convertidos.slice(0, -1);
+  let url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}&travelmode=driving`;
+  if (waypoints.length) url += `&waypoints=${waypoints.map(encodeURIComponent).join("|")}`;
+  return url;
+}
+
+document.getElementById("btn-abrir-maps").addEventListener("click", () => {
+  const enderecos = paradasCache.map((p) => (p.rl_pedidos || {}).local_retirada).filter(Boolean);
+  if (!enderecos.length) {
+    mostrarAviso("Nenhuma parada pendente com endereço cadastrado.");
+    return;
+  }
+  if (enderecos.length > 9) {
+    mostrarAviso("O Google Maps só aceita até 9 paradas de uma vez por esse link — abrindo com as 9 primeiras.");
+  }
+  window.open(linkMapsRota(enderecos.slice(0, 9)), "_blank", "noopener");
+});
+
+function renderRota() {
+  const progresso = document.getElementById("rota-progresso");
+  const lista = document.getElementById("lista-rota");
+  const btnExcluirSelecionadas = document.getElementById("btn-excluir-selecionadas");
+  const btnAbrirMaps = document.getElementById("btn-abrir-maps");
+  btnExcluirSelecionadas.classList.toggle("hidden", !paradasCache.length);
+  btnAbrirMaps.classList.toggle("hidden", !paradasCache.length);
+
+  if (!rotaProgresso.total) {
+    progresso.textContent = "";
+    lista.innerHTML = `<li class="empty-state">Nenhuma parada na rota ainda.</li>`;
+    return;
+  }
+  progresso.textContent = `${rotaProgresso.concluidas} de ${rotaProgresso.total} paradas distintas concluídas.${
+    rotaProgresso.concluidas ? " As já concluídas aparecem na aba Histórico." : ""
+  }`;
+
+  if (!paradasCache.length) {
+    lista.innerHTML = `<li class="empty-state">Todas as paradas desta rota já foram concluídas. Veja o detalhe na aba Histórico.</li>`;
+    return;
+  }
+
+  const compradorFiltroRota = document.getElementById("filtro-comprador-rota").value;
+  const fornecedorFiltroRota = document.getElementById("filtro-fornecedor-rota").value;
+  // Mantém o índice ORIGINAL em paradasCache (não a posição no filtro) no
+  // data-index, pra arrastar/soltar continuar reordenando a rota de verdade
+  // mesmo com o filtro aplicado — só o número mostrado (①②③) é sequencial.
+  const visiveis = paradasCache
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => {
+      const pedido = p.rl_pedidos || {};
+      if (cidadesSelecionadasRota.size > 0 && !cidadesSelecionadasRota.has(extrairCidade(pedido.local_retirada))) return false;
+      if (compradorFiltroRota && pedido.comprador_nome !== compradorFiltroRota) return false;
+      if (fornecedorFiltroRota && pedido.fornecedor_nome !== fornecedorFiltroRota) return false;
+      return true;
+    });
+
+  // "Parada" de verdade é por fornecedor (mesmo endereço) — vários pedidos
+  // do mesmo fornecedor viram um só card ainda, então o número de pedidos e
+  // o de paradas reais (fornecedores distintos) podem ser diferentes.
+  const fornecedoresDistintos = new Set(visiveis.map(({ p }) => (p.rl_pedidos || {}).fornecedor_nome || `pedido-${p.id}`)).size;
+  document.getElementById("total-rota").textContent =
+    `${visiveis.length} pedido${visiveis.length === 1 ? "" : "s"} · ${fornecedoresDistintos} parada${fornecedoresDistintos === 1 ? "" : "s"} (fornecedores distintos)`;
+
+  if (!visiveis.length) {
+    lista.innerHTML = `<li class="empty-state">Nenhuma parada pendente com esse filtro.</li>`;
+    return;
+  }
+
+  lista.innerHTML = visiveis
+    .map(({ p, i }, posicao) => {
+      const pedido = p.rl_pedidos || {};
+      return `
+      <li class="rota-item" draggable="true" data-index="${i}">
+        <input type="checkbox" class="parada-check" data-parada-id="${p.id}">
+        <span class="drag-handle">⠿</span>
+        <span class="ordem-num">${posicao + 1}</span>
+        <div class="rota-item-info">
+          <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+          ${pedido.urgente ? `<span class="badge urgente">Urgente</span>` : ""}
+          ${pedido.parcial_esperado ? `<span class="badge parcial">📦 Pode vir parcial</span>` : ""}
+          ${pedido.fornecedor_nome ? `<span class="card-fornecedor">🏢 ${escapeHtml(pedido.fornecedor_nome)}</span>` : ""}
+          <span>Comprador: ${escapeHtml(pedido.comprador_nome || "—")} · Valor esperado: ${formatarMoeda(pedido.valor_total)}</span>
+          ${
+            pedido.local_retirada
+              ? `<span>📍 ${escapeHtml(pedido.local_retirada)} · <a class="arquivo-link" href="${linkMapsDestino(pedido.local_retirada)}" target="_blank" rel="noopener">Navegar</a></span>`
+              : ""
+          }
+          ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
+        </div>
+        <button class="btn secondary small" type="button" data-concluir="${p.id}">Concluir</button>
+      </li>`;
+    })
+    .join("");
+}
+
+// drag and drop pra reordenar a rota
+document.getElementById("lista-rota").addEventListener("dragstart", (e) => {
+  const li = e.target.closest(".rota-item");
+  if (!li) return;
+  dragIndex = Number(li.dataset.index);
+  li.classList.add("dragging");
+});
+
+document.getElementById("lista-rota").addEventListener("dragend", (e) => {
+  e.target.closest(".rota-item")?.classList.remove("dragging");
+});
+
+document.getElementById("lista-rota").addEventListener("dragover", (e) => e.preventDefault());
+
+document.getElementById("lista-rota").addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const li = e.target.closest(".rota-item");
+  if (!li || dragIndex == null) return;
+  const dropIndex = Number(li.dataset.index);
+  if (dragIndex === dropIndex) return;
+  const item = paradasCache.splice(dragIndex, 1)[0];
+  paradasCache.splice(dropIndex, 0, item);
+  dragIndex = null;
+  renderRota();
+  await Promise.all(paradasCache.map((p, i) => db.from("rl_rota_paradas").update({ ordem: i }).eq("id", p.id)));
+});
+
+// ---------- concluir parada (modal com conferência) ----------
+// "notaPreLida" (opcional) vem preenchido quando a portaria já anexou e leu
+// a nota com IA no aviso — nesse caso pula direto pra conferência, sem pedir
+// pra fotografar/ler de novo o mesmo documento.
+function abrirModalConcluir(parada, notaPreLida) {
+  paradaEmEdicao = parada;
+  notaItensExtraidos = notaPreLida ? notaPreLida.itens : null;
+  notaTipoDocumento = notaPreLida ? notaPreLida.tipo_documento : null;
+  notaEmitenteExtraido = notaPreLida ? notaPreLida.emitente_nome : null;
+  notaDataEmissaoExtraida = notaPreLida ? notaPreLida.data_emissao : null;
+  notaParcelasExtraidas = notaPreLida ? notaPreLida.parcelas : null;
+  notaArquivoUrlPreLido = notaPreLida ? notaPreLida.arquivo_url : null;
+  document.getElementById("form-modal-nota").reset();
+  // já vem pré-marcado se o comprador/motorista sinalizou antes, em
+  // "Pedidos disponíveis", que esse pedido costuma vir em partes.
+  document.getElementById("nota-parcial").checked = !!(paradaEmEdicao.rl_pedidos || {}).parcial_esperado;
+  document.getElementById("nota-ia-feedback").textContent = "";
+  document.getElementById("modal-feedback").textContent = "";
+  document.getElementById("conferencia-resultado").classList.add("hidden");
+
+  // Link pro anexo original do pedido de compra — útil pra conferir o
+  // documento fonte sem precisar sair do modal (ex: dúvida sobre um item).
+  const arquivoPedido = (paradaEmEdicao.rl_pedidos || {}).arquivo_url;
+  const blocoPedidoAnexo = document.getElementById("bloco-pedido-anexo");
+  if (arquivoPedido) {
+    document.getElementById("link-pedido-anexo").href = arquivoPedido;
+    blocoPedidoAnexo.classList.remove("hidden");
+  } else {
+    blocoPedidoAnexo.classList.add("hidden");
+  }
+
+  resetarFotosNota();
+  if (notaPreLida) {
+    document.getElementById("nota-valor").value = notaPreLida.valor_total ?? "";
+    document.getElementById("nota-cnpj").value = notaPreLida.cnpj || "";
+    document.getElementById("nota-numero").value = notaPreLida.numero || "";
+    document.getElementById("link-nota-pre-lida").href = notaPreLida.arquivo_url;
+    document.getElementById("bloco-nota-pre-lida").classList.remove("hidden");
+    document.getElementById("bloco-upload-nota").classList.add("hidden");
+    atualizarConferencia();
+  } else {
+    document.getElementById("bloco-nota-pre-lida").classList.add("hidden");
+    document.getElementById("bloco-upload-nota").classList.remove("hidden");
+  }
+
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+document.getElementById("btn-reler-nota").addEventListener("click", () => {
+  notaArquivoUrlPreLido = null;
+  document.getElementById("bloco-nota-pre-lida").classList.add("hidden");
+  document.getElementById("bloco-upload-nota").classList.remove("hidden");
+});
+
+document.getElementById("lista-rota").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-concluir]");
+  if (!btn) return;
+  const parada = paradasCache.find((p) => String(p.id) === btn.dataset.concluir);
+  if (!parada) return;
+  abrirModalConcluir(parada);
+});
+
+document.getElementById("btn-modal-fechar").addEventListener("click", () => {
+  document.getElementById("modal-overlay").classList.add("hidden");
+  paradaEmEdicao = null;
+});
+
+let notaItensExtraidos = null;
+let notaTipoDocumento = null;
+let notaEmitenteExtraido = null;
+let notaDataEmissaoExtraida = null;
+let notaParcelasExtraidas = null;
+// Preenchido quando a nota já veio lida da portaria (ver iniciarConferenciaCif)
+// — nesse caso não faz sentido pedir upload de novo, só reaproveitar a URL.
+let notaArquivoUrlPreLido = null;
+
+// Junta a leitura de várias fotos da MESMA nota (nota com muitos itens, uma
+// foto por parte): itens somam; valor total = o MAIOR lido (a página com os
+// totais traz o valor cheio, e uma página só de itens pode vir com uma soma
+// parcial); CNPJ/número/emitente/data/parcelas = o primeiro que tiver.
+function mesclarLeiturasNota(leituras) {
+  if (!leituras.length) return null;
+  const primeiro = (campo) => {
+    for (const l of leituras) if (l[campo] != null && l[campo] !== "") return l[campo];
+    return undefined;
+  };
+  const valores = leituras.map((l) => l.valor_total).filter((v) => v != null);
+  return {
+    tipo_documento: primeiro("tipo_documento"),
+    numero_nota: primeiro("numero_nota"),
+    valor_total: valores.length ? Math.max(...valores) : undefined,
+    destinatario_cnpj: primeiro("destinatario_cnpj"),
+    emitente_nome: primeiro("emitente_nome"),
+    data_emissao: primeiro("data_emissao"),
+    parcelas_pagamento: primeiro("parcelas_pagamento"),
+    itens: leituras.flatMap((l) => (Array.isArray(l.itens) ? l.itens : [])),
+  };
+}
+
+// Fotos da nota anexadas no modal (cada uma lida pela IA ao ser adicionada).
+let notaFotos = []; // { file, leitura, status: "lendo" | "ok" | "erro", erroMsg }
+
+function resetarFotosNota() {
+  notaFotos = [];
+  renderFotosNota();
+}
+
+function renderFotosNota() {
+  const el = document.getElementById("nota-fotos-lista");
+  el.innerHTML = notaFotos
+    .map((f, i) => {
+      const situacao = f.status === "lendo" ? "lendo..." : f.status === "ok" ? "✅ lida" : `⚠️ não lida${f.erroMsg ? ` (${escapeHtml(f.erroMsg)})` : ""}`;
+      return `<div class="nota-foto-item">📷 Foto ${i + 1}: ${escapeHtml(f.file.name || "foto")} — ${situacao}
+        <button type="button" class="link-btn danger" data-remover-foto-nota="${i}">remover</button></div>`;
+    })
+    .join("");
+}
+
+// Preenche os campos do modal com a leitura juntada de todas as fotos.
+function aplicarLeituraMescladaNota() {
+  const feedback = document.getElementById("nota-ia-feedback");
+  const lidas = notaFotos.filter((f) => f.leitura);
+  const extraido = mesclarLeiturasNota(lidas.map((f) => f.leitura));
+  if (!extraido) {
+    notaItensExtraidos = null;
+    notaTipoDocumento = null;
+    notaEmitenteExtraido = null;
+    notaDataEmissaoExtraida = null;
+    notaParcelasExtraidas = null;
+    const erro = notaFotos.find((f) => f.status === "erro");
+    feedback.textContent = erro ? "Erro: " + erro.erroMsg : notaFotos.length ? "" : "Selecione/tire a foto da nota primeiro.";
+    feedback.className = erro || !notaFotos.length ? "feedback error" : "feedback";
+    atualizarConferencia();
+    return;
+  }
+  if (extraido.valor_total != null) document.getElementById("nota-valor").value = extraido.valor_total;
+  if (extraido.destinatario_cnpj) document.getElementById("nota-cnpj").value = extraido.destinatario_cnpj;
+  if (extraido.numero_nota) document.getElementById("nota-numero").value = extraido.numero_nota;
+  notaItensExtraidos = extraido.itens.length ? extraido.itens : null;
+  notaTipoDocumento = extraido.tipo_documento || null;
+  notaEmitenteExtraido = extraido.emitente_nome || null;
+  notaDataEmissaoExtraida = extraido.data_emissao || null;
+  notaParcelasExtraidas =
+    Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null;
+  const naoLidas = notaFotos.filter((f) => f.status === "erro").length;
+  feedback.textContent =
+    (notaTipoDocumento === "servico"
+      ? "Nota de serviço lida. Confira o tomador, a prestadora e o valor abaixo."
+      : lidas.length > 1
+        ? `${lidas.length} fotos lidas e juntadas. Confira os valores abaixo.`
+        : "Nota lida. Confira os valores abaixo.") + (naoLidas ? ` ⚠️ ${naoLidas} foto(s) não foram lidas — remova e tire de novo.` : "");
+  feedback.className = naoLidas ? "feedback error" : "feedback success";
+  atualizarConferencia();
+}
+
+// Adiciona uma ou mais fotos e lê cada uma com IA (uma chamada por foto).
+async function adicionarFotosNota(files) {
+  const feedback = document.getElementById("nota-ia-feedback");
+  const novas = files.map((file) => ({ file, leitura: null, status: "lendo", erroMsg: "" }));
+  if (!novas.length) return;
+  notaFotos.push(...novas);
+  renderFotosNota();
+  for (const foto of novas) {
+    feedback.textContent = `Lendo foto ${notaFotos.indexOf(foto) + 1} de ${notaFotos.length} com IA...`;
+    feedback.className = "feedback";
+    try {
+      foto.leitura = await lerComIA(foto.file, "nota");
+      foto.status = "ok";
+    } catch (err) {
+      foto.status = "erro";
+      foto.erroMsg = err.message;
+    }
+    renderFotosNota();
+  }
+  aplicarLeituraMescladaNota();
+}
+
+// Botão "Ler nota com IA": relê TODAS as fotos já anexadas.
+async function lerNotaComIA() {
+  const feedback = document.getElementById("nota-ia-feedback");
+  if (!notaFotos.length) {
+    feedback.textContent = "Selecione/tire a foto da nota primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  for (const foto of notaFotos) {
+    foto.status = "lendo";
+    foto.leitura = null;
+  }
+  renderFotosNota();
+  for (const foto of notaFotos) {
+    feedback.textContent = `Lendo foto ${notaFotos.indexOf(foto) + 1} de ${notaFotos.length} com IA...`;
+    feedback.className = "feedback";
+    try {
+      foto.leitura = await lerComIA(foto.file, "nota");
+      foto.status = "ok";
+    } catch (err) {
+      foto.status = "erro";
+      foto.erroMsg = err.message;
+    }
+    renderFotosNota();
+  }
+  aplicarLeituraMescladaNota();
+}
+
+document.getElementById("btn-ler-nota").addEventListener("click", lerNotaComIA);
+// Roda sozinho assim que a foto é escolhida — sem depender do motorista
+// lembrar de clicar em "Ler nota com IA" (na prática, quando ele esquecia,
+// a conferência ficava toda em branco e ele acabava marcando qualquer coisa
+// como "Entrega parcial" só pra conseguir enviar). Cada foto escolhida é
+// ACRESCENTADA às anteriores (nota com muitos itens = uma foto por parte), e
+// o campo é limpo pra permitir tirar a próxima.
+for (const idInput of ["nota-arquivo", "nota-arquivo-galeria"]) {
+  document.getElementById(idInput).addEventListener("change", (e) => {
+    const arquivos = Array.from(e.target.files || []);
+    e.target.value = "";
+    adicionarFotosNota(arquivos);
+  });
+}
+document.getElementById("nota-fotos-lista").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-remover-foto-nota]");
+  if (!btn) return;
+  notaFotos.splice(Number(btn.dataset.removerFotoNota), 1);
+  renderFotosNota();
+  aplicarLeituraMescladaNota();
+});
+
+// Casa os itens do pedido com os da nota pelo nome do produto (a ordem pode
+// mudar de um documento pro outro). Tenta igualdade exata primeiro, depois
+// um item "conter" o outro (nomes costumam variar um pouco entre pedido e
+// nota do mesmo produto).
+function normalizarProduto(nome) {
+  // Sem tirar acento, "Química" (como a portaria/nota às vezes escreve) não
+  // batia com "QUIMICA" (como a IA às vezes lê do pedido) — nem em produto
+  // nem em nome de fornecedor (normalizarEmpresa usa esta função por baixo).
+  return String(nome || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+// O mesmo produto às vezes aparece em mais de uma linha num dos dois
+// documentos (ex: pedido lista "FILTRO DE ÓLEO" em 2 linhas de 5, cada uma
+// com um centro de custo/data diferente, e a nota junta tudo numa linha só
+// de 10) — sem agrupar antes, a comparação linha-a-linha acusaria
+// divergência de quantidade numa linha e "não encontrado" na outra, mesmo
+// batendo tudo certo no total. Agrupa por nome antes de comparar, somando
+// quantidade e tirando a média do valor unitário ponderada pela quantidade.
+function agruparPorProduto(itens) {
+  const grupos = new Map();
+  itens.forEach((item) => {
+    const chave = normalizarProduto(item.produto_nome);
+    if (!grupos.has(chave)) grupos.set(chave, { ...item, quantidade: 0, __pesoValor: 0, __pesoQtd: 0 });
+    const g = grupos.get(chave);
+    const qtd = item.quantidade || 0;
+    g.quantidade += qtd;
+    if (item.valor_unitario != null) {
+      g.__pesoValor += item.valor_unitario * (qtd || 1);
+      g.__pesoQtd += qtd || 1;
+    }
+  });
+  return [...grupos.values()].map((g) => {
+    const valor_unitario = g.__pesoQtd > 0 ? g.__pesoValor / g.__pesoQtd : g.valor_unitario;
+    const { __pesoValor, __pesoQtd, ...resto } = g;
+    return { ...resto, valor_unitario };
+  });
+}
+
+// Fornecedor às vezes vende por embalagem "fechada" (ex: nota em CENTO/CT =
+// 100 unidades, DÚZIA/DZ = 12) enquanto o pedido conta unidade por unidade —
+// sem converter ANTES de comparar, tanto a quantidade quanto o valor
+// unitário da nota ficam numa escala totalmente diferente da do pedido (10
+// CT x R$3,50 vs 1000 UN x R$0,09), o que quebra até o casamento por nome
+// parecido/código, porque o preço "não bate nem de longe". Convertendo pra
+// unidade individual antes de tentar casar os itens, o valor unitário passa
+// a ficar bem próximo do esperado e o casamento funciona normal.
+const FATORES_EMBALAGEM = { ct: 100, cento: 100, dz: 12, duzia: 12, milheiro: 1000, mil: 1000 };
+
+function converterEmbalagem(item) {
+  // Se a coluna "UND" da nota veio no formato "FD/0020/UN" (sigla / fator /
+  // sigla-menor), a IA copia essa string inteira pro campo unidade (sem
+  // separar em campo próprio — um campo a mais no schema da IA estourou o
+  // limite de complexidade da API, "Schema is too complex"). Extrai o fator
+  // aqui, é específico de cada produto/nota, bem mais confiável que a tabela
+  // fixa abaixo (que só cobre unidades padronizadas tipo "cento"/"dúzia",
+  // sempre com o mesmo fator; "fardo" e "caixa" variam de produto pra produto).
+  const unidadeOriginal = String(item.unidade || "").trim();
+  const matchBarras = unidadeOriginal.match(/^([a-z]+)\s*\/\s*0*(\d+)\s*\/\s*[a-z]+$/i);
+  const fator = matchBarras ? Number(matchBarras[2]) : FATORES_EMBALAGEM[unidadeOriginal.toLowerCase()];
+  if (!fator) return item;
+  return {
+    ...item,
+    unidade: matchBarras ? matchBarras[1] : item.unidade,
+    quantidade: item.quantidade != null ? item.quantidade * fator : item.quantidade,
+    valor_unitario: item.valor_unitario != null ? item.valor_unitario / fator : item.valor_unitario,
+    __embalagemOriginal: { unidade: unidadeOriginal, quantidade: item.quantidade, fator },
+  };
+}
+
+// Pedido com um item só às vezes foi salvo com "itens" sendo o objeto do
+// item direto, não um array de 1 elemento (bug de import antigo — achado ao
+// testar a conferência unificada dos pedidos S51677/S51831, onde isso fazia
+// a comparação de itens virar "sem dados" silenciosamente, mascarando
+// divergência real de preço). Normaliza aqui, pra cobrir pedidos antigos já
+// salvos assim e qualquer import futuro que repita o problema.
+function itensComoArray(itens) {
+  if (Array.isArray(itens)) return itens;
+  if (itens && typeof itens === "object") return [itens];
+  return [];
+}
+
+function compararItens(pedidoItensBrutos, notaItensBrutos) {
+  const pedidoItens = agruparPorProduto(itensComoArray(pedidoItensBrutos));
+  const notaItens = agruparPorProduto(itensComoArray(notaItensBrutos).map(converterEmbalagem));
+  if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
+
+  const restantes = notaItens.map((it) => ({ ...it, usado: false }));
+
+  // 1ª tentativa: nome igual ou um contendo o outro.
+  const semMatchPorNome = [];
+  const pedidoComMatch = pedidoItens.map((pItem, idx) => {
+    const nomeP = normalizarProduto(pItem.produto_nome);
+    let match =
+      restantes.find((n) => !n.usado && normalizarProduto(n.produto_nome) === nomeP) ||
+      restantes.find(
+        (n) => !n.usado && nomeP && (normalizarProduto(n.produto_nome).includes(nomeP) || nomeP.includes(normalizarProduto(n.produto_nome)))
+      );
+    if (match) match.usado = true;
+    else semMatchPorNome.push(idx);
+    return { pItem, match };
+  });
+
+  // 2ª tentativa, pra quem sobrou: o fornecedor costuma abreviar o nome do
+  // produto de um jeito bem diferente do ERP do comprador (ex: "DISJUNTOR
+  // TRIPOLAR 40A MDWP40A WEG" vira "DISJ. TRIP 40A MDWP-C40-3 3KA"), então o
+  // nome sozinho não basta — e como o pedido pode listar os itens numa
+  // ordem e a nota noutra, casar só pela POSIÇÃO também dá pareamento
+  // errado (uma linha "diverge" de outra que nem é o mesmo produto).
+  // Usa dois sinais, nessa ordem de prioridade:
+  //  1) "códigos" em comum no nome (ex: 10A, 20A, 40A, 3KA) — específicos o
+  //     bastante pra distinguir itens de preço quase idêntico (ex: dois
+  //     disjuntores de amperagens diferentes custando quase a mesma coisa);
+  //  2) valor unitário mais PRÓXIMO ainda livre, como critério de desempate
+  //     ou quando não há nenhum código em comum.
+  function codigosProduto(nome) {
+    return new Set((normalizarProduto(nome).match(/\d+[a-z]*/g) || []).filter((c) => c.length >= 2));
+  }
+  restantes.forEach((n) => (n.__codigos = codigosProduto(n.produto_nome)));
+  const candidatos = [];
+  semMatchPorNome.forEach((idxPedido) => {
+    const pItem = pedidoItens[idxPedido];
+    const codigosP = codigosProduto(pItem.produto_nome);
+    restantes.forEach((n, idxNota) => {
+      if (n.usado) return;
+      const codigosComuns = [...codigosP].filter((c) => n.__codigos.has(c)).length;
+      const diffPreco = pItem.valor_unitario != null && n.valor_unitario != null ? Math.abs(pItem.valor_unitario - n.valor_unitario) : null;
+      if (!codigosComuns && diffPreco == null) return;
+      candidatos.push({ idxPedido, idxNota, codigosComuns, diffPreco });
+    });
+  });
+  candidatos.sort((a, b) => {
+    if (b.codigosComuns !== a.codigosComuns) return b.codigosComuns - a.codigosComuns;
+    if (a.diffPreco == null) return 1;
+    if (b.diffPreco == null) return -1;
+    return a.diffPreco - b.diffPreco;
+  });
+  const pedidoUsado = new Set();
+  candidatos.forEach(({ idxPedido, idxNota, codigosComuns, diffPreco }) => {
+    if (pedidoUsado.has(idxPedido) || restantes[idxNota].usado) return;
+    // Sem nenhum código em comum, só casa por preço se estiver de fato
+    // perto — preço muito diferente significa que são produtos diferentes.
+    if (!codigosComuns) {
+      if (diffPreco == null) return;
+      if (diffPreco > TOLERANCIA_VALOR * 20 && diffPreco > pedidoItens[idxPedido].valor_unitario * 0.3) return;
+    }
+    pedidoComMatch[idxPedido].match = restantes[idxNota];
+    restantes[idxNota].usado = true;
+    pedidoUsado.add(idxPedido);
+  });
+
+  // 3ª tentativa, pra quem ainda sobrou: fornecedor às vezes vende por
+  // "pacote" (ex: nome do produto vem com "C/100" — cento de folhas — e a
+  // nota lista 5 pacotes a R$64 enquanto o pedido lista 500 folhas a R$0,64)
+  // — quantidade e valor unitário nunca vão bater nesse caso, mas o VALOR
+  // TOTAL da linha continua sendo o mesmo dinheiro, então casa por ele.
+  function valorTotalDoItem(item) {
+    if (item.valor_total != null) return item.valor_total;
+    if (item.quantidade != null && item.valor_unitario != null) return item.quantidade * item.valor_unitario;
+    return null;
+  }
+  const candidatosPorTotal = [];
+  pedidoComMatch.forEach(({ pItem, match }, idxPedido) => {
+    if (match) return;
+    const totalP = valorTotalDoItem(pItem);
+    if (totalP == null) return;
+    restantes.forEach((n, idxNota) => {
+      if (n.usado) return;
+      const totalN = valorTotalDoItem(n);
+      if (totalN == null) return;
+      const diff = Math.abs(totalP - totalN);
+      if (diff <= TOLERANCIA_VALOR) candidatosPorTotal.push({ idxPedido, idxNota, diff });
+    });
+  });
+  candidatosPorTotal.sort((a, b) => a.diff - b.diff);
+  candidatosPorTotal.forEach(({ idxPedido, idxNota }) => {
+    if (pedidoComMatch[idxPedido].match || restantes[idxNota].usado) return;
+    pedidoComMatch[idxPedido].match = restantes[idxNota];
+    pedidoComMatch[idxPedido].matchPorTotal = true;
+    restantes[idxNota].usado = true;
+  });
+
+  // 4ª tentativa: sobrou exatamente 1 item sem casar de cada lado (pedido e
+  // nota têm a mesma quantidade de itens, os outros N-1 já bateram) — só
+  // pode ser o mesmo item descrito diferente (nome mudou, embalagem mudou,
+  // preço divergiu mais que a tolerância aceita nas tentativas acima). Como
+  // não sobra mais nenhum outro candidato pra confundir, casa por
+  // eliminação e deixa a comparação de qtd/valor apontar a divergência real
+  // — em vez de aparecer como "não encontrado" de um lado e "item não
+  // estava no pedido" do outro, o que esconde que é o mesmo item.
+  const semMatchFinal = pedidoComMatch.filter((pc) => !pc.match);
+  const notaSemUsoFinal = restantes.filter((n) => !n.usado);
+  if (semMatchFinal.length === 1 && notaSemUsoFinal.length === 1) {
+    semMatchFinal[0].match = notaSemUsoFinal[0];
+    semMatchFinal[0].casadoPorEliminacao = true;
+    notaSemUsoFinal[0].usado = true;
+  }
+
+  // 5ª tentativa: o pedido pede uma quantidade fechada de um produto (ex: 12
+  // marcadores) e a nota detalha por variação (cor/modelo) em várias linhas
+  // — cada uma com o MESMO valor unitário, mas nome diferente (ex: "PINCEL
+  // P/RETROPROJETOR 1.0 AZ/PT/VD/VM", 3 de cada). O casamento por preço (2ª
+  // tentativa) já pareou o pedido com UMA dessas linhas; sem agrupar as
+  // demais, elas sobram como "item não estava no pedido" — quando na
+  // verdade é tudo a mesma compra, só detalhada. Só agrupa quando a soma das
+  // quantidades bate exato com o que o pedido pedia (senão pode ser mesmo
+  // produto diferente, tipo reposição parcial futura), e exige preço igual
+  // (não só parecido) pra não juntar itens que só coincidem por acaso.
+  pedidoComMatch.forEach((pc) => {
+    if (!pc.match || pc.matchPorTotal || pc.casadoPorEliminacao) return;
+    const vuPedido = pc.pItem.valor_unitario;
+    const qtdPedido = pc.pItem.quantidade;
+    if (vuPedido == null || qtdPedido == null) return;
+    const qtdJaCasada = pc.match.quantidade || 0;
+    if (Math.abs(qtdJaCasada - qtdPedido) < 0.01) return; // já bate, nada a fazer
+    const variacoes = restantes.filter((n) => !n.usado && n.valor_unitario != null && Math.abs(n.valor_unitario - vuPedido) <= TOLERANCIA_VALOR);
+    if (!variacoes.length) return;
+    const qtdVariacoes = variacoes.reduce((soma, n) => soma + (n.quantidade || 0), 0);
+    if (Math.abs(qtdJaCasada + qtdVariacoes - qtdPedido) < 0.01) {
+      pc.variacoes = variacoes;
+      variacoes.forEach((n) => (n.usado = true));
+    }
+  });
+
+  let divergente = false;
+  const linhas = pedidoComMatch.map(({ pItem, match, matchPorTotal, casadoPorEliminacao, variacoes }) => {
+    // Casado só pelo valor total (embalagem diferente) — quantidade e valor
+    // unitário não vão bater mesmo, e tudo bem; o que importa é o total.
+    if (matchPorTotal) {
+      return {
+        produto: pItem.produto_nome,
+        qtdP: pItem.quantidade,
+        qtdN: match.quantidade,
+        vuP: pItem.valor_unitario,
+        vuN: match.valor_unitario,
+        match: true,
+        divergente: false,
+        obs: "embalagem diferente, mesmo valor total",
+      };
+    }
+    const qtdNEfetiva = variacoes ? (match.quantidade || 0) + variacoes.reduce((soma, n) => soma + (n.quantidade || 0), 0) : match ? match.quantidade : null;
+    const qtdOk = match && pItem.quantidade != null && qtdNEfetiva != null ? Math.abs(pItem.quantidade - qtdNEfetiva) < 0.01 : null;
+    let vuOk =
+      match && pItem.valor_unitario != null && match.valor_unitario != null
+        ? Math.abs(pItem.valor_unitario - match.valor_unitario) <= TOLERANCIA_VALOR
+        : null;
+    // Nota com desconto NA LINHA do item (coluna "V. DESC."): o valor unitário
+    // impresso é o de tabela (bruto), mas o que de fato se paga é o líquido
+    // (valor total da linha / quantidade) — se o líquido bate com o pedido, não
+    // é divergência (ex: S50669, unit. 1.591,09 - desc. 111,09 = 1.480,00).
+    let obsDescontoLinha;
+    if (vuOk === false && match.valor_total != null && match.quantidade > 0 && pItem.valor_unitario != null) {
+      const liquido = match.valor_total / match.quantidade;
+      if (Math.abs(pItem.valor_unitario - liquido) <= TOLERANCIA_VALOR) {
+        vuOk = true;
+        obsDescontoLinha = "nota traz desconto na linha — valor líquido confere com o pedido";
+      }
+    }
+
+    const linhaDivergente = !match || qtdOk === false || vuOk === false;
+    if (linhaDivergente) divergente = true;
+
+    const embalagem = match && match.__embalagemOriginal;
+    return {
+      produto: pItem.produto_nome,
+      qtdP: pItem.quantidade,
+      qtdN: qtdNEfetiva,
+      vuP: pItem.valor_unitario,
+      vuN: match ? match.valor_unitario : null,
+      match: !!match,
+      divergente: linhaDivergente,
+      obs: embalagem
+        ? `nota: ${embalagem.quantidade} ${embalagem.unidade} (1 ${embalagem.unidade} = ${embalagem.fator} un)`
+        : casadoPorEliminacao
+          ? `nota: "${match.produto_nome}" — nome/embalagem diferente, casado por eliminação (único item que sobrou dos dois lados)`
+          : variacoes
+            ? `nota dividiu em variações do mesmo preço: ${[match, ...variacoes].map((n) => `"${n.produto_nome}" (${n.quantidade})`).join(", ")}`
+            : obsDescontoLinha,
+    };
+  });
+
+  // Preços CRUZADOS entre duas linhas: o preço que o pedido tem num item
+  // aparece na nota no OUTRO item e vice-versa, com as mesmas quantidades e o
+  // mesmo total. Quase sempre é a IA que trocou duas linhas ao ler a foto (ex:
+  // nota fotografada de cabeça pra baixo — achado no pedido 828425), não o
+  // fornecedor. Não conta como divergência, mas fica avisado na linha pra
+  // conferir na foto.
+  const candidatasCruzadas = linhas
+    .map((l, idx) => ({ l, idx }))
+    .filter(({ l }) => l.match && l.divergente && l.vuP != null && l.vuN != null && l.qtdP != null && l.qtdP === l.qtdN && Math.abs(l.vuP - l.vuN) > TOLERANCIA_VALOR);
+  for (let a = 0; a < candidatasCruzadas.length; a++) {
+    for (let b = a + 1; b < candidatasCruzadas.length; b++) {
+      const A = candidatasCruzadas[a].l;
+      const B = candidatasCruzadas[b].l;
+      if (A.cruzadoCom || B.cruzadoCom) continue;
+      const cruza = Math.abs(A.vuP - B.vuN) <= TOLERANCIA_VALOR && Math.abs(B.vuP - A.vuN) <= TOLERANCIA_VALOR;
+      const totalPedido = A.qtdP * A.vuP + B.qtdP * B.vuP;
+      const totalNota = A.qtdN * A.vuN + B.qtdN * B.vuN;
+      if (cruza && Math.abs(totalPedido - totalNota) <= TOLERANCIA_VALOR * 2) {
+        A.cruzadoCom = B.produto;
+        B.cruzadoCom = A.produto;
+      }
+    }
+  }
+  linhas.forEach((l) => {
+    if (!l.cruzadoCom) return;
+    l.divergente = false;
+    l.obs = `preços cruzados com "${l.cruzadoCom}" (total igual) — provável troca de linhas na leitura da nota; confira na foto`;
+  });
+  divergente = linhas.some((l) => l.divergente);
+
+  // Item que sobrou na NOTA sem casar com nenhum item do pedido — sem isso,
+  // ele simplesmente desaparecia da comparação (nem aparecia na tabela, nem
+  // contava como divergência), mesmo sendo um item a mais que ninguém pediu.
+  restantes
+    .filter((n) => !n.usado)
+    .forEach((n) => {
+      divergente = true;
+      linhas.push({
+        produto: n.produto_nome,
+        qtdP: null,
+        qtdN: n.quantidade,
+        vuP: null,
+        vuN: n.valor_unitario,
+        match: true,
+        divergente: true,
+        obs: "item não estava no pedido",
+      });
+    });
+
+  return { temDados: true, divergente, linhas };
+}
+
+function renderTabelaItens(resultado) {
+  if (!resultado.temDados) return "";
+  const linhas = resultado.linhas
+    .map(
+      (l) => `
+    <tr class="${l.divergente ? "linha-divergente" : ""}">
+      <td>${escapeHtml(l.produto)}${l.obs ? `<div class="hint">📦 ${escapeHtml(l.obs)}</div>` : ""}</td>
+      <td>${l.qtdP ?? "—"}</td>
+      <td>${l.match ? l.qtdN ?? "—" : "não encontrado"}</td>
+      <td>${formatarMoeda(l.vuP)}</td>
+      <td>${l.match ? formatarMoeda(l.vuN) : "—"}</td>
+      <td>${l.divergente ? "⚠️" : "✅"}</td>
+    </tr>`
+    )
+    .join("");
+  return `
+    <table class="tabela-itens">
+      <thead><tr><th>Produto</th><th>Qtd. pedido</th><th>Qtd. nota</th><th>Vl. Unit. pedido</th><th>Vl. Unit. nota</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>`;
+}
+
+document.getElementById("nota-valor").addEventListener("input", atualizarConferencia);
+document.getElementById("nota-cnpj").addEventListener("input", atualizarConferencia);
+document.getElementById("nota-parcial").addEventListener("change", atualizarConferencia);
+
+function calcularDivergencias() {
+  const pedido = (paradaEmEdicao && paradaEmEdicao.rl_pedidos) || {};
+  const notaValor = document.getElementById("nota-valor").value;
+  const notaCnpj = document.getElementById("nota-cnpj").value;
+
+  let msgValor, divergValor;
+  if (pedido.valor_total == null) {
+    msgValor = "Valor esperado não informado no pedido — não é possível conferir.";
+    divergValor = false;
+  } else if (!notaValor) {
+    msgValor = "Informe o valor da nota pra conferir.";
+    divergValor = false;
+  } else if (Math.abs(Number(pedido.valor_total) - Number(notaValor)) <= TOLERANCIA_VALOR) {
+    msgValor = `✅ Valor confere (${formatarMoeda(notaValor)}).`;
+    divergValor = false;
+  } else {
+    msgValor = `⚠️ Divergência de valor: pedido ${formatarMoeda(pedido.valor_total)} vs nota ${formatarMoeda(notaValor)}.`;
+    divergValor = true;
+  }
+
+  const cnpjEsperado = apenasDigitos(pedido.empresa_cnpj);
+  const cnpjNota = apenasDigitos(notaCnpj);
+  let msgCnpj, divergCnpj;
+  if (!cnpjEsperado) {
+    msgCnpj = "CNPJ da empresa compradora não informado no pedido — não é possível conferir.";
+    divergCnpj = false;
+  } else if (!cnpjNota) {
+    msgCnpj = "Informe o CNPJ da nota pra conferir.";
+    divergCnpj = false;
+  } else if (cnpjEsperado === cnpjNota) {
+    msgCnpj = "✅ CNPJ confere.";
+    divergCnpj = false;
+  } else {
+    msgCnpj = `⚠️ CNPJ diferente: pedido esperava ${escapeHtml(pedido.empresa_cnpj)} (${escapeHtml(
+      pedido.empresa_nome || ""
+    )}), nota informa ${escapeHtml(notaCnpj)}.`;
+    divergCnpj = true;
+  }
+
+  return { msgValor, divergValor, msgCnpj, divergCnpj };
+}
+
+// Nome de empresa varia de documento pra documento no sufixo jurídico (ex:
+// "GRAFICA FORMOSA LTDA" no pedido vs "GRAFICA FORMOSA EIRELI ME" na nota,
+// mesma empresa) — remove esses sufixos antes de comparar pra não acusar
+// divergência falsa por causa só disso.
+function normalizarEmpresa(nome) {
+  return normalizarProduto(nome)
+    .replace(/\b(ltda|me|epp|eireli|s\/?a|mei)\b\.?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Palavras comuns demais pra usar como "assinatura" de fornecedor — duas
+// empresas diferentes que só têm ISSO em comum não devem ser consideradas a
+// mesma (ex: duas distribuidoras quaisquer não são a mesma loja).
+const PALAVRAS_GENERICAS_FORNECEDOR = new Set([
+  "comercio", "comercial", "distribuidora", "distribuicao", "industria", "industrial",
+  "solucoes", "produtos", "materiais", "material", "agricola", "agricolas", "brasil",
+  "nacional", "regional", "importacao", "exportacao", "representacao", "logistica",
+  "servicos", "tecnologia", "tecnologias", "alimentos", "atacadista", "atacado",
+  "construcao", "construtora", "transportes", "participacoes", "holding", "grupo",
+  "quimica", "quimicos", "equipamentos", "maquinas", "pecas", "acessorios",
+]);
+
+function palavrasSignificativas(nome) {
+  return normalizarEmpresa(nome)
+    .split(" ")
+    .filter((p) => p.length >= 4 && !PALAVRAS_GENERICAS_FORNECEDOR.has(p));
+}
+
+// Nem sempre o nome bate inteiro de um documento pro outro (ex: a nota vem
+// no nome da fábrica/matriz — "SUINOCOP SUINOCULTURA COPACABANA LTDA" — e o
+// pedido no nome comercial — "SUINOCOP ALIMENTOS LTDA"): além de "um nome
+// conter o outro", considera parecido também quando os dois compartilham
+// alguma palavra realmente distintiva (não genérica) em comum.
+function fornecedoresParecidos(nomeA, nomeB) {
+  const a = normalizarEmpresa(nomeA || "");
+  const b = normalizarEmpresa(nomeB || "");
+  if (!a || !b) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  const palavrasA = new Set(palavrasSignificativas(nomeA));
+  return palavrasSignificativas(nomeB).some((p) => palavrasA.has(p));
+}
+
+// Nota de serviço (NFS-e) não tem tabela de itens de verdade pra comparar —
+// em vez disso, confere se a empresa prestadora bate com o fornecedor
+// registrado no pedido (comparação de nome, não tem CNPJ do fornecedor
+// guardado no pedido pra comparar dígito a dígito).
+function compararPrestador(pedido, emitenteNome) {
+  const esperado = normalizarEmpresa(pedido.fornecedor_nome);
+  if (!esperado) return { msgPrestador: "Fornecedor não informado no pedido — não é possível conferir.", divergPrestador: false };
+  if (!emitenteNome) return { msgPrestador: "Não foi possível ler a prestadora na nota.", divergPrestador: false };
+  const lido = normalizarEmpresa(emitenteNome);
+  const bate = lido === esperado || lido.includes(esperado) || esperado.includes(lido);
+  return bate
+    ? { msgPrestador: `✅ Prestadora confere (${escapeHtml(emitenteNome)}).`, divergPrestador: false }
+    : {
+        msgPrestador: `⚠️ Prestadora diferente: pedido esperava ${escapeHtml(pedido.fornecedor_nome)}, nota informa ${escapeHtml(emitenteNome)}.`,
+        divergPrestador: true,
+      };
+}
+
+const TOLERANCIA_DIAS_PAGAMENTO = 5; // absorve vencimento caindo em fim de semana/feriado
+
+// Confere se o prazo de pagamento que saiu na nota bate com a condição
+// combinada no pedido (código -> dias médios, tabela cs_condicoes_pagamento
+// compartilhada com o Avanço para Contratos). Quando há mais de uma parcela,
+// usa a média ponderada pelo valor de cada uma, do mesmo jeito que os dias
+// da própria tabela foram calculados.
+function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
+  const codigo = pedido.condicao_pagamento_codigo;
+  if (!codigo) return { msgCondicao: null, divergCondicao: false };
+  // Se a tabela nunca carregou de verdade (conexão ruim na hora que o app
+  // abriu), tenta buscar de novo em segundo plano — assim a PRÓXIMA
+  // conferência já vem certa, sem precisar recarregar a página inteira.
+  if (condicoesPagamentoCache.size === 0) loadCondicoesPagamento();
+  let diasEsperados = condicoesPagamentoCache.get(normalizarCodigoCondicao(codigo));
+  if (diasEsperados == null) diasEsperados = diasEsperadosDeTexto(codigo);
+  if (diasEsperados == null) {
+    return {
+      msgCondicao: `Condição de pagamento "${escapeHtml(codigo)}" não reconhecida (não está na tabela de códigos nem parece uma lista de dias) — não é possível conferir.`,
+      divergCondicao: false,
+    };
+  }
+  if (!dataEmissao || !Array.isArray(parcelas) || !parcelas.length) {
+    return { msgCondicao: "Não foi possível ler as datas de pagamento da nota — não é possível conferir o prazo.", divergCondicao: false };
+  }
+  const emissao = new Date(dataEmissao + "T00:00:00");
+  const comValor = parcelas.every((p) => p.valor != null);
+  const pesoTotal = comValor ? parcelas.reduce((s, p) => s + p.valor, 0) : parcelas.length;
+  const diasNota =
+    parcelas.reduce((soma, p) => {
+      const venc = new Date(p.data_vencimento + "T00:00:00");
+      const dias = (venc - emissao) / (1000 * 60 * 60 * 24);
+      const peso = comValor ? p.valor : 1;
+      return soma + dias * peso;
+    }, 0) / pesoTotal;
+  // Só é problema quando a nota dá MENOS prazo do que o combinado (a empresa
+  // acaba tendo que pagar mais cedo do que devia). Prazo maior é bom pra nós
+  // — mais tempo pra pagar — então nunca conta como divergência.
+  const diferenca = diasEsperados - diasNota;
+  return diferenca <= TOLERANCIA_DIAS_PAGAMENTO
+    ? { msgCondicao: `✅ Prazo de pagamento confere (${Math.round(diasNota)} dias, condição ${escapeHtml(codigo)}).`, divergCondicao: false }
+    : {
+        msgCondicao: `⚠️ Prazo de pagamento menor que o esperado: condição ${escapeHtml(codigo)} do pedido espera ~${Math.round(
+          diasEsperados
+        )} dias, nota saiu com ${Math.round(diasNota)} dias.`,
+        divergCondicao: true,
+      };
+}
+
+function atualizarConferencia() {
+  if (!paradaEmEdicao) return;
+  const box = document.getElementById("conferencia-resultado");
+
+  // Entrega parcial nunca vai bater com o total do pedido — não faz sentido
+  // (nem é justo com o motorista) rodar a conferência nesse caso. A
+  // conferência de verdade só acontece quando a entrega for marcada completa.
+  if (document.getElementById("nota-parcial").checked) {
+    box.classList.remove("hidden", "warn");
+    box.classList.add("ok");
+    box.innerHTML = `<div>📦 Entrega parcial — a conferência de valor/itens só é feita quando o pedido for concluído por completo.</div>`;
+    return;
+  }
+
+  const { msgValor, divergValor, msgCnpj, divergCnpj } = calcularDivergencias();
+  const pedido = paradaEmEdicao.rl_pedidos || {};
+
+  const { msgCondicao, divergCondicao } = compararCondicaoPagamento(pedido, notaDataEmissaoExtraida, notaParcelasExtraidas);
+  const msgCondicaoHtml = msgCondicao ? `<div>${msgCondicao}</div>` : "";
+
+  // Nota de serviço (NFS-e) não tem itens de verdade pra comparar — confere
+  // só tomador (CNPJ, já incluso acima), prestadora e valor total.
+  if (notaTipoDocumento === "servico") {
+    const { msgPrestador, divergPrestador } = compararPrestador(pedido, notaEmitenteExtraido);
+    box.classList.remove("hidden", "ok", "warn");
+    box.classList.add(divergValor || divergCnpj || divergPrestador || divergCondicao ? "warn" : "ok");
+    box.innerHTML = `<div>📄 Nota de serviço.</div><div>${msgValor}</div><div>${msgCnpj}</div><div>${msgPrestador}</div>${msgCondicaoHtml}`;
+    return;
+  }
+
+  const resultadoItens = compararItens(pedido.itens, notaItensExtraidos);
+
+  box.classList.remove("hidden", "ok", "warn");
+  box.classList.add(divergValor || divergCnpj || resultadoItens.divergente || divergCondicao ? "warn" : "ok");
+  let html = `<div>${msgValor}</div><div>${msgCnpj}</div>${msgCondicaoHtml}`;
+  if (resultadoItens.temDados) {
+    html += `<div>${resultadoItens.divergente ? "⚠️ Divergência nos itens (veja a tabela abaixo)." : "✅ Itens conferem."}</div>`;
+    html += renderTabelaItens(resultadoItens);
+  } else if (!pedido.itens) {
+    html += `<div class="muted">Pedido não tem lista de itens registrada — não é possível conferir item a item.</div>`;
+  }
+  box.innerHTML = html;
+}
+
+document.getElementById("form-modal-nota").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!paradaEmEdicao) return;
+  const rotaId = paradaEmEdicao.rota_id;
+  const feedback = document.getElementById("modal-feedback");
+  const fotosNota = notaFotos.map((f) => f.file);
+  if (!fotosNota.length && !notaArquivoUrlPreLido) {
+    feedback.textContent = "Anexe a foto da nota fiscal.";
+    feedback.className = "feedback error";
+    return;
+  }
+
+  const btnConcluir = document.getElementById("btn-concluir-parada");
+  // Sem isso, uma nota que não foi lida (foto ruim, motorista esqueceu de
+  // esperar a leitura, ou fotografou o documento errado) ia direto pro banco
+  // em branco, sem ninguém perceber — só aparecia depois, no Histórico,
+  // como "❓ Nota não lida". Bloqueia a primeira tentativa e exige confirmar
+  // de novo, igual ao padrão de "clique duas vezes" já usado no resto do app.
+  const entregaParcialAgora = document.getElementById("nota-parcial").checked;
+  const nadaLido =
+    !entregaParcialAgora &&
+    !document.getElementById("nota-valor").value &&
+    !document.getElementById("nota-cnpj").value.trim() &&
+    !notaEmitenteExtraido &&
+    (!notaItensExtraidos || !notaItensExtraidos.length);
+  if (nadaLido && !btnConcluir.dataset.confirmandoSemDados) {
+    btnConcluir.dataset.confirmandoSemDados = "1";
+    btnConcluir.textContent = "Nota não lida — clique de novo pra enviar assim mesmo";
+    feedback.textContent = "⚠️ Não conseguimos ler nada da nota (valor, CNPJ e itens em branco). Confira se a foto está nítida e tente ler de novo, ou clique no botão acima pra enviar mesmo assim.";
+    feedback.className = "feedback error";
+    setTimeout(() => {
+      delete btnConcluir.dataset.confirmandoSemDados;
+      btnConcluir.textContent = "Concluir parada";
+    }, 8000);
+    return;
+  }
+  delete btnConcluir.dataset.confirmandoSemDados;
+  btnConcluir.textContent = "Concluir parada";
+
+  feedback.textContent = "Salvando...";
+  feedback.className = "feedback";
+  try {
+    const urlsNota = [];
+    for (const foto of fotosNota) urlsNota.push((await uploadArquivo(foto, "rl_notas")).url);
+    const url = urlsNota[0] || notaArquivoUrlPreLido;
+    const urlsExtras = urlsNota.slice(1);
+    const entregaParcial = document.getElementById("nota-parcial").checked;
+    const notaValor = document.getElementById("nota-valor").value;
+    const notaCnpj = document.getElementById("nota-cnpj").value.trim();
+    const notaNumero = document.getElementById("nota-numero").value.trim();
+
+    // Entrega parcial não passa pela conferência (o valor/itens dessa nota
+    // não deve mesmo bater com o total do pedido) e o pedido volta pra fila
+    // de disponíveis pra uma próxima rota buscar o restante.
+    let divergValor = false;
+    let divergCnpj = false;
+    let itensDivergentes = false;
+    let divergCondicao = false;
+    if (!entregaParcial) {
+      ({ divergValor, divergCnpj } = calcularDivergencias());
+      // Nota de serviço não tem itens de verdade pra comparar — a divergência
+      // de "itens" nesse caso vira divergência de prestadora (fornecedor).
+      if (notaTipoDocumento === "servico") {
+        itensDivergentes = compararPrestador(paradaEmEdicao.rl_pedidos || {}, notaEmitenteExtraido).divergPrestador;
+      } else {
+        itensDivergentes = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos).divergente;
+      }
+      divergCondicao = compararCondicaoPagamento(
+        paradaEmEdicao.rl_pedidos || {},
+        notaDataEmissaoExtraida,
+        notaParcelasExtraidas
+      ).divergCondicao;
+    }
+
+    const dadosConclusao = {
+      status: "concluida",
+      nota_arquivo_url: url,
+      nota_numero: notaNumero || null,
+      nota_valor_total: notaValor ? Number(notaValor) : null,
+      nota_cnpj: notaCnpj || null,
+      nota_itens: notaItensExtraidos,
+      nota_tipo_documento: notaTipoDocumento,
+      nota_emitente_nome: notaEmitenteExtraido,
+      nota_data_emissao: notaDataEmissaoExtraida,
+      nota_parcelas: notaParcelasExtraidas,
+      entrega_parcial: entregaParcial,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: divergCnpj,
+      divergencia_itens: itensDivergentes,
+      divergencia_condicao_pagamento: divergCondicao,
+      concluido_em: new Date().toISOString(),
+    };
+    // Só manda a coluna quando de fato há fotos extras — assim nota de uma
+    // foto só (o caso comum) continua funcionando mesmo antes da migração
+    // que cria a coluna nota_arquivos_extras.
+    if (urlsExtras.length) dadosConclusao.nota_arquivos_extras = urlsExtras;
+
+    const { error: errParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaEmEdicao.id);
+    if (errParada) throw errParada;
+
+    const { error: errPedido } = await db
+      .from("rl_pedidos")
+      .update({ status: entregaParcial ? "pendente" : "concluido" })
+      .eq("id", paradaEmEdicao.pedido_id);
+    if (errPedido) throw errPedido;
+
+    // Nota que cobre mais de um pedido junto (ver iniciarConferenciaCif) —
+    // aplica a MESMA conferência e o mesmo resultado nas outras paradas, pra
+    // cada pedido real ficar com seu próprio registro completo no Histórico.
+    const paradasIrmas = paradaEmEdicao._paradasIrmas || [];
+    for (const irma of paradasIrmas) {
+      await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", irma.paradaId);
+      await db.from("rl_pedidos").update({ status: entregaParcial ? "pendente" : "concluido" }).eq("id", irma.pedidoId);
+    }
+
+    // Usa a rota DESSA parada (não a "rota atual" global do motorista) — o
+    // mesmo modal também é reaproveitado pra conferência CIF da portaria, que
+    // roda numa rota "virtual" própria, diferente da que o motorista tem
+    // aberta no momento (se tiver).
+    const { data: pendentes } = await db.from("rl_rota_paradas").select("id").eq("rota_id", rotaId).eq("status", "pendente");
+    if (!pendentes || !pendentes.length) {
+      await db.from("rl_rotas").update({ status: "concluida" }).eq("id", rotaId);
+    }
+
+    // Alerta sonoro (voz do navegador, sem custo) na hora que uma divergência
+    // é encontrada — pra quem estiver por perto ouvir na hora, sem precisar
+    // ficar checando o Histórico depois.
+    const pedidoConcluido = paradaEmEdicao.rl_pedidos || {};
+    if (!entregaParcial && (divergValor || divergCnpj || itensDivergentes || divergCondicao)) {
+      falarAlerta(
+        `Atenção! Divergência encontrada. Comprador ${pedidoConcluido.comprador_nome || "não informado"}, ` +
+          `pedido ${pedidoConcluido.numero_pedido || "sem número"}.`
+      );
+    }
+
+    document.getElementById("modal-overlay").classList.add("hidden");
+    paradaEmEdicao = null;
+    // Atualiza o Histórico/Recebimento CIF, caso a conferência tenha vindo do
+    // fluxo da portaria/almoxarifado, não do motorista — o pedido que acabou
+    // de ser conferido some da lista de "liberados aguardando conferência".
+    carregarAvisosLiberadosPendentesConferencia();
+    await Promise.all([
+      loadRotaAtual(),
+      entregaParcial ? loadDisponiveis() : Promise.resolve(),
+      document.getElementById("tab-historico").classList.contains("active") ? loadHistorico() : Promise.resolve(),
+      document.getElementById("tab-recebimento-cif").classList.contains("active") ? carregarPedidosCifPendentes() : Promise.resolve(),
+    ]);
+    renderAvisosPortariaPendentes();
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+  }
+});
+
+// ---------- configurações ----------
+document.getElementById("form-empresa").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById("empresa-nome").value.trim();
+  const cnpj = document.getElementById("empresa-cnpj").value.trim();
+  if (!nome) return;
+  const { error } = await db.from("rl_empresas").insert({ nome, cnpj: cnpj || null });
+  if (error) return mostrarAviso("Erro ao cadastrar: " + error.message);
+  document.getElementById("form-empresa").reset();
+  await loadEmpresas();
+  renderCadastros();
+});
+
+// Cadastro direto de almoxarife pela aba Configurações — antes só dava pra
+// criar um novo clicando em "+ Novo" ao lado do seletor "Meu nome" (em
+// Recebimento CIF/Comprador), o que não é um lugar óbvio pra administrar
+// usuários. Empresa/setor continuam se ajustando depois, pelos seletores já
+// existentes na própria lista abaixo.
+document.getElementById("form-almoxarife").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById("almoxarife-nome-novo").value.trim();
+  if (!nome) return;
+  const existente = almoxarifesCache.find((a) => a.nome.toLowerCase() === nome.toLowerCase());
+  if (existente) {
+    mostrarAviso(`"${nome}" já está cadastrado.`);
+    return;
+  }
+  const { error } = await db.from("rl_almoxarifes").insert({ nome });
+  if (error) return mostrarAviso("Erro ao cadastrar: " + error.message);
+  document.getElementById("form-almoxarife").reset();
+  await loadAlmoxarifes();
+  renderCadastros();
+});
+
+function renderCadastros() {
+  const listaEmpresas = document.getElementById("lista-empresas");
+  listaEmpresas.innerHTML = empresasCache.length
+    ? empresasCache
+        .map(
+          (emp) => `
+      <li class="${emp.ativo ? "" : "inativo"}">
+        <span>${escapeHtml(emp.nome)}${emp.cnpj ? ` <span class="cadastro-meta">— ${escapeHtml(emp.cnpj)}</span>` : ""}</span>
+        <button class="link-btn" data-toggle-empresa="${emp.id}" data-ativo="${emp.ativo}" type="button">${emp.ativo ? "Desativar" : "Ativar"}</button>
+      </li>`
+        )
+        .join("")
+    : `<li class="empty-state">Nenhuma empresa cadastrada.</li>`;
+
+  const listaCompradores = document.getElementById("lista-compradores-config");
+  listaCompradores.innerHTML = compradoresCache.length
+    ? compradoresCache
+        .map(
+          (c) => `
+      <li class="${c.ativo ? "" : "inativo"}">
+        <span>${escapeHtml(c.nome)}</span>
+        <input type="tel" inputmode="tel" class="input-telefone" data-telefone-comprador="${c.id}" placeholder="WhatsApp (opcional)" value="${escapeHtml(c.telefone || "")}">
+        <button class="link-btn" data-toggle-comprador="${c.id}" data-ativo="${c.ativo}" type="button">${c.ativo ? "Desativar" : "Ativar"}</button>
+      </li>`
+        )
+        .join("")
+    : `<li class="empty-state">Nenhum comprador cadastrado.</li>`;
+
+  const listaMotoristas = document.getElementById("lista-motoristas-config");
+  listaMotoristas.innerHTML = motoristasCache.length
+    ? motoristasCache
+        .map(
+          (m) => `
+      <li class="${m.ativo ? "" : "inativo"}">
+        <span>${escapeHtml(m.nome)}</span>
+        <button class="link-btn" data-toggle-motorista="${m.id}" data-ativo="${m.ativo}" type="button">${m.ativo ? "Desativar" : "Ativar"}</button>
+      </li>`
+        )
+        .join("")
+    : `<li class="empty-state">Nenhum motorista cadastrado.</li>`;
+
+  const listaAlmoxarifes = document.getElementById("lista-almoxarifes-config");
+  listaAlmoxarifes.innerHTML = almoxarifesCache.length
+    ? almoxarifesCache
+        .map((a) => {
+          const ehWehrmann = a.empresa_nome === "AGRICOLA WEHRMANN LTDA";
+          return `
+      <li class="${a.ativo ? "" : "inativo"}">
+        <span>${escapeHtml(a.nome)}</span>
+        <select class="select-empresa-almoxarife" data-almoxarife-id="${a.id}">
+          <option value="">Todas as empresas</option>
+          ${empresasCache
+            .filter((e) => e.ativo)
+            .map((e) => `<option value="${escapeHtml(e.nome)}" ${a.empresa_nome === e.nome ? "selected" : ""}>${escapeHtml(e.nome)}</option>`)
+            .join("")}
+        </select>
+        <select class="select-setor-almoxarife${ehWehrmann ? "" : " hidden"}" data-almoxarife-id="${a.id}">
+          <option value="">Todos os setores</option>
+          <option value="Uso e Consumo" ${a.setor === "Uso e Consumo" ? "selected" : ""}>Uso e Consumo</option>
+          <option value="Insumos" ${a.setor === "Insumos" ? "selected" : ""}>Insumos</option>
+          <option value="Cantina" ${a.setor === "Cantina" ? "selected" : ""}>Cantina</option>
+        </select>
+        <button class="link-btn" data-toggle-almoxarife="${a.id}" data-ativo="${a.ativo}" type="button">${a.ativo ? "Desativar" : "Ativar"}</button>
+      </li>`;
+        })
+        .join("")
+    : `<li class="empty-state">Nenhum almoxarife cadastrado.</li>`;
+}
+
+document.getElementById("tab-config").addEventListener("change", async (e) => {
+  const selEmpresa = e.target.closest("select.select-empresa-almoxarife");
+  if (selEmpresa) {
+    const ehWehrmann = selEmpresa.value === "AGRICOLA WEHRMANN LTDA";
+    const selSetor = selEmpresa.closest("li").querySelector(".select-setor-almoxarife");
+    selSetor.classList.toggle("hidden", !ehWehrmann);
+    if (!ehWehrmann) selSetor.value = "";
+    await db
+      .from("rl_almoxarifes")
+      .update({ empresa_nome: selEmpresa.value || null, setor: ehWehrmann ? selSetor.value || null : null })
+      .eq("id", selEmpresa.dataset.almoxarifeId);
+    await loadAlmoxarifes();
+    return;
+  }
+  const selSetor = e.target.closest("select.select-setor-almoxarife");
+  if (selSetor) {
+    await db.from("rl_almoxarifes").update({ setor: selSetor.value || null }).eq("id", selSetor.dataset.almoxarifeId);
+    await loadAlmoxarifes();
+  }
+});
+
+document.getElementById("tab-config").addEventListener("click", async (e) => {
+  const btnEmp = e.target.closest("button[data-toggle-empresa]");
+  const btnComp = e.target.closest("button[data-toggle-comprador]");
+  const btnMot = e.target.closest("button[data-toggle-motorista]");
+  const btnAlm = e.target.closest("button[data-toggle-almoxarife]");
+  // Sem isso, QUALQUER clique dentro de Configurações (até só focar o campo
+  // de telefone) redesenhava a lista inteira e destruía o campo, fazendo
+  // parecer que só dava pra digitar segurando o botão do mouse pressionado.
+  if (!btnEmp && !btnComp && !btnMot && !btnAlm) return;
+
+  if (btnEmp) {
+    await db.from("rl_empresas").update({ ativo: btnEmp.dataset.ativo !== "true" }).eq("id", btnEmp.dataset.toggleEmpresa);
+    await loadEmpresas();
+  }
+  if (btnComp) {
+    await db.from("rl_compradores").update({ ativo: btnComp.dataset.ativo !== "true" }).eq("id", btnComp.dataset.toggleComprador);
+    await loadCompradores();
+  }
+  if (btnMot) {
+    await db.from("rl_motoristas").update({ ativo: btnMot.dataset.ativo !== "true" }).eq("id", btnMot.dataset.toggleMotorista);
+    await loadMotoristas();
+  }
+  if (btnAlm) {
+    await db.from("rl_almoxarifes").update({ ativo: btnAlm.dataset.ativo !== "true" }).eq("id", btnAlm.dataset.toggleAlmoxarife);
+    await loadAlmoxarifes();
+  }
+  renderCadastros();
+});
+
+// salva o telefone ao sair do campo (sem botão de salvar separado)
+document.getElementById("tab-config").addEventListener(
+  "blur",
+  async (e) => {
+    const input = e.target.closest("input[data-telefone-comprador]");
+    if (!input) return;
+    const { error } = await db
+      .from("rl_compradores")
+      .update({ telefone: input.value.trim() || null })
+      .eq("id", input.dataset.telefoneComprador);
+    if (error) {
+      mostrarAviso("Erro ao salvar telefone: " + error.message);
+      return;
+    }
+    await loadCompradores();
+    renderCadastros();
+  },
+  true
+);
+
+// ---------- portaria (avisa o almoxarifado que uma entrega chegou) ----------
+// Se a portaria tiver o arquivo da nota em mãos, lê com IA na hora — o
+// almoxarifado reaproveita essa leitura na conferência CIF depois, sem
+// fotografar/gastar outra chamada de IA pro mesmo documento. Guarda o File
+// (não a URL) porque só faz sentido subir pro Storage se o aviso for enviado
+// de verdade.
+let portariaNotaArquivo = null;
+let portariaNotaExtraida = null; // { itens, tipo_documento, emitente_nome, data_emissao, parcelas, valor_total, cnpj, numero }
+let portariaPedidosCandidatos = [];
+
+// Só a AGRICOLA WEHRMANN LTDA tem mais de um almoxarifado (Uso e Consumo /
+// Insumos / Cantina) — o campo "Setor" só aparece quando essa empresa é escolhida.
+document.getElementById("portaria-empresa").addEventListener("change", (e) => {
+  const ehWehrmann = e.target.value === "AGRICOLA WEHRMANN LTDA";
+  document.getElementById("label-portaria-setor").classList.toggle("hidden", !ehWehrmann);
+  if (!ehWehrmann) document.getElementById("portaria-setor").value = "";
+});
+
+function resetPortariaNota() {
+  portariaNotaArquivo = null;
+  portariaNotaExtraida = null;
+  portariaPedidosCandidatos = [];
+  document.getElementById("portaria-nota-arquivo").value = "";
+  document.getElementById("portaria-nota-ia-feedback").textContent = "";
+  document.getElementById("label-portaria-pedido-relacionado").classList.add("hidden");
+  document.getElementById("portaria-pedido-relacionado").innerHTML = "";
+}
+
+document.getElementById("btn-portaria-ler-nota").addEventListener("click", async () => {
+  const input = document.getElementById("portaria-nota-arquivo");
+  const feedback = document.getElementById("portaria-nota-ia-feedback");
+  const file = input.files && input.files[0];
+  if (!file) {
+    feedback.textContent = "Anexe o arquivo da nota primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  feedback.textContent = "Lendo nota com IA...";
+  feedback.className = "feedback";
+  try {
+    const extraido = await lerComIA(file, "nota");
+    portariaNotaArquivo = file;
+    portariaNotaExtraida = {
+      itens: Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null,
+      tipo_documento: extraido.tipo_documento || null,
+      emitente_nome: extraido.emitente_nome || null,
+      data_emissao: extraido.data_emissao || null,
+      parcelas: Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null,
+      valor_total: extraido.valor_total != null ? extraido.valor_total : null,
+      cnpj: extraido.destinatario_cnpj || null,
+      numero: extraido.numero_nota || null,
+    };
+
+    if (extraido.emitente_nome && !document.getElementById("portaria-fornecedor").value.trim()) {
+      document.getElementById("portaria-fornecedor").value = extraido.emitente_nome;
+    }
+    // Número do pedido que a própria nota cita — preenche o campo "Nº do
+    // pedido" (o almoxarifado usa ele depois pra sugerir o pedido certo).
+    const pedidoCitado = (extraido.pedido_referenciado || "").trim();
+    if (pedidoCitado && !document.getElementById("portaria-pedido-numero").value.trim()) {
+      document.getElementById("portaria-pedido-numero").value = pedidoCitado;
+    }
+
+    // Sugere os pedidos CIF pendentes do mesmo fornecedor (por nome — a nota
+    // não traz o CNPJ de quem emite, só de quem recebe) e da mesma empresa,
+    // se a portaria já tiver escolhido uma — ajuda a desambiguar quando mais
+    // de uma empresa do grupo compra do mesmo fornecedor.
+    const empresaAlvo = document.getElementById("portaria-empresa").value;
+    let queryCandidatos = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false);
+    if (empresaAlvo) queryCandidatos = queryCandidatos.eq("empresa_nome", empresaAlvo);
+    const { data } = await comTimeout(queryCandidatos);
+    // Também entra quem a nota cita pelo número, mesmo que o nome do
+    // fornecedor no pedido seja bem diferente do da nota.
+    const citadosNaNota = new Set(numerosPedidoCitados(extraido.pedido_referenciado));
+    portariaPedidosCandidatos = (data || []).filter(
+      (p) =>
+        (extraido.emitente_nome && fornecedoresParecidos(extraido.emitente_nome, p.fornecedor_nome)) ||
+        citadosNaNota.has(normalizarNumeroPedido(p.numero_pedido))
+    );
+
+    const selPedido = document.getElementById("portaria-pedido-relacionado");
+    const labelPedido = document.getElementById("label-portaria-pedido-relacionado");
+    if (portariaPedidosCandidatos.length) {
+      // Pré-marca o(s) pedido(s) que a própria nota cita, se bater com algum.
+      const citados = new Set(numerosPedidoCitados(extraido.pedido_referenciado));
+      const jaMarcados = new Set(
+        portariaPedidosCandidatos.filter((p) => citados.has(normalizarNumeroPedido(p.numero_pedido))).map((p) => p.id)
+      );
+      selPedido.innerHTML = portariaPedidosCandidatos
+        .map(
+          (p) =>
+            `<option value="${p.id}"${jaMarcados.has(p.id) ? " selected" : ""}>Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${formatarMoeda(
+              p.valor_total
+            )}${jaMarcados.has(p.id) ? " (citado na nota)" : ""}</option>`
+        )
+        .join("");
+      labelPedido.classList.remove("hidden");
+      feedback.textContent = jaMarcados.size
+        ? `Nota lida! Ela cita o pedido ${extraido.pedido_referenciado} — já deixei marcado abaixo (confira).`
+        : `Nota lida! Encontramos ${portariaPedidosCandidatos.length} pedido(s) pendente(s) de "${extraido.emitente_nome}" — marque qual(is) é(são) esse(s) abaixo (a nota pode cobrir mais de um).`;
+    } else {
+      labelPedido.classList.add("hidden");
+      feedback.textContent = `Nota lida! Não achamos pedido CIF pendente de "${extraido.emitente_nome || "fornecedor não identificado"}" — o almoxarifado escolhe manualmente depois.`;
+    }
+    feedback.className = "feedback success";
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+  }
+});
+
+document.getElementById("btn-avisar-portaria").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-avisar-portaria");
+  const empresa = document.getElementById("portaria-empresa").value;
+  const setor = document.getElementById("portaria-setor").value;
+  const cnpj = document.getElementById("portaria-cnpj").value.trim();
+  const fornecedor = document.getElementById("portaria-fornecedor").value.trim();
+  const pedidoNumero = document.getElementById("portaria-pedido-numero").value.trim();
+  const mensagem = document.getElementById("portaria-mensagem").value.trim();
+  const pedidoRelacionadoIds = Array.from(document.getElementById("portaria-pedido-relacionado").selectedOptions).map((o) => o.value);
+  if (!empresa) {
+    mostrarAviso("Selecione a empresa antes de avisar a chegada.");
+    return;
+  }
+  if (empresa === "AGRICOLA WEHRMANN LTDA" && !setor) {
+    mostrarAviso("Selecione o setor (Uso e Consumo, Insumos ou Cantina) antes de avisar a chegada.");
+    return;
+  }
+  if (!cnpj && !fornecedor && !pedidoNumero) {
+    mostrarAviso("Informe pelo menos o CNPJ, o fornecedor ou o número do pedido.");
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  try {
+    let notaArquivoUrl = null;
+    if (portariaNotaArquivo) {
+      const { url } = await uploadArquivo(portariaNotaArquivo, "rl_notas");
+      notaArquivoUrl = url;
+    }
+    const nota = portariaNotaExtraida;
+    const { error } = await db.from("rl_avisos_portaria").insert({
+      empresa_nome: empresa || null,
+      setor: setor || null,
+      fornecedor_cnpj: cnpj || null,
+      fornecedor_nome: fornecedor || null,
+      pedido_numero: pedidoNumero || null,
+      mensagem: mensagem || null,
+      pedido_ids: pedidoRelacionadoIds.length ? pedidoRelacionadoIds : null,
+      nota_arquivo_url: notaArquivoUrl,
+      nota_numero: nota ? nota.numero : null,
+      nota_valor_total: nota ? nota.valor_total : null,
+      nota_cnpj: nota ? nota.cnpj : null,
+      nota_itens: nota ? nota.itens : null,
+      nota_tipo_documento: nota ? nota.tipo_documento : null,
+      nota_emitente_nome: nota ? nota.emitente_nome : null,
+      nota_data_emissao: nota ? nota.data_emissao : null,
+      nota_parcelas: nota ? nota.parcelas : null,
+    });
+    if (error) throw error;
+    document.getElementById("portaria-cnpj").value = "";
+    document.getElementById("portaria-fornecedor").value = "";
+    document.getElementById("portaria-pedido-numero").value = "";
+    document.getElementById("portaria-mensagem").value = "";
+    resetPortariaNota();
+    mostrarAviso("Aviso enviado! O almoxarifado vai ser notificado.");
+    carregarAvisosPortariaEnviados();
+  } catch (err) {
+    mostrarAviso("Erro ao enviar aviso: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔔 Avisar chegada";
+  }
+});
+
+async function carregarAvisosPortariaEnviados() {
+  const el = document.getElementById("lista-avisos-portaria-enviados");
+  const hojeInicio = new Date();
+  hojeInicio.setHours(0, 0, 0, 0);
+  const { data, error } = await comTimeout(
+    db.from("rl_avisos_portaria").select("*").gte("criado_em", hojeInicio.toISOString()).order("criado_em", { ascending: false })
+  );
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar avisos.</p>`;
+    return;
+  }
+  if (!data || !data.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum aviso enviado ainda hoje.</p>`;
+    return;
+  }
+  el.innerHTML = data
+    .map(
+      (a) => `
+    <div class="aviso-portaria-enviado">
+      ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}
+      ${a.fornecedor_nome ? `<strong>${escapeHtml(a.fornecedor_nome)}</strong>` : "<strong>Fornecedor não informado</strong>"}
+      ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
+      ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
+      · ${formatarDataHora(a.criado_em)}
+      ${a.lido ? ` · ✅ acesso liberado por ${escapeHtml(a.lido_por || "—")}` : " · ⏳ aguardando liberação"}
+      ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
+    </div>`
+    )
+    .join("");
+}
+
+// ---------- indicadores ----------
+const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function chaveAnoMes(data) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+
+async function loadIndicadores() {
+  const container = document.getElementById("grafico-coletados");
+  const containerLojas = document.getElementById("grafico-lojas-diferentes");
+  const containerDivergencias = document.getElementById("grafico-divergencias");
+  const containerSemResposta = document.getElementById("tabela-divergencias-sem-resposta");
+  const containerFornecedor = document.getElementById("tabela-divergencias-fornecedor");
+  const containerTempoResposta = document.getElementById("tabela-tempo-resposta");
+  const { data, error } = await comTimeout(
+    db
+      .from("rl_rota_paradas")
+      .select(
+        "concluido_em, entrega_parcial, nota_tipo_documento, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_valor, resolucao_cnpj, resolucao_itens, resolucao_condicao, resolucoes_meta, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome, frete_fob)"
+      )
+      .eq("status", "concluida")
+      .not("concluido_em", "is", null)
+  );
+  if (error) {
+    container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerLojas.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerDivergencias.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerSemResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerFornecedor.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerTempoResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    return;
+  }
+
+  // últimos 6 meses, incluindo os que tiverem zero coletas
+  const hoje = new Date();
+  const meses = [];
+  const mesesLojas = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const chave = chaveAnoMes(d);
+    const label = `${MESES_ABREV[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+    meses.push({ chave, label, total: 0 });
+    mesesLojas.push({ chave, label, lojas: new Set() });
+  }
+  const porChave = Object.fromEntries(meses.map((m) => [m.chave, m]));
+  const porChaveLojas = Object.fromEntries(mesesLojas.map((m) => [m.chave, m]));
+
+  // Um indicador por tipo de divergência — entregas parciais não contam
+  // como divergência (o pedido simplesmente não veio todo de uma vez).
+  const tiposDivergencia = [
+    { chave: "divergencia_valor", label: "Valor", total: 0 },
+    { chave: "divergencia_cnpj", label: "CNPJ", total: 0 },
+    { chave: "divergencia_itens", label: "Itens", total: 0 },
+    { chave: "divergencia_condicao_pagamento", label: "Cond. pgto", total: 0 },
+  ];
+
+  // Divergências que ainda não têm uma decisão registrada (resolucao_divergencia
+  // vazia), agrupadas por comprador, com os dias corridos desde a conclusão da
+  // parada — pra saber quem está devendo resposta e há quanto tempo.
+  const semRespostaPorComprador = new Map();
+  const divergenciasPorFornecedor = new Map();
+  const tempoRespostaPorComprador = new Map();
+  const hojeMs = Date.now();
+
+  (data || []).forEach((p) => {
+    const chave = chaveAnoMes(new Date(p.concluido_em));
+    if (porChave[chave]) porChave[chave].total++;
+
+    // Só FOB conta como "loja que o motorista passou" — CIF é o fornecedor
+    // que traz até o almoxarifado, não o motorista que vai até a loja.
+    // Normaliza o nome (mesma função usada pra comparar fornecedor na
+    // conferência) pra não contar a mesma loja duas vezes por causa de
+    // LTDA/ME/etc ou variação de maiúscula no nome.
+    const pedidoDaParada = p.rl_pedidos || {};
+    if (porChaveLojas[chave] && pedidoDaParada.frete_fob !== false) {
+      const nomeLoja = normalizarEmpresa(pedidoDaParada.fornecedor_nome || "") || (pedidoDaParada.fornecedor_nome || "").trim();
+      if (nomeLoja) porChaveLojas[chave].lojas.add(nomeLoja);
+    }
+
+    if (!p.entrega_parcial) {
+      tiposDivergencia.forEach((t) => {
+        if (p[t.chave]) t.total++;
+      });
+
+      const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
+      if (divergente) {
+        const fornecedor = (p.rl_pedidos || {}).fornecedor_nome || "—";
+        divergenciasPorFornecedor.set(fornecedor, (divergenciasPorFornecedor.get(fornecedor) || 0) + 1);
+
+        // "Sem resposta" = falta decisão em pelo menos um dos tipos que divergiram.
+        if (!divergenciaJustificada(p)) {
+          const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+          const numero = (p.rl_pedidos || {}).numero_pedido || "—";
+          const dias = Math.max(0, Math.floor((hojeMs - new Date(p.concluido_em).getTime()) / 86400000));
+          const atual = semRespostaPorComprador.get(comprador) || { comprador, total: 0, diasMax: 0, pedidos: [] };
+          atual.total++;
+          atual.diasMax = Math.max(atual.diasMax, dias);
+          atual.pedidos.push({ numero, dias });
+          semRespostaPorComprador.set(comprador, atual);
+        } else if (quandoJustificou(p)) {
+          const comprador = (p.rl_pedidos || {}).comprador_nome || "—";
+          const diasResposta = Math.max(0, (new Date(quandoJustificou(p)).getTime() - new Date(p.concluido_em).getTime()) / 86400000);
+          const atual = tempoRespostaPorComprador.get(comprador) || { comprador, soma: 0, total: 0 };
+          atual.soma += diasResposta;
+          atual.total++;
+          tempoRespostaPorComprador.set(comprador, atual);
+        }
+      }
+    }
+  });
+
+  renderGraficoBarras(container, meses, "var(--primary)", (m) => `${m.label}: ${m.total} pedido(s) coletado(s)`);
+
+  const lojasPorMes = mesesLojas.map((m) => ({ chave: m.chave, label: m.label, total: m.lojas.size }));
+  renderGraficoBarras(containerLojas, lojasPorMes, "var(--ok)", (m) => `${m.label}: ${m.total} loja(s) diferente(s) visitada(s)`);
+
+  renderGraficoBarras(containerDivergencias, tiposDivergencia, "var(--atrasado)", (t) => `${t.label}: ${t.total} divergência(s)`);
+
+  const listaSemResposta = Array.from(semRespostaPorComprador.values()).sort((a, b) => b.diasMax - a.diasMax);
+  renderTabelaSemResposta(listaSemResposta);
+
+  const listaFornecedor = Array.from(divergenciasPorFornecedor.entries())
+    .map(([fornecedor, total]) => ({ fornecedor, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+  renderTabelaFornecedor(listaFornecedor);
+
+  const listaTempoResposta = Array.from(tempoRespostaPorComprador.values())
+    .map((c) => ({ comprador: c.comprador, total: c.total, mediaDias: c.soma / c.total }))
+    .sort((a, b) => b.mediaDias - a.mediaDias);
+  renderTabelaTempoResposta(listaTempoResposta);
+}
+
+function renderTabelaFornecedor(lista) {
+  const container = document.getElementById("tabela-divergencias-fornecedor");
+  if (!lista.length) {
+    container.innerHTML = `<p class="empty-state">Nenhuma divergência registrada ainda.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="tabela-itens">
+      <thead>
+        <tr><th>Fornecedor</th><th>Divergências</th></tr>
+      </thead>
+      <tbody>
+        ${lista.map((f) => `<tr><td>${escapeHtml(f.fornecedor)}</td><td>${f.total}</td></tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderTabelaTempoResposta(lista) {
+  const container = document.getElementById("tabela-tempo-resposta");
+  if (!lista.length) {
+    container.innerHTML = `<p class="empty-state">Nenhuma divergência respondida ainda.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="tabela-itens">
+      <thead>
+        <tr><th>Comprador</th><th>Divergências respondidas</th><th>Tempo médio de resposta</th></tr>
+      </thead>
+      <tbody>
+        ${lista
+          .map((c) => `<tr><td>${escapeHtml(c.comprador)}</td><td>${c.total}</td><td>${c.mediaDias.toFixed(1)} dia(s)</td></tr>`)
+          .join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderTabelaSemResposta(lista) {
+  const container = document.getElementById("tabela-divergencias-sem-resposta");
+  if (!lista.length) {
+    container.innerHTML = `<p class="empty-state">Nenhuma divergência sem resposta. 🎉</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="tabela-itens">
+      <thead>
+        <tr><th>Comprador</th><th>Divergências sem resposta</th><th>Dias sem resposta (mais antiga)</th></tr>
+      </thead>
+      <tbody>
+        ${lista
+          .map((l) => {
+            const detalhe = l.pedidos
+              .slice()
+              .sort((a, b) => b.dias - a.dias)
+              .map((pd) => `Pedido ${pd.numero}: ${pd.dias} dia(s)`)
+              .join(" | ");
+            return `<tr class="${l.diasMax >= 3 ? "linha-atrasada" : ""}" title="${escapeHtml(detalhe)}">
+              <td>${escapeHtml(l.comprador)}</td>
+              <td>${l.total}</td>
+              <td>${l.diasMax} dia(s)</td>
+            </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>
+    <p class="hint">Passe o mouse sobre uma linha pra ver quais pedidos estão pendentes.</p>`;
+}
+
+function renderGraficoBarras(container, itens, cor, tituloFn) {
+  const max = Math.max(1, ...itens.map((m) => m.total));
+  const larguraBarra = 56;
+  const espaco = 28;
+  const alturaBarraMax = 160;
+  const larguraTotal = itens.length * (larguraBarra + espaco) + espaco;
+  const alturaTotal = alturaBarraMax + 56;
+
+  const barras = itens
+    .map((m, i) => {
+      const x = espaco + i * (larguraBarra + espaco);
+      const altura = m.total === 0 ? 0 : Math.max(4, Math.round((m.total / max) * alturaBarraMax));
+      const y = alturaBarraMax - altura + 20;
+      return `
+      <g class="grafico-barra">
+        <title>${tituloFn(m)}</title>
+        <rect x="${x}" y="${y}" width="${larguraBarra}" height="${altura}" rx="4" fill="${cor}"></rect>
+        <text class="grafico-valor" x="${x + larguraBarra / 2}" y="${y - 6}" text-anchor="middle">${m.total}</text>
+        <text class="grafico-mes" x="${x + larguraBarra / 2}" y="${alturaBarraMax + 40}" text-anchor="middle">${m.label}</text>
+      </g>`;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${larguraTotal} ${alturaTotal}" width="100%" style="max-width:${larguraTotal}px">
+      <line class="grafico-eixo" x1="0" y1="${alturaBarraMax + 20}" x2="${larguraTotal}" y2="${alturaBarraMax + 20}"></line>
+      ${barras}
+    </svg>`;
+}
+
+// ---------- histórico (rotas concluídas) ----------
+// Sem número salvo, "" abre o seletor de contato do próprio WhatsApp (mesmo
+// padrão usado no Painel de Operações).
+function linkWhatsapp(numero, mensagem) {
+  const digitos = String(numero || "").replace(/\D/g, "");
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(mensagem)}`;
+}
+
+// Quando uma nota cobre mais de um pedido (ver vincularOutroPedidoHistorico/
+// iniciarConferenciaCif), cada pedido real tem sua própria parada, mas todas
+// apontam pro mesmo arquivo de nota — usa isso pra reconhecer o grupo e
+// mostrar o comparativo somado (senão cada card mostraria só o pedaço do seu
+// próprio pedido, e um item que é do pedido IRMÃO apareceria como "item
+// extra" mesmo batendo perfeitamente quando somado).
+function pedidosIrmaos(parada, todasParadas) {
+  if (!parada.nota_arquivo_url) return [];
+  return todasParadas.filter((q) => q.id !== parada.id && q.nota_arquivo_url === parada.nota_arquivo_url);
+}
+
+// Junta os anexos de vários pedidos (PDFs e fotos) num PDF só, montado aqui no
+// navegador com a biblioteca pdf-lib (carregada só na primeira vez que alguém
+// pede, pra não pesar o site).
+let pdfLibPromise = null;
+function carregarPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  if (!pdfLibPromise) {
+    pdfLibPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
+      s.onload = () => resolve(window.PDFLib);
+      s.onerror = () => {
+        pdfLibPromise = null;
+        reject(new Error("Não consegui carregar a biblioteca de PDF (sem internet?)."));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return pdfLibPromise;
+}
+
+async function montarPdfJunto(urls) {
+  const { PDFDocument } = await carregarPdfLib();
+  const saida = await PDFDocument.create();
+  for (const url of urls) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Não consegui baixar um dos anexos (${resp.status}).`);
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    const tipo = (resp.headers.get("content-type") || "").toLowerCase();
+    const ehPdf = tipo.includes("pdf") || /\.pdf($|\?)/i.test(url) || String.fromCharCode(...bytes.slice(0, 4)) === "%PDF";
+    if (ehPdf) {
+      const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const paginas = await saida.copyPages(doc, doc.getPageIndices());
+      paginas.forEach((p) => saida.addPage(p));
+    } else {
+      const ehPng = tipo.includes("png") || /\.png($|\?)/i.test(url);
+      const img = ehPng ? await saida.embedPng(bytes) : await saida.embedJpg(bytes);
+      const escala = Math.min(1, 595 / img.width);
+      const pagina = saida.addPage([img.width * escala, img.height * escala]);
+      pagina.drawImage(img, { x: 0, y: 0, width: img.width * escala, height: img.height * escala });
+    }
+  }
+  return saida.save();
+}
+
+// Abre o PDF junto numa aba nova. A aba é aberta ANTES de baixar/montar (senão
+// o navegador bloqueia o pop-up, já que a montagem demora alguns segundos).
+async function abrirPedidosJuntos(urls) {
+  const aba = window.open("", "_blank");
+  if (aba) aba.document.write("<p style='font-family:sans-serif'>Montando o PDF com os pedidos juntos...</p>");
+  try {
+    const bytes = await montarPdfJunto(urls);
+    const blobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    if (aba) aba.location.href = blobUrl;
+    else window.open(blobUrl, "_blank");
+  } catch (err) {
+    if (aba) aba.close();
+    mostrarAviso("Erro ao montar o PDF: " + err.message);
+  }
+}
+
+function pedidoEfetivoParaExibicao(parada, todasParadas) {
+  const irmas = pedidosIrmaos(parada, todasParadas || []);
+  if (!irmas.length) return parada.rl_pedidos || {};
+  return mesclarPedidosParaConferencia([parada.rl_pedidos, ...irmas.map((q) => q.rl_pedidos)].filter(Boolean));
+}
+
+// Mesma lógica de renderDivergenciasParada, mas em texto puro (sem HTML)
+// pra poder entrar direto na mensagem do WhatsApp.
+function resumoDivergenciasTexto(parada, pedidoEfetivo) {
+  const pedido = pedidoEfetivo || parada.rl_pedidos || {};
+  const linhas = [];
+  if (parada.divergencia_valor) {
+    linhas.push(`Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.`);
+  }
+  if (parada.divergencia_cnpj) {
+    linhas.push(`CNPJ: pedido esperava ${pedido.empresa_cnpj || "—"}, nota trouxe ${parada.nota_cnpj || "—"}.`);
+  }
+  if (parada.divergencia_itens) {
+    if (parada.nota_tipo_documento === "servico") {
+      linhas.push(
+        `Prestadora do serviço: pedido esperava ${pedido.fornecedor_nome || "—"}, nota trouxe ${parada.nota_emitente_nome || "—"}.`
+      );
+    } else {
+      linhas.push("Itens com quantidade ou valor unitário diferente do esperado (confira no sistema).");
+    }
+  }
+  if (parada.divergencia_condicao_pagamento) {
+    const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
+    if (msgCondicao) linhas.push(msgCondicao.replace(/^[⚠️✅]\s*/, ""));
+  }
+  return linhas.join("\n");
+}
+
+function linkAvisoComprador(parada, pedidoEfetivo) {
+  const pedido = pedidoEfetivo || parada.rl_pedidos || {};
+  const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
+  const mensagem =
+    `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! Encontramos uma divergência na conferência do pedido ` +
+    `${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n` +
+    resumoDivergenciasTexto(parada, pedido) +
+    "\n\nPode conferir com o fornecedor?";
+  return linkWhatsapp(comprador.telefone, mensagem);
+}
+
+// Manda pro comprador a observação que o almoxarifado deixou na conferência
+// do recebimento (ex: avaria, embalagem violada, quantidade a menos).
+function linkAvisoObservacaoRecebimento(parada) {
+  const pedido = parada.rl_pedidos || {};
+  const comprador = compradoresCache.find((c) => c.nome === pedido.comprador_nome) || {};
+  const mensagem =
+    `Olá${pedido.comprador_nome ? " " + pedido.comprador_nome : ""}! O almoxarifado deixou uma observação na conferência do ` +
+    `pedido ${pedido.numero_pedido ? "Nº " + pedido.numero_pedido + " " : ""}(${pedido.empresa_nome || "empresa não informada"}):\n\n` +
+    `"${parada.recebido_observacao}"`;
+  return linkWhatsapp(comprador.telefone, mensagem);
+}
+
+// Reconstrói as mensagens de divergência a partir do que já ficou salvo na
+// parada (nota_valor_total, nota_cnpj, nota_itens) — não depende de nada
+// que só existia na tela no momento em que o motorista concluiu a parada.
+function renderDivergenciasParada(parada, pedidoEfetivo) {
+  const pedido = pedidoEfetivo || parada.rl_pedidos || {};
+  // Etiquetas no topo com TODOS os tipos de divergência deste registro — a
+  // mensagem de prazo de pagamento, por exemplo, é só uma linha no meio de um
+  // cartão grande e passava despercebida.
+  const tipos = [
+    parada.divergencia_valor && "💰 Valor",
+    parada.divergencia_cnpj && "🏢 CNPJ",
+    parada.divergencia_itens && (parada.nota_tipo_documento === "servico" ? "🧾 Prestadora" : "📦 Itens"),
+    parada.divergencia_condicao_pagamento && "🗓️ Prazo de pagamento",
+  ].filter(Boolean);
+  let html = tipos.length
+    ? `<div class="chips-divergencia">${tipos.map((t) => `<span class="chip-divergencia">${t}</span>`).join("")}</div>`
+    : "";
+  if (parada.divergencia_valor) {
+    html += `<div>⚠️ Valor: pedido esperava ${formatarMoeda(pedido.valor_total)}, nota trouxe ${formatarMoeda(parada.nota_valor_total)}.</div>`;
+  }
+  if (parada.divergencia_cnpj) {
+    html += `<div>⚠️ CNPJ: pedido esperava ${escapeHtml(pedido.empresa_cnpj || "—")}, nota trouxe ${escapeHtml(parada.nota_cnpj || "—")}.</div>`;
+  }
+  // As mensagens de UMA linha (valor, CNPJ, prestadora, prazo de pagamento)
+  // ficam juntas no topo; a tabela de itens, que é grande, vai por último —
+  // senão o prazo de pagamento aparecia depois da tabela, longe das outras.
+  if (parada.divergencia_itens && parada.nota_tipo_documento === "servico") {
+    html += `<div>⚠️ Prestadora do serviço: pedido esperava ${escapeHtml(pedido.fornecedor_nome || "—")}, nota trouxe ${escapeHtml(
+      parada.nota_emitente_nome || "—"
+    )}.</div>`;
+  }
+  if (parada.divergencia_condicao_pagamento) {
+    const { msgCondicao } = compararCondicaoPagamento(pedido, parada.nota_data_emissao, parada.nota_parcelas);
+    if (msgCondicao) html += `<div>${msgCondicao}</div>`;
+  }
+  if (parada.divergencia_itens && parada.nota_tipo_documento !== "servico") {
+    const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
+    html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
+  }
+  return html;
+}
+
+// Registra o que foi decidido sobre uma divergência (ex: "fornecedor vai
+// reemitir a nota", "confirmado, é a filial certa mesmo") — fica visível
+// pra quem olhar o Histórico depois, sem precisar perguntar de novo.
+// Cada TIPO de divergência tem a sua própria decisão (uma caixinha por tipo):
+// o card tem às vezes valor + itens + prazo errados, e uma justificativa só
+// não cobre os três. O card só vale como "justificado" quando TODOS os tipos
+// que divergiram têm decisão.
+const TIPOS_DIVERGENCIA = [
+  { chave: "valor", flag: "divergencia_valor", coluna: "resolucao_valor", rotulo: "💰 Valor" },
+  { chave: "cnpj", flag: "divergencia_cnpj", coluna: "resolucao_cnpj", rotulo: "🏢 CNPJ" },
+  { chave: "itens", flag: "divergencia_itens", coluna: "resolucao_itens", rotulo: "📦 Itens" },
+  { chave: "condicao", flag: "divergencia_condicao_pagamento", coluna: "resolucao_condicao", rotulo: "🗓️ Prazo de pagamento" },
+];
+
+function tiposAtivosDaParada(parada) {
+  return TIPOS_DIVERGENCIA.filter((t) => parada[t.flag]).map((t) =>
+    t.chave === "itens" && parada.nota_tipo_documento === "servico" ? { ...t, rotulo: "🧾 Prestadora" } : t
+  );
+}
+
+function decisaoDoTipo(parada, tipo) {
+  return String(parada[tipo.coluna] || "").trim();
+}
+
+function divergenciaJustificada(parada) {
+  const ativos = tiposAtivosDaParada(parada);
+  return ativos.length > 0 && ativos.every((t) => decisaoDoTipo(parada, t));
+}
+
+// Quando ficou 100% justificada = a data da ÚLTIMA decisão que faltava.
+function quandoJustificou(parada) {
+  const meta = parada.resolucoes_meta || {};
+  const datas = tiposAtivosDaParada(parada)
+    .map((t) => meta[t.chave] && meta[t.chave].em)
+    .filter(Boolean)
+    .map((d) => new Date(d).getTime());
+  return datas.length ? new Date(Math.max(...datas)).toISOString() : null;
+}
+
+let resolucoesEmEdicao = new Set(); // chaves "paradaId:tipo"
+function renderResolucaoDivergencia(parada) {
+  const ativos = tiposAtivosDaParada(parada);
+  if (!ativos.length) return "";
+  const meta = parada.resolucoes_meta || {};
+  const feitas = ativos.filter((t) => decisaoDoTipo(parada, t)).length;
+  const blocos = ativos.map((t) => {
+    const texto = decisaoDoTipo(parada, t);
+    const chaveEdicao = `${parada.id}:${t.chave}`;
+    if (texto && !resolucoesEmEdicao.has(chaveEdicao)) {
+      const m = meta[t.chave] || {};
+      return `<div class="card-meta decisao-tipo decisao-ok">✅ <strong>${t.rotulo}</strong> — ${escapeHtml(texto)}${
+        m.por ? ` — ${escapeHtml(m.por)}` : ""
+      }${m.em ? `, ${formatarDataHora(m.em)}` : ""} <button class="link-btn" type="button" data-editar-resolucao="${parada.id}" data-tipo="${t.chave}">Editar</button></div>`;
+    }
+    return `<div class="resolucao-form decisao-tipo">
+      <label class="form-label">⚠️ ${t.rotulo}: o que foi decidido/combinado?</label>
+      <textarea class="input-resolucao" data-parada-id="${parada.id}" data-tipo="${t.chave}" rows="2" placeholder="Ex: fornecedor vai reemitir a nota">${escapeHtml(texto)}</textarea>
+      <button class="btn secondary small" type="button" data-salvar-resolucao="${parada.id}" data-tipo="${t.chave}">Salvar decisão (${t.rotulo})</button>
+    </div>`;
+  });
+  return `<div class="decisoes-por-tipo">
+    <div class="form-label">Decisões por tipo: ${feitas} de ${ativos.length} registrada${ativos.length === 1 ? "" : "s"}</div>
+    ${blocos.join("")}
+  </div>`;
+}
+
+// Quando uma nota cobre mais de um pedido e só um deles foi vinculado na hora
+// da conferência (ex: motorista/almoxarife não sabia), o comprador — que é
+// quem de fato sabe disso — pode resolver aqui no Histórico, buscando e
+// juntando o outro pedido na mesma conferência já concluída. Não lê nada de
+// novo com IA: só reorganiza pedidos que já existem contra a nota que já foi
+// lida (ver vincularOutroPedidoHistorico).
+// Outro registro já concluído que tem o MESMO número de nota, mesmo valor e
+// fornecedor parecido, mas foto enviada separadamente (motorista fotografou a
+// nota de novo em cada parada) — quase certamente a mesma nota cobrindo dois
+// pedidos. Quem tem a MESMA foto (nota_arquivo_url) já é tratado como grupo
+// confirmado (ver pedidosIrmaos), então não entra aqui.
+function sugestoesMesmaNota(parada, pool) {
+  if (!parada.nota_numero) return [];
+  const ped = parada.rl_pedidos || {};
+  return (pool || []).filter(
+    (q) =>
+      q.id !== parada.id &&
+      !q.entrega_parcial &&
+      q.nota_arquivo_url !== parada.nota_arquivo_url &&
+      q.nota_numero === parada.nota_numero &&
+      Number(q.nota_valor_total) === Number(parada.nota_valor_total) &&
+      fornecedoresParecidos(ped.fornecedor_nome, (q.rl_pedidos || {}).fornecedor_nome)
+  );
+}
+
+function renderSugestaoMesmaNota(parada, pool) {
+  return sugestoesMesmaNota(parada, pool)
+    .map(
+      (q) => `<div class="sugestao-mesma-nota">🔗 Mesma nota (nº ${escapeHtml(parada.nota_numero)}) também no pedido Nº ${escapeHtml(
+        (q.rl_pedidos || {}).numero_pedido || "sem número"
+      )}. <button type="button" class="btn small" data-juntar-concluida="${parada.id}" data-parada-irma="${q.id}">Juntar os dois</button></div>`
+    )
+    .join("");
+}
+
+// Motorista anexou a foto errada (ou foto ruim): quem confere (comprador) troca
+// a nota aqui e o sistema lê de novo e recalcula as divergências.
+function renderTrocarNota(parada) {
+  return `<details class="vincular-outro-pedido">
+    <summary>🔄 Foto da nota errada? Trocar a nota e ler de novo</summary>
+    <p class="hint">Anexe a(s) foto(s) certa(s) — se a nota tem muitas páginas, escolha todas de uma vez. Cada foto é lida pela IA e substitui a nota atual.</p>
+    <input type="file" class="input-nota-troca" data-parada-id="${parada.id}" accept="image/*,application/pdf" multiple>
+    <button type="button" class="btn small" data-trocar-nota="${parada.id}">Trocar e ler de novo</button>
+    <p class="feedback" data-troca-feedback="${parada.id}"></p>
+  </details>`;
+}
+
+function renderVincularOutroPedido(parada) {
+  return `<details class="vincular-outro-pedido">
+    <summary>🔗 Essa nota também cobre outro pedido? Buscar e vincular</summary>
+    <input type="text" class="busca-pedido-vincular" data-parada-id="${parada.id}" placeholder="🔎 Buscar pedido pendente por número ou fornecedor...">
+    <div class="resultado-busca-pedido-vincular" data-parada-id="${parada.id}"></div>
+  </details>`;
+}
+
+const ITENS_POR_PAGINA_HISTORICO = 10;
+let paginaHistoricoAtual = 1;
+let somenteDivergentesHistorico = false;
+// Guarda só a página atual (já filtrada e paginada pelo próprio banco) — não
+// o histórico inteiro. Assim a busca sempre alcança qualquer registro, não
+// importa o quão antigo ou quantos existam no total.
+let paginaAtualDados = [];
+// Página atual + registros de OUTRAS páginas que compartilham o número da nota
+// com algum deles — usado pra achar "pedidos irmãos" (mesma nota) mesmo quando
+// caem em páginas diferentes do Histórico.
+let poolParadasHistorico = [];
+let algumFiltroAtivoHistorico = false;
+
+function paradaEDivergente(p) {
+  return !p.entrega_parcial && (p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento);
+}
+
+// Só redesenha com o que já foi buscado (não refaz consulta ao banco) — usado
+// quando o filtro não muda, ex: entrar/sair do modo de editar uma decisão.
+function renderHistorico() {
+  const el = document.getElementById("lista-historico");
+  if (!paginaAtualDados.length) {
+    el.innerHTML = `<p class="empty-state">${
+      algumFiltroAtivoHistorico ? "Nenhuma parada concluída com esse filtro." : "Nenhuma parada concluída ainda."
+    }</p>`;
+    return;
+  }
+  renderCardsHistorico(paginaAtualDados);
+}
+
+function renderPaginacaoHistorico(totalPaginas) {
+  const el = document.getElementById("paginacao-historico");
+  if (totalPaginas <= 1) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = Array.from({ length: totalPaginas }, (_, i) => i + 1)
+    .map(
+      (n) =>
+        `<button type="button" class="btn-pagina${n === paginaHistoricoAtual ? " ativa" : ""}" data-pagina-historico="${n}">${n}</button>`
+    )
+    .join("");
+}
+
+document.getElementById("paginacao-historico").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-pagina-historico]");
+  if (!btn) return;
+  paginaHistoricoAtual = Number(btn.dataset.paginaHistorico);
+  loadHistorico();
+});
+
+function renderCardsHistorico(paradas) {
+  const el = document.getElementById("lista-historico");
+  el.innerHTML = paradas
+    .map((p) => {
+      const pedido = p.rl_pedidos || {};
+      const pedidoEfetivo = pedidoEfetivoParaExibicao(p, poolParadasHistorico);
+      const motorista = (p.rl_rotas || {}).motorista_nome || "—";
+      const divergente = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
+      // "OK" só quando teve dado de verdade pra comparar — se a nota não foi
+      // lida (foto ruim, ilegível), não teve conferência nenhuma, então não
+      // pode aparecer como se tivesse batido tudo certinho.
+      const notaSemLeitura =
+        p.nota_valor_total == null &&
+        !p.nota_cnpj &&
+        !p.nota_emitente_nome &&
+        (!Array.isArray(p.nota_itens) || !p.nota_itens.length);
+      const status = p.recebido_por_terceiro
+        ? "🤝 Recebido por terceiro"
+        : p.entrega_parcial
+          ? "📦 Entrega parcial"
+          : divergente
+            ? "⚠️ Divergência"
+            : notaSemLeitura
+              ? "❓ Nota não lida"
+              : "✅ OK";
+      return `
+      <div class="card-pedido historico-parada-card">
+        <div class="card-pedido-head">
+          <strong>${escapeHtml(pedido.empresa_nome || "Empresa não informada")}</strong>
+          <span>${status}</span>
+        </div>
+        ${pedido.fornecedor_nome ? `<div class="card-fornecedor">🏢 ${escapeHtml(pedido.fornecedor_nome)}</div>` : ""}
+        <div class="card-meta">
+          ${pedido.numero_pedido ? `Nº ${escapeHtml(pedido.numero_pedido)} · ` : ""}Comprador: ${escapeHtml(pedido.comprador_nome || "—")}
+          · Motorista: ${escapeHtml(motorista)} · Concluído em ${formatarDataHora(p.concluido_em)}
+        </div>
+        ${
+          pedidosIrmaos(p, poolParadasHistorico).length
+            ? `<div class="card-meta">🔗 Nota também cobre: ${pedidosIrmaos(p, poolParadasHistorico)
+                .map((q) => escapeHtml((q.rl_pedidos || {}).numero_pedido || "sem número"))
+                .join(", ")}</div>`
+            : ""
+        }
+        ${pedido.observacao ? `<div class="card-meta">💬 Observação do comprador: ${escapeHtml(pedido.observacao)}</div>` : ""}
+        ${pedido.arquivo_url ? `<a class="arquivo-link" href="${pedido.arquivo_url}" target="_blank" rel="noopener">📎 pedido</a>` : ""}
+        ${
+          pedidosIrmaos(p, poolParadasHistorico).length
+            ? `<button type="button" class="link-btn" data-abrir-pedidos-juntos="${p.id}">📎 todos os pedidos juntos (PDF)</button>`
+            : ""
+        }
+        ${p.nota_arquivo_url ? `<a class="arquivo-link" href="${p.nota_arquivo_url}" target="_blank" rel="noopener">📎 nota fiscal</a>` : ""}
+        ${(Array.isArray(p.nota_arquivos_extras) ? p.nota_arquivos_extras : [])
+          .map((u, i) => `<a class="arquivo-link" href="${u}" target="_blank" rel="noopener">📎 nota fiscal (foto ${i + 2})</a>`)
+          .join(" ")}
+        ${
+          p.entrega_parcial
+            ? `<div class="conferencia-box ok">📦 Entrega parcial — o pedido voltou pra fila de disponíveis pra buscar o restante. Confira aqui os dados desta parcial: valor ${formatarMoeda(
+                p.nota_valor_total
+              )}${p.nota_numero ? `, Nº nota ${escapeHtml(p.nota_numero)}` : ""}.</div>`
+            : divergente
+              ? `<div class="conferencia-box warn">${renderDivergenciasParada(p, pedidoEfetivo)}<a class="btn secondary small" href="${linkAvisoComprador(
+                  p,
+                  pedidoEfetivo
+                )}" target="_blank" rel="noopener">📱 Avisar comprador</a>${renderResolucaoDivergencia(p)}${renderSugestaoMesmaNota(p, poolParadasHistorico)}${renderVincularOutroPedido(p)}${renderTrocarNota(p)}</div>`
+              : !p.recebido_por_terceiro
+                ? `<div class="${notaSemLeitura ? "conferencia-box warn" : ""}">${renderTrocarNota(p)}</div>`
+                : ""
+        }
+        <div class="card-meta">
+          ${
+            p.recebido_em
+              ? `✅ Recebido por ${escapeHtml(p.recebido_por || "—")} em ${formatarDataHora(p.recebido_em)}` +
+                (p.recebido_observacao
+                  ? `<div class="card-meta">💬 ${escapeHtml(p.recebido_observacao)} <a class="arquivo-link" href="${linkAvisoObservacaoRecebimento(
+                      p
+                    )}" target="_blank" rel="noopener">📱 Enviar observação do almoxarifado pro comprador</a></div>`
+                  : "") +
+                (Array.isArray(p.recebido_fotos) && p.recebido_fotos.length
+                  ? `<div class="card-meta">${p.recebido_fotos
+                      .map((url, i) => `<a class="arquivo-link" href="${url}" target="_blank" rel="noopener">📷 foto ${i + 1}</a>`)
+                      .join(" ")}</div>`
+                  : "")
+              : `<div class="recebimento-form">
+                  <label class="form-label">📦 Observação do almoxarifado sobre o recebimento (opcional — ex: avaria, embalagem violada, faltou algo)</label>
+                  <textarea class="input-obs-recebimento" data-parada-id="${p.id}" rows="2" placeholder="Ex: caixa chegou amassada"></textarea>
+                  <input type="file" class="input-fotos-recebimento" data-parada-id="${p.id}" accept="image/*" capture="environment" multiple>
+                  <button class="btn secondary small" type="button" data-confirmar-recebimento="${p.id}">✅ Confirmar recebimento</button>
+                </div>`
+          }
+        </div>
+        <button class="link-btn" data-desfazer-historico="${p.id}" type="button" title="Apaga esta conclusão e devolve o pedido para ser conferido de novo">↩️ Desfazer e devolver ${
+          pedido.frete_fob ? "à fila do motorista" : "ao recebimento"
+        }</button>
+        <button class="link-btn danger" data-excluir-historico="${p.id}" type="button" title="Só apaga este registro do Histórico — o pedido continua como concluído">Excluir</button>
+      </div>`;
+    })
+    .join("");
+}
+
+// Detecta divergências NOVAS entre uma verificação e outra (pra avisar por
+// voz só o que apareceu agora, não repetir o que já tinha sido avisado) —
+// pensado pro app ficar aberto o dia todo numa TV/tela fixa no setor. Roda
+// numa consulta PRÓPRIA (não a lista visível/paginada), porque precisa
+// enxergar TODAS as divergências em aberto, não só a página/filtro que a
+// pessoa está olhando na hora.
+let idsHistoricoConhecidos = null; // null = ainda não verificou nenhuma vez
+function avisarDivergenciasNovas(paradasDivergentesAtuais) {
+  const idsAtuais = new Set(paradasDivergentesAtuais.map((p) => p.id));
+  if (idsHistoricoConhecidos) {
+    paradasDivergentesAtuais
+      .filter((p) => !idsHistoricoConhecidos.has(p.id))
+      .forEach((p) => {
+        const pedido = p.rl_pedidos || {};
+        falarAlerta(
+          `Atenção! Divergência encontrada. Comprador ${pedido.comprador_nome || "não informado"}, pedido ${
+            pedido.numero_pedido || "sem número"
+          }.`
+        );
+      });
+  }
+  idsHistoricoConhecidos = idsAtuais;
+}
+
+async function verificarDivergenciasNovas() {
+  const { data, error } = await comTimeout(
+    db
+      .from("rl_rota_paradas")
+      .select("id, rl_pedidos(comprador_nome, numero_pedido)")
+      .eq("status", "concluida")
+      .eq("entrega_parcial", false)
+      .or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true")
+  );
+  if (error || !data) return;
+  avisarDivergenciasNovas(data);
+}
+
+// ---------- avisos da portaria pendentes (aparecem no topo do Histórico) ----------
+let idsAvisosPortariaConhecidos = null; // null = ainda não verificou nenhuma vez
+let avisosPortariaPendentesCache = [];
+
+// O almoxarife selecionado (aba Recebimento CIF) pode estar amarrado a uma
+// empresa (e, só na Wehrmann, também a um setor: Uso e Consumo/Insumos/Cantina) —
+// nesse caso só vê os avisos daquela empresa/setor. Sem empresa definida no
+// cadastro dele, continua vendo tudo (comportamento de antes).
+function filtrarAvisosPorAlmoxarifeAtual(avisos) {
+  const nomeAtual = document.getElementById("almoxarife-select-cif").value;
+  const almoxarife = almoxarifesCache.find((a) => a.nome === nomeAtual);
+  let resultado = avisos;
+  if (almoxarife && almoxarife.empresa_nome) {
+    resultado = resultado.filter((a) => {
+      if (a.empresa_nome !== almoxarife.empresa_nome) return false;
+      if (almoxarife.setor && a.setor !== almoxarife.setor) return false;
+      return true;
+    });
+  }
+  // Filtro manual de setor — independente do almoxarife escolhido, pra dar
+  // pra olhar só um setor sem precisar trocar de pessoa (ex: alguém que
+  // enxerga a empresa toda querendo focar só na Cantina por um instante).
+  const setorFiltro = document.getElementById("filtro-setor-cif")?.value;
+  if (setorFiltro) resultado = resultado.filter((a) => a.setor === setorFiltro);
+  return resultado;
+}
+
+async function carregarAvisosPortariaPendentes() {
+  const { data, error } = await comTimeout(
+    db.from("rl_avisos_portaria").select("*").eq("lido", false).order("criado_em", { ascending: true })
+  );
+  if (error || !data) return;
+
+  const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
+
+  // Avisa por voz só o que apareceu de novo desde a última verificação —
+  // mesmo padrão já usado pras divergências (ver avisarDivergenciasNovas).
+  // IMPORTANTE: o conjunto de "já conhecidos" usa TODOS os avisos pendentes
+  // (não só os visíveis pro almoxarife selecionado agora) — senão, trocar de
+  // almoxarife no mesmo aparelho (empresa/setor diferente) faz um aviso
+  // antigo, que só ficou fora do filtro até agora, parecer "novo" de novo e
+  // repete o alerta sonoro à toa toda vez que alguém troca a seleção.
+  const idsAtuais = new Set(data.map((a) => a.id));
+  if (idsAvisosPortariaConhecidos) {
+    avisosVisiveis
+      .filter((a) => !idsAvisosPortariaConhecidos.has(a.id))
+      .forEach((a) => {
+        falarAlerta(`Atenção! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "não informado"}.`);
+      });
+  }
+  idsAvisosPortariaConhecidos = idsAtuais;
+
+  avisosPortariaPendentesCache = avisosVisiveis;
+  renderAvisosPortariaPendentes();
+
+  const badge = document.getElementById("badge-avisos-portaria");
+  if (avisosVisiveis.length) {
+    badge.textContent = String(avisosVisiveis.length);
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+}
+
+function renderAvisosPortariaPendentes() {
+  const el = document.getElementById("avisos-portaria-pendentes");
+  if (!el) return;
+  if (!avisosPortariaPendentesCache.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum aviso pendente no momento.</p>`;
+    return;
+  }
+  el.innerHTML = avisosPortariaPendentesCache
+    .map((a) => {
+      return `
+      <div class="aviso-portaria-card">
+        <div>
+          🚪 ${a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""}<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong>
+          ${a.fornecedor_cnpj ? ` · CNPJ ${escapeHtml(a.fornecedor_cnpj)}` : ""}
+          ${a.pedido_numero ? ` · Nº ${escapeHtml(a.pedido_numero)}` : ""}
+          · ${formatarDataHora(a.criado_em)}
+          ${
+            a.nota_arquivo_url
+              ? `<div class="card-meta">📎 Nota já lida pela portaria${
+                  a.pedido_ids && a.pedido_ids.length
+                    ? ` e já relacionada a ${a.pedido_ids.length > 1 ? `${a.pedido_ids.length} pedidos` : "um pedido"}`
+                    : ""
+                } — <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a> — a conferência libera assim que o acesso for liberado.</div>`
+              : ""
+          }
+          ${a.mensagem ? `<div class="hint">${escapeHtml(a.mensagem)}</div>` : ""}
+        </div>
+        <div style="display:flex; gap:0.5rem; flex-shrink:0;">
+          <button type="button" class="btn secondary small" data-dispensar-aviso-portaria="${a.id}">✅ Liberar acesso</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+// ---------- avisos liberados, aguardando conferência ----------
+// A conferência só fica disponível DEPOIS de liberar o acesso — de propósito
+// (ordem obrigatória: primeiro libera o caminhão, a conferência da nota é
+// feita com calma depois). Some da lista assim que os pedidos relacionados
+// forem conferidos/marcados como recebidos.
+let avisosLiberadosPendentesCache = [];
+// aviso.id -> lista de pedidos candidatos (com texto de busca já pronto),
+// usado pra filtrar sem precisar reconsultar o banco a cada tecla digitada.
+let candidatosPorAvisoSemPedido = {};
+
+async function carregarAvisosLiberadosPendentesConferencia() {
+  const el = document.getElementById("avisos-liberados-aguardando-conferencia");
+  if (!el) return;
+  // Não filtra por pedido_ids aqui: um aviso pode ter sido liberado sem
+  // nenhum pedido vinculado (a portaria não achou pedido pendente do
+  // fornecedor, ou não escolheu nenhum) — esses precisam continuar
+  // aparecendo pro almoxarife vincular manualmente, senão somem sem deixar
+  // rastro (foi exatamente o bug que motivou essa seção existir).
+  const { data, error } = await comTimeout(
+    db.from("rl_avisos_portaria").select("*").eq("lido", true).order("lido_em", { ascending: false }).limit(50)
+  );
+  if (error || !data) return;
+
+  const avisosVisiveis = filtrarAvisosPorAlmoxarifeAtual(data);
+  // pedido_ids null = nunca vinculado ainda (precisa de ação); [] = almoxarife
+  // já dispensou explicitamente ("não tem pedido pra conferir aqui").
+  const comPedidos = avisosVisiveis.filter((a) => a.pedido_ids && a.pedido_ids.length);
+  const semPedidos = avisosVisiveis.filter((a) => a.pedido_ids == null);
+
+  let comPedidosPendentes = [];
+  const idsPedidos = [...new Set(comPedidos.flatMap((a) => a.pedido_ids || []))];
+  if (idsPedidos.length) {
+    const { data: pedidosPendentes } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").in("id", idsPedidos));
+    const idsPendentes = new Set((pedidosPendentes || []).map((p) => p.id));
+
+    // Se algum dos pedidos ainda pendentes já teve uma entrega PARCIAL
+    // registrada antes (voltou pra fila de propósito, esperando o resto),
+    // sinaliza isso no card — senão o aviso continua aparecendo aqui igual
+    // a um que ninguém tocou ainda, e parece que "não saiu do lugar".
+    const { data: paradasParciais } = await comTimeout(
+      db.from("rl_rota_paradas").select("pedido_id").eq("entrega_parcial", true).in("pedido_id", [...idsPendentes])
+    );
+    const idsComParcial = new Set((paradasParciais || []).map((p) => p.pedido_id));
+
+    comPedidosPendentes = comPedidos
+      .filter((a) => (a.pedido_ids || []).some((id) => idsPendentes.has(id)))
+      .map((a) => ({
+        ...a,
+        _temParcial: (a.pedido_ids || []).some((id) => idsComParcial.has(id)),
+        _pedidos: (pedidosPendentes || []).filter((p) => (a.pedido_ids || []).includes(p.id)),
+      }));
+  }
+
+  let semPedidosComCandidatos = [];
+  if (semPedidos.length) {
+    // Não sugere mais uma LISTA automática (ficava grande e poluía o card) —
+    // o almoxarife busca e vincula manualmente. Mas continua valendo dar uma
+    // dica discreta (no máximo 2 pedidos) quando o fornecedor bate — sem
+    // isso, um pedido que já está no sistema mas com nome de fornecedor um
+    // pouco diferente na nota parecia "não vinculável" à toa.
+    const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
+    semPedidosComCandidatos = semPedidos.map((a) => {
+      const candidatos = a.empresa_nome ? (pendentesGeral || []).filter((p) => p.empresa_nome === a.empresa_nome) : pendentesGeral || [];
+      // 1º: pedido que a própria nota cita (campo "Nº do pedido" do aviso,
+      // preenchido pela leitura da nota ou pela portaria) — match exato é a
+      // sugestão mais forte. Depois, os de fornecedor parecido.
+      const citados = new Set(numerosPedidoCitados(a.pedido_numero));
+      const citadosNaNota = citados.size ? candidatos.filter((p) => citados.has(normalizarNumeroPedido(p.numero_pedido))) : [];
+      const similares = a.fornecedor_nome
+        ? candidatos.filter((p) => fornecedoresParecidos(a.fornecedor_nome, p.fornecedor_nome) && !citadosNaNota.includes(p))
+        : [];
+      const sugestoes = [...citadosNaNota, ...similares].slice(0, Math.max(2, citadosNaNota.length));
+      return { ...a, _candidatos: candidatos, _sugestoes: sugestoes, _idsCitados: citadosNaNota.map((p) => p.id) };
+    });
+  }
+
+  avisosLiberadosPendentesCache = [...semPedidosComCandidatos, ...comPedidosPendentes];
+  renderAvisosLiberadosPendentesConferencia();
+}
+
+// Prévia da conferência ANTES de vincular: compara a nota que a portaria já
+// leu (valor, itens, CNPJ, fornecedor, guardados no aviso) com o(s) pedido(s)
+// candidato(s), sem gastar IA. Com vários pedidos, compara a SOMA deles (uma
+// nota pode cobrir mais de um). Sem nota anexada no aviso, não há prévia.
+function calcularPreviaConferencia(aviso, pedidos) {
+  const temItens = Array.isArray(aviso.nota_itens) && aviso.nota_itens.length;
+  if (!aviso.nota_arquivo_url || (aviso.nota_valor_total == null && !temItens) || !pedidos.length) return null;
+  const mesclado = mesclarPedidosParaConferencia(pedidos);
+  const msgs = [];
+  let ok = true;
+
+  const emitente = aviso.nota_emitente_nome || aviso.fornecedor_nome;
+  if (emitente && pedidos.every((p) => p.fornecedor_nome) && !pedidos.every((p) => fornecedoresParecidos(emitente, p.fornecedor_nome))) {
+    msgs.push("🚩 fornecedor diferente do da nota");
+    ok = false;
+  }
+
+  if (aviso.nota_valor_total != null && mesclado.valor_total != null) {
+    const dif = Math.abs(Number(aviso.nota_valor_total) - Number(mesclado.valor_total));
+    if (dif <= TOLERANCIA_VALOR) {
+      msgs.push(`✅ valor confere (${formatarMoeda(aviso.nota_valor_total)})`);
+    } else {
+      msgs.push(`⚠️ valor difere ${formatarMoeda(dif)} (pedido ${formatarMoeda(mesclado.valor_total)}, nota ${formatarMoeda(aviso.nota_valor_total)})`);
+      ok = false;
+    }
+  }
+
+  if (temItens && aviso.nota_tipo_documento !== "servico") {
+    const r = compararItens(mesclado.itens, aviso.nota_itens);
+    if (r.temDados) {
+      const batem = r.linhas.filter((l) => l.match && !l.divergente).length;
+      msgs.push(`${r.divergente ? "⚠️" : "✅"} itens: ${batem} de ${r.linhas.length} batem`);
+      if (r.divergente) ok = false;
+    }
+  }
+
+  const cnpjEsperado = apenasDigitos(mesclado.empresa_cnpj);
+  const cnpjNota = apenasDigitos(aviso.nota_cnpj);
+  if (cnpjEsperado && cnpjNota && cnpjEsperado !== cnpjNota) {
+    msgs.push("⚠️ CNPJ da nota é de outra empresa");
+    ok = false;
+  }
+
+  return msgs.length ? { ok, msgs } : null;
+}
+
+function renderPreviaConferencia(aviso, pedidos, rotulo) {
+  const previa = calcularPreviaConferencia(aviso, pedidos);
+  if (!previa) return "";
+  return `<span class="previa-conferencia ${previa.ok ? "previa-ok" : "previa-alerta"}">🔎 ${rotulo || "Prévia com a nota"}: ${previa.msgs.map(escapeHtml).join(" · ")}</span>`;
+}
+
+function renderAvisosLiberadosPendentesConferencia() {
+  const el = document.getElementById("avisos-liberados-aguardando-conferencia");
+  if (!el) return;
+  if (!avisosLiberadosPendentesCache.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum acesso liberado aguardando conferência.</p>`;
+    return;
+  }
+  el.innerHTML = avisosLiberadosPendentesCache
+    .map((a) => {
+      const cabecalho = `✅ ${
+        a.empresa_nome ? `<span class="badge">${escapeHtml(a.empresa_nome)}${a.setor ? ` · ${escapeHtml(a.setor)}` : ""}</span> ` : ""
+      }<strong>${escapeHtml(a.fornecedor_nome || "Fornecedor não informado")}</strong> · liberado ${formatarDataHora(a.lido_em)} por ${escapeHtml(
+        a.lido_por || "—"
+      )}${
+        a.nota_arquivo_url
+          ? ` · <a href="${a.nota_arquivo_url}" target="_blank" rel="noopener">ver nota</a>`
+          : ` · <span class="hint">nota não anexada pela portaria</span>`
+      }`;
+
+      if (a._candidatos) {
+        // Guarda os candidatos (com o resumo dos produtos e o texto de busca
+        // já calculados) num mapa à parte — não renderiza a lista inteira de
+        // cara (sem "sugestão" pré-carregada poluindo o card); só aparece o
+        // que a pessoa efetivamente procurar (ou o que bater como sugestão).
+        const candidatosComResumo = a._candidatos.map((p) => {
+          const itensArr = itensComoArray(p.itens);
+          const resumoItens = itensArr
+            .map((it) => it.produto_nome)
+            .filter(Boolean)
+            .join(", ");
+          return {
+            ...p,
+            _resumoItens: resumoItens,
+            _busca: normalizarProduto(`${p.numero_pedido || ""} ${p.fornecedor_nome || ""} ${resumoItens}`),
+          };
+        });
+        candidatosPorAvisoSemPedido[a.id] = candidatosComResumo;
+
+        const idsResumo = new Map(candidatosComResumo.map((p) => [p.id, p]));
+        const sugestoesHtml = (a._sugestoes || [])
+          .map((pSemResumo) => {
+            const p = idsResumo.get(pSemResumo.id) || pSemResumo;
+            const resumoCurto = p._resumoItens && p._resumoItens.length > 80 ? `${p._resumoItens.slice(0, 80)}…` : p._resumoItens;
+            const citado = (a._idsCitados || []).includes(p.id);
+            return `
+            <div class="sugestao-pedido-aviso${citado ? " sugestao-citada" : ""}">
+              ${citado ? "🎯 A nota cita o pedido" : "💡 Pode ser o pedido"} Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(
+              p.valor_total
+            )}${resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""}
+              <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
+              <button type="button" class="link-btn" data-usar-sugestao="${a.id}" data-pedido-sugerido="${p.id}">é esse, conferir</button>
+              ${renderPreviaConferencia(a, [p])}
+            </div>`;
+          })
+          .join("");
+        return `
+        <div class="aviso-portaria-card aviso-sem-pedido">
+          <div>${cabecalho}<br><span class="hint">Ninguém vinculou um pedido a este aviso ainda.</span></div>
+          ${sugestoesHtml}
+          <label class="form-label">Vincular pedido manualmente</label>
+          <input type="text" class="busca-pedido-manual" data-aviso-id="${a.id}" placeholder="🔎 Buscar por número, fornecedor ou produto...">
+          <div class="resultado-busca-pedido" data-aviso-id="${a.id}"></div>
+          <div class="previa-selecionados" data-aviso-id="${a.id}"></div>
+          <button type="button" class="btn small" data-conferir-vinculando="${a.id}">🔍 Conferir selecionados</button>
+          <details class="anexar-pedido-novo">
+            <summary class="link-btn">📎 Não achou o pedido? Anexe o arquivo (foto ou PDF) dele aqui</summary>
+            <label>
+              Arquivo do pedido de compra
+              <input type="file" class="anexo-pedido-novo" data-aviso-id="${a.id}" accept="image/*,application/pdf" capture="environment">
+            </label>
+            <button type="button" class="btn secondary small" data-ler-pedido-novo="${a.id}">🤖 Ler pedido com IA e vincular</button>
+            <p class="feedback" data-feedback-pedido-novo="${a.id}"></p>
+          </details>
+          <button type="button" class="link-btn" data-dispensar-sem-pedido="${a.id}">Não tem pedido pra conferir aqui</button>
+        </div>`;
+      }
+
+      return `
+      <div class="aviso-portaria-card">
+        <div>${cabecalho}${
+        a._temParcial
+          ? `<br><span class="hint">📦 Já teve uma entrega parcial registrada aqui — confira o restante quando chegar (anexe a nota nova, não reaproveite a antiga).</span>`
+          : ""
+      }${
+        a._pedidos && a._pedidos.length
+          ? `<br><span class="hint">Pedido(s) vinculado(s): ${a._pedidos
+              .map((p) => `Nº ${escapeHtml(p.numero_pedido || "sem número")}`)
+              .join(", ")}</span>${renderPreviaConferencia(a, a._pedidos, "Prévia do vinculado")}`
+          : ""
+      }</div>
+        <div class="aviso-acoes">
+          <button type="button" class="btn secondary small" data-conferir-aviso-liberado="${a.id}">${
+        a._temParcial ? "📦 Conferir o restante" : a.nota_arquivo_url ? "✅ Ver conferência" : "🔍 Conferir"
+      }</button>
+          <button type="button" class="link-btn" data-trocar-pedido-aviso="${a.id}" title="Desvincula o pedido deste aviso e volta pra escolha do pedido, com a prévia da comparação com a nota">🔁 Trocar o pedido vinculado</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+// Busca manual do pedido pra vincular — não mostra nenhuma sugestão de cara
+// (só depois que a pessoa digita algo com 2+ caracteres), pra não poluir o
+// card com uma lista grande de candidatos que talvez nem sejam o certo.
+const MAX_RESULTADOS_BUSCA_PEDIDO = 8;
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("input", (e) => {
+  const input = e.target.closest("input.busca-pedido-manual");
+  if (!input) return;
+  const avisoId = input.dataset.avisoId;
+  const resultadoEl = document.querySelector(`.resultado-busca-pedido[data-aviso-id="${avisoId}"]`);
+  if (!resultadoEl) return;
+
+  const termo = normalizarProduto(input.value.trim());
+  if (termo.length < 2) {
+    resultadoEl.innerHTML = "";
+    return;
+  }
+  const candidatos = candidatosPorAvisoSemPedido[avisoId] || [];
+  const avisoDaBusca = avisosLiberadosPendentesCache.find((x) => x.id === avisoId) || {};
+  const encontrados = candidatos.filter((p) => p._busca.includes(termo)).slice(0, MAX_RESULTADOS_BUSCA_PEDIDO);
+  if (!encontrados.length) {
+    resultadoEl.innerHTML = `<p class="hint">Nenhum pedido encontrado com "${escapeHtml(input.value.trim())}".</p>`;
+    return;
+  }
+  resultadoEl.innerHTML = encontrados
+    .map((p) => {
+      const resumoCurto = p._resumoItens.length > 60 ? `${p._resumoItens.slice(0, 60)}…` : p._resumoItens;
+      return `
+      <div class="resultado-busca-item">
+        <label class="checkbox-line">
+          <input type="checkbox" value="${p.id}">
+          Nº ${escapeHtml(p.numero_pedido || "sem número")} — ${escapeHtml(p.fornecedor_nome || "")} — ${formatarMoeda(p.valor_total)}${
+        resumoCurto ? ` — ${escapeHtml(resumoCurto)}` : ""
+      }${renderPreviaConferencia(avisoDaBusca, [p])}
+        </label>
+        <a href="${p.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
+      </div>`;
+    })
+    .join("");
+});
+
+// Volta um aviso já vinculado pra etapa de ESCOLHER o pedido (pedido_ids =
+// null = "nunca vinculado"), onde aparecem as sugestões, a busca e a prévia da
+// comparação com a nota. Não mexe no pedido nem em nenhuma conferência.
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-trocar-pedido-aviso]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    const original = btn.textContent;
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo pra confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = original;
+    }, 4000);
+    return;
+  }
+  const { error } = await db.from("rl_avisos_portaria").update({ pedido_ids: null }).eq("id", btn.dataset.trocarPedidoAviso);
+  if (error) {
+    mostrarAviso("Erro ao desvincular: " + error.message);
+    return;
+  }
+  await carregarAvisosLiberadosPendentesConferencia();
+});
+
+// Ao marcar/desmarcar pedidos nos resultados da busca, mostra a prévia da
+// comparação com a nota considerando a SOMA dos marcados (nota que cobre mais
+// de um pedido).
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("change", (e) => {
+  const caixa = e.target.closest(".resultado-busca-pedido input[type=checkbox]");
+  if (!caixa) return;
+  const resultadoEl = caixa.closest(".resultado-busca-pedido");
+  const avisoId = resultadoEl.dataset.avisoId;
+  const destino = document.querySelector(`.previa-selecionados[data-aviso-id="${avisoId}"]`);
+  if (!destino) return;
+  const aviso = avisosLiberadosPendentesCache.find((x) => x.id === avisoId);
+  const marcados = Array.from(resultadoEl.querySelectorAll("input[type=checkbox]:checked")).map((c) => c.value);
+  const pedidos = (candidatosPorAvisoSemPedido[avisoId] || []).filter((p) => marcados.includes(p.id));
+  destino.innerHTML =
+    aviso && pedidos.length
+      ? renderPreviaConferencia(aviso, pedidos, pedidos.length > 1 ? `Prévia dos ${pedidos.length} marcados somados` : "Prévia do marcado")
+      : "";
+});
+
+// Grava o vínculo aviso -> pedido(s) e já abre a conferência — usado tanto
+// pela busca manual (um ou mais pedidos marcados) quanto pelo atalho de
+// sugestão "é esse, conferir" (um só, direto).
+async function vincularPedidosEConferir(avisoId, ids) {
+  const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
+  if (!aviso) return;
+  const { error: errUpdate } = await db.from("rl_avisos_portaria").update({ pedido_ids: ids }).eq("id", avisoId);
+  if (errUpdate) {
+    mostrarAviso("Erro ao vincular pedido: " + errUpdate.message);
+    return;
+  }
+  const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", ids).eq("status", "pendente"));
+  if (error || !pedidos || !pedidos.length) {
+    mostrarAviso("Erro ao buscar o(s) pedido(s) selecionado(s).");
+    carregarAvisosLiberadosPendentesConferencia();
+    return;
+  }
+  await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+}
+
+document.getElementById("avisos-liberados-aguardando-conferencia").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-conferir-aviso-liberado]");
+  if (btn) {
+    const aviso = avisosLiberadosPendentesCache.find((a) => a.id === btn.dataset.conferirAvisoLiberado);
+    if (!aviso) return;
+    const { data: pedidos, error } = await comTimeout(db.from("rl_pedidos").select("*").in("id", aviso.pedido_ids).eq("status", "pendente"));
+    if (error || !pedidos || !pedidos.length) {
+      mostrarAviso("Erro ao buscar o(s) pedido(s): " + (error ? error.message : "já foram conferidos ou não encontrados"));
+      carregarAvisosLiberadosPendentesConferencia();
+      return;
+    }
+    await iniciarConferenciaCif(pedidos, notaPreLidaDoAviso(aviso));
+    return;
+  }
+
+  const btnVincular = e.target.closest("button[data-conferir-vinculando]");
+  if (btnVincular) {
+    const avisoId = btnVincular.dataset.conferirVinculando;
+    const resultadoEl = document.querySelector(`.resultado-busca-pedido[data-aviso-id="${avisoId}"]`);
+    const ids = resultadoEl ? Array.from(resultadoEl.querySelectorAll("input[type=checkbox]:checked")).map((cb) => cb.value) : [];
+    if (!ids.length) {
+      mostrarAviso("Selecione ao menos um pedido pra vincular a este aviso.");
+      return;
+    }
+    await vincularPedidosEConferir(avisoId, ids);
+    return;
+  }
+
+  const btnSugestao = e.target.closest("button[data-usar-sugestao]");
+  if (btnSugestao) {
+    await vincularPedidosEConferir(btnSugestao.dataset.usarSugestao, [btnSugestao.dataset.pedidoSugerido]);
+    return;
+  }
+
+  const btnLerPedidoNovo = e.target.closest("button[data-ler-pedido-novo]");
+  if (btnLerPedidoNovo) {
+    const avisoId = btnLerPedidoNovo.dataset.lerPedidoNovo;
+    const inputArquivo = document.querySelector(`.anexo-pedido-novo[data-aviso-id="${avisoId}"]`);
+    const feedback = document.querySelector(`[data-feedback-pedido-novo="${avisoId}"]`);
+    const file = inputArquivo && inputArquivo.files[0];
+    if (!file) {
+      feedback.textContent = "Anexe o arquivo do pedido primeiro.";
+      feedback.className = "feedback error";
+      return;
+    }
+    const aviso = avisosLiberadosPendentesCache.find((a) => a.id === avisoId);
+    if (!aviso) return;
+
+    btnLerPedidoNovo.disabled = true;
+    feedback.textContent = "Lendo pedido com IA (pode levar alguns segundos)...";
+    feedback.className = "feedback";
+    try {
+      const extraido = await lerComIA(file, "pedido");
+
+      if (extraido.numero_pedido) {
+        const { data: existente } = await comTimeout(
+          db.from("rl_pedidos").select("id").eq("numero_pedido", extraido.numero_pedido).limit(1)
+        );
+        if (existente && existente.length) {
+          throw new Error(
+            `Pedido Nº ${extraido.numero_pedido} já existe no sistema — busque por ele no campo de busca acima em vez de anexar de novo.`
+          );
+        }
+      }
+
+      // Acha a empresa pelo CNPJ/nome lido no documento; se a IA não achar,
+      // cai pra empresa já registrada no próprio aviso (a portaria já
+      // informou qual é na hora de avisar a chegada).
+      const cnpjLido = apenasDigitos(extraido.empresa_compradora_cnpj);
+      let empresa = cnpjLido ? empresasCache.find((e) => apenasDigitos(e.cnpj) === cnpjLido) : null;
+      if (!empresa && extraido.empresa_compradora_nome) {
+        const nomeAlvo = extraido.empresa_compradora_nome.trim().toLowerCase();
+        empresa = empresasCache.find((e) => e.nome.trim().toLowerCase() === nomeAlvo);
+      }
+      if (!empresa && aviso.empresa_nome) {
+        empresa = empresasCache.find((e) => e.nome === aviso.empresa_nome);
+      }
+
+      // Acha ou cria o comprador pelo nome lido — mesmo padrão do robô/import
+      // automático, sem pedir pra digitar de novo um nome que já veio no
+      // próprio documento.
+      const nomeSolicitante = (extraido.solicitante_nome || "").trim();
+      let compradorNome = "Importação automática";
+      if (nomeSolicitante) {
+        const existenteComprador = compradoresCache.find((c) => c.nome.trim().toLowerCase() === nomeSolicitante.toLowerCase());
+        if (existenteComprador) {
+          compradorNome = existenteComprador.nome;
+        } else {
+          const { data: novoComprador, error: errComprador } = await db
+            .from("rl_compradores")
+            .insert({ nome: nomeSolicitante })
+            .select()
+            .single();
+          if (!errComprador && novoComprador) {
+            compradoresCache.push(novoComprador);
+            compradorNome = novoComprador.nome;
+          }
+        }
+      }
+
+      const { url } = await uploadArquivo(file, "rl_pedidos");
+
+      const { data: novoPedido, error: errPedido } = await db
+        .from("rl_pedidos")
+        .insert({
+          comprador_nome: compradorNome,
+          empresa_id: empresa ? empresa.id : null,
+          empresa_nome: empresa ? empresa.nome : extraido.empresa_compradora_nome || aviso.empresa_nome || null,
+          empresa_cnpj: extraido.empresa_compradora_cnpj || (empresa ? empresa.cnpj : null),
+          numero_pedido: extraido.numero_pedido || null,
+          local_retirada: extraido.local_retirada || null,
+          arquivo_url: url,
+          arquivo_nome: file.name,
+          valor_total: extraido.valor_total != null ? extraido.valor_total : null,
+          itens: Array.isArray(extraido.itens) && extraido.itens.length ? extraido.itens : null,
+          fornecedor_nome: extraido.fornecedor_nome || aviso.fornecedor_nome || null,
+          condicao_pagamento_codigo: extraido.condicao_pagamento_codigo || null,
+          urgente: false,
+          retirar_transportadora: false,
+          // Chegou por aqui (conferência CIF, aviso da portaria) — por
+          // definição é entrega do fornecedor, não precisa de coleta.
+          frete_fob: false,
+          status: "pendente",
+        })
+        .select()
+        .single();
+      if (errPedido) throw errPedido;
+
+      const { error: errAviso } = await db.from("rl_avisos_portaria").update({ pedido_ids: [novoPedido.id] }).eq("id", avisoId);
+      if (errAviso) throw errAviso;
+
+      mostrarAviso(`Pedido Nº ${novoPedido.numero_pedido || "sem número"} cadastrado e vinculado a este aviso.`);
+      await iniciarConferenciaCif([novoPedido], notaPreLidaDoAviso(aviso));
+    } catch (err) {
+      feedback.textContent = "Erro: " + err.message;
+      feedback.className = "feedback error";
+    } finally {
+      btnLerPedidoNovo.disabled = false;
+    }
+    return;
+  }
+
+  const btnDispensarSemPedido = e.target.closest("button[data-dispensar-sem-pedido]");
+  if (btnDispensarSemPedido) {
+    // Mesmo padrão de confirmação em dois cliques do resto do app — dispensar
+    // sem vincular pedido nenhum tira o aviso da lista pra sempre.
+    if (!btnDispensarSemPedido.dataset.confirmando) {
+      btnDispensarSemPedido.dataset.confirmando = "1";
+      btnDispensarSemPedido.textContent = "Confirma? Clique de novo";
+      setTimeout(() => {
+        delete btnDispensarSemPedido.dataset.confirmando;
+        btnDispensarSemPedido.textContent = "Não tem pedido pra conferir aqui";
+      }, 4000);
+      return;
+    }
+    const { error } = await db
+      .from("rl_avisos_portaria")
+      .update({ pedido_ids: [] })
+      .eq("id", btnDispensarSemPedido.dataset.dispensarSemPedido);
+    if (error) {
+      mostrarAviso("Erro ao dispensar aviso: " + error.message);
+      return;
+    }
+    carregarAvisosLiberadosPendentesConferencia();
+  }
+});
+
+// Arquiva de uma vez os avisos "sem pedido vinculado" mais antigos que 7
+// dias — pedido do Danilo (2026-09-22): a tela ficou poluída de avisos de
+// uma época em que o pedido ainda não era anexado no sistema, então nunca
+// vão achar um pedido pra vincular. Em vez de dispensar um por um, arquiva
+// todos de uma vez (mesmo efeito do botão individual: pedido_ids vira []).
+document.getElementById("btn-arquivar-sem-pedido-antigos").addEventListener("click", async (e) => {
+  const btn = e.target;
+  const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const antigos = avisosLiberadosPendentesCache.filter((a) => a._candidatos && new Date(a.lido_em || a.criado_em) < seteDiasAtras);
+  if (!antigos.length) {
+    mostrarAviso("Nenhum aviso sem pedido vinculado com mais de 7 dias pra arquivar.");
+    return;
+  }
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = `Confirma arquivar ${antigos.length}? Clique de novo`;
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "🗄️ Arquivar antigos sem pedido (+7 dias)";
+    }, 4000);
+    return;
+  }
+  delete btn.dataset.confirmando;
+  btn.textContent = "🗄️ Arquivar antigos sem pedido (+7 dias)";
+  const { error } = await db
+    .from("rl_avisos_portaria")
+    .update({ pedido_ids: [] })
+    .in("id", antigos.map((a) => a.id));
+  if (error) {
+    mostrarAviso("Erro ao arquivar: " + error.message);
+    return;
+  }
+  mostrarAviso(`${antigos.length} aviso(s) arquivado(s).`);
+  carregarAvisosLiberadosPendentesConferencia();
+});
+
+// Monta o objeto "notaPreLida" (mesmo formato usado por abrirModalConcluir)
+// a partir de um aviso que já veio com a nota lida pela portaria.
+function notaPreLidaDoAviso(aviso) {
+  if (!aviso.nota_arquivo_url) return null;
+  return {
+    arquivo_url: aviso.nota_arquivo_url,
+    valor_total: aviso.nota_valor_total,
+    cnpj: aviso.nota_cnpj,
+    numero: aviso.nota_numero,
+    itens: aviso.nota_itens,
+    tipo_documento: aviso.nota_tipo_documento,
+    emitente_nome: aviso.nota_emitente_nome,
+    data_emissao: aviso.nota_data_emissao,
+    parcelas: aviso.nota_parcelas,
+  };
+}
+
+// Único botão possível num aviso ainda pendente: liberar o acesso. A
+// conferência (ver mais abaixo) só fica disponível DEPOIS disso, de
+// propósito — ordem obrigatória, não é só uma sugestão.
+document.getElementById("avisos-portaria-pendentes").addEventListener("click", async (e) => {
+  const btnDispensar = e.target.closest("button[data-dispensar-aviso-portaria]");
+  if (!btnDispensar) return;
+  const almoxarife = document.getElementById("almoxarife-select-cif").value || null;
+  const { error } = await db
+    .from("rl_avisos_portaria")
+    .update({ lido: true, lido_por: almoxarife, lido_em: new Date().toISOString() })
+    .eq("id", btnDispensar.dataset.dispensarAvisoPortaria);
+  if (error) {
+    mostrarAviso("Erro ao dispensar aviso: " + error.message);
+    return;
+  }
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
+});
+
+// Cria uma "rota" mínima (só pra essa entrega) e abre o MESMO modal de
+// conferência que o motorista usa pra concluir uma parada — reaproveita 100%
+// da leitura de nota por IA e da comparação de itens/valor/CNPJ/condição de
+// pagamento, sem duplicar nada disso só porque dessa vez quem confere é o
+// almoxarifado (entrega CIF), não o motorista numa rota de coleta.
+// Junta vários pedidos pendentes num só "pedido" pra fins de comparação —
+// usado quando uma nota só cobre mais de um pedido do mesmo fornecedor
+// (soma o valor esperado, junta os itens de todos).
+function mesclarPedidosParaConferencia(pedidos) {
+  if (pedidos.length === 1) return pedidos[0];
+  return {
+    ...pedidos[0],
+    numero_pedido: pedidos.map((p) => p.numero_pedido || "s/ nº").join(" + "),
+    valor_total: pedidos.reduce((soma, p) => soma + (Number(p.valor_total) || 0), 0),
+    itens: pedidos.flatMap((p) => itensComoArray(p.itens)),
+  };
+}
+
+// "pedidos" é sempre um array — normalmente com 1 item, mas pode ter mais de
+// um quando o fornecedor manda uma nota só cobrindo vários pedidos juntos.
+// Cria uma parada por pedido real (pra cada um ficar registrado certinho no
+// Histórico), mas mostra/compara tudo junto numa conferência só.
+async function iniciarConferenciaCif(pedidos, notaPreLida) {
+  const almoxarife = document.getElementById("almoxarife-select-cif").value;
+  try {
+    const { data: rota, error: errRota } = await db
+      .from("rl_rotas")
+      .insert({ motorista_nome: `${almoxarife || "Almoxarifado"} (recebimento CIF)`, status: "em_andamento" })
+      .select()
+      .single();
+    if (errRota) throw errRota;
+
+    const { data: paradas, error: errParada } = await db
+      .from("rl_rota_paradas")
+      .insert(pedidos.map((p, i) => ({ rota_id: rota.id, pedido_id: p.id, ordem: i, status: "pendente" })))
+      .select();
+    if (errParada) throw errParada;
+
+    const [paradaPrimaria, ...paradasIrmas] = paradas;
+    const pedidoMesclado = mesclarPedidosParaConferencia(pedidos);
+    abrirModalConcluir(
+      {
+        ...paradaPrimaria,
+        rl_pedidos: pedidoMesclado,
+        _paradasIrmas: paradasIrmas.map((par, i) => ({ paradaId: par.id, pedidoId: pedidos[i + 1].id })),
+      },
+      notaPreLida
+    );
+  } catch (err) {
+    mostrarAviso("Erro ao iniciar conferência: " + err.message);
+  }
+}
+
+// ---------- lista geral de pedidos CIF pendentes (independe de aviso da portaria) ----------
+let pedidosCifPendentesCache = [];
+
+async function carregarPedidosCifPendentes() {
+  const el = document.getElementById("lista-pedidos-cif-pendentes");
+  const numeroFiltro = document.getElementById("filtro-numero-cif").value.trim();
+  const fornecedorFiltro = document.getElementById("filtro-fornecedor-cif").value.trim();
+
+  let query = db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false).order("criado_em");
+  if (numeroFiltro) query = query.ilike("numero_pedido", `%${numeroFiltro}%`);
+  if (fornecedorFiltro) query = query.ilike("fornecedor_nome", `%${fornecedorFiltro}%`);
+
+  // Mesma regra dos avisos: almoxarife com empresa cadastrada só vê pedidos
+  // daquela empresa (o pedido não tem "setor", só a nota/aviso tem).
+  const nomeAtual = document.getElementById("almoxarife-select-cif").value;
+  const almoxarife = almoxarifesCache.find((a) => a.nome === nomeAtual);
+  if (almoxarife && almoxarife.empresa_nome) query = query.eq("empresa_nome", almoxarife.empresa_nome);
+
+  const { data, error } = await comTimeout(query);
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos CIF.</p>`;
+    return;
+  }
+  pedidosCifPendentesCache = data || [];
+  renderPedidosCifPendentes();
+}
+
+function renderPedidosCifPendentes() {
+  const el = document.getElementById("lista-pedidos-cif-pendentes");
+  if (!pedidosCifPendentesCache.length) {
+    el.innerHTML = `<p class="empty-state">Nenhum pedido CIF pendente.</p>`;
+    return;
+  }
+  el.innerHTML = `
+    <table class="tabela-itens">
+      <thead><tr><th>Pedido</th><th>Empresa</th><th>Fornecedor</th><th>Comprador</th><th>Valor</th><th></th><th><input type="checkbox" id="chk-todos-terceiro" title="Selecionar todos"></th></tr></thead>
+      <tbody>
+        ${pedidosCifPendentesCache
+          .map(
+            (p) => `<tr>
+              <td>${escapeHtml(p.numero_pedido || "—")}</td>
+              <td>${escapeHtml(p.empresa_nome || "—")}</td>
+              <td>${escapeHtml(p.fornecedor_nome || "—")}</td>
+              <td>${escapeHtml(p.comprador_nome || "—")}</td>
+              <td>${formatarMoeda(p.valor_total)}</td>
+              <td><button type="button" class="btn small" data-conferir-pedido-cif-geral="${p.id}">🔍 Conferir</button></td>
+              <td><input type="checkbox" class="chk-recebido-terceiro" data-id="${p.id}"></td>
+            </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>
+    <p class="hint">Marque o(s) pedido(s) recebido(s) fora do almoxarifado (sem nota fiscal pra conferir aqui) e use "Recebido por terceiro" acima — marca como recebido sem passar pela comparação de divergência.</p>`;
+}
+
+document.getElementById("lista-pedidos-cif-pendentes").addEventListener("click", async (e) => {
+  const btnConferir = e.target.closest("button[data-conferir-pedido-cif-geral]");
+  if (btnConferir) {
+    const pedido = pedidosCifPendentesCache.find((p) => p.id === btnConferir.dataset.conferirPedidoCifGeral);
+    if (pedido) await iniciarConferenciaCif([pedido]);
+    return;
+  }
+
+  if (e.target.id === "chk-todos-terceiro") {
+    document.querySelectorAll(".chk-recebido-terceiro").forEach((chk) => (chk.checked = e.target.checked));
+  }
+});
+
+const btnRecebidoTerceiroSelecionados = document.getElementById("btn-recebido-terceiro-selecionados");
+btnRecebidoTerceiroSelecionados.addEventListener("click", async () => {
+  const ids = Array.from(document.querySelectorAll(".chk-recebido-terceiro:checked")).map((chk) => chk.dataset.id);
+  if (!ids.length) {
+    mostrarAviso("Selecione ao menos um pedido na lista.");
+    return;
+  }
+  // Mesmo padrão de confirmação em dois cliques já usado no resto do app
+  // (ex: "Excluir" no Histórico) — marcar como recebido sem conferência não
+  // tem volta fácil, então evita clique acidental.
+  if (!btnRecebidoTerceiroSelecionados.dataset.confirmando) {
+    btnRecebidoTerceiroSelecionados.dataset.confirmando = "1";
+    btnRecebidoTerceiroSelecionados.textContent = `Confirma ${ids.length} pedido(s)? Clique de novo`;
+    setTimeout(() => {
+      delete btnRecebidoTerceiroSelecionados.dataset.confirmando;
+      btnRecebidoTerceiroSelecionados.textContent = "🤝 Recebido por terceiro (selecionados)";
+    }, 4000);
+    return;
+  }
+  delete btnRecebidoTerceiroSelecionados.dataset.confirmando;
+  btnRecebidoTerceiroSelecionados.textContent = "🤝 Recebido por terceiro (selecionados)";
+  await marcarRecebidoPorTerceiro(ids);
+});
+
+// Registra o recebimento sem nenhuma conferência de nota — cria a mesma rota
+// "virtual" usada na conferência normal (só pra manter um registro no
+// Histórico), mas já marca concluído na hora, sem divergência nenhuma (não
+// há nota pra comparar). Aceita um ou mais pedidos de uma vez (seleção via
+// checkbox na lista geral).
+async function marcarRecebidoPorTerceiro(pedidoIds) {
+  const pedidos = pedidosCifPendentesCache.filter((p) => pedidoIds.includes(p.id));
+  if (!pedidos.length) return;
+  const almoxarife = document.getElementById("almoxarife-select-cif").value;
+  try {
+    for (const pedido of pedidos) {
+      const { data: rota, error: errRota } = await db
+        .from("rl_rotas")
+        .insert({ motorista_nome: `${almoxarife || "Almoxarifado"} (recebimento CIF)`, status: "concluida" })
+        .select()
+        .single();
+      if (errRota) throw errRota;
+
+      const { error: errParada } = await db.from("rl_rota_paradas").insert({
+        rota_id: rota.id,
+        pedido_id: pedido.id,
+        ordem: 0,
+        status: "concluida",
+        recebido_por_terceiro: true,
+        recebido_por: almoxarife || null,
+        recebido_em: new Date().toISOString(),
+        concluido_em: new Date().toISOString(),
+      });
+      if (errParada) throw errParada;
+
+      const { error: errPedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedido.id);
+      if (errPedido) throw errPedido;
+    }
+
+    mostrarAviso(pedidos.length > 1 ? `${pedidos.length} pedidos marcados como recebidos por terceiro.` : "Pedido marcado como recebido por terceiro.");
+    carregarPedidosCifPendentes();
+  } catch (err) {
+    mostrarAviso("Erro ao marcar recebimento: " + err.message);
+  }
+}
+
+document.getElementById("filtro-numero-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
+document.getElementById("filtro-fornecedor-cif").addEventListener("input", debounce(carregarPedidosCifPendentes, 400));
+document.getElementById("btn-limpar-filtros-cif").addEventListener("click", () => {
+  document.getElementById("filtro-numero-cif").value = "";
+  document.getElementById("filtro-fornecedor-cif").value = "";
+  carregarPedidosCifPendentes();
+});
+document.getElementById("btn-atualizar-recebimento-cif").addEventListener("click", () => {
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
+  carregarPedidosCifPendentes();
+});
+
+// Preenche os filtros de empresa/comprador (dropdown) a partir de TODOS os
+// pedidos já cadastrados — não só da página atual do histórico — pra sempre
+// oferecer a lista completa de opções, mesmo filtrando por algo raro/antigo.
+// Só é chamado ao abrir a aba (não a cada atualização de 1 min), já que essas
+// opções mudam bem devagar.
+async function carregarFiltrosHistorico() {
+  const { data, error } = await comTimeout(db.from("rl_pedidos").select("empresa_nome, comprador_nome"));
+  if (error || !data) return;
+
+  const selEmpresa = document.getElementById("filtro-empresa-historico");
+  const empresaAtual = selEmpresa.value;
+  const empresas = [...new Set(data.map((p) => p.empresa_nome).filter(Boolean))].sort();
+  selEmpresa.innerHTML =
+    `<option value="">Todas as empresas</option>` + empresas.map((emp) => `<option value="${escapeHtml(emp)}">${escapeHtml(emp)}</option>`).join("");
+  if (empresas.includes(empresaAtual)) selEmpresa.value = empresaAtual;
+
+  const selComprador = document.getElementById("filtro-comprador-historico");
+  const compradorAtual = selComprador.value;
+  const compradores = [...new Set(data.map((p) => p.comprador_nome).filter(Boolean))].sort();
+  selComprador.innerHTML =
+    `<option value="">Todos os compradores</option>` + compradores.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (compradores.includes(compradorAtual)) selComprador.value = compradorAtual;
+}
+
+// Busca só a página atual, já filtrada, direto no banco — nunca baixa o
+// histórico inteiro. Por isso qualquer filtro (número, empresa, comprador,
+// fornecedor, data, só-divergentes) sempre alcança TODO o histórico, não
+// importa o quão antigo o registro seja nem quantos existam no total.
+async function loadHistorico(opcoes) {
+  const el = document.getElementById("lista-historico");
+  const numeroFiltro = document.getElementById("filtro-numero-historico").value.trim();
+  const fornecedorFiltro = document.getElementById("filtro-fornecedor-historico").value.trim();
+  const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
+  const compradorFiltro = document.getElementById("filtro-comprador-historico").value;
+  const dataInicio = document.getElementById("filtro-data-inicio").value;
+  const dataFim = document.getElementById("filtro-data-fim").value;
+
+  algumFiltroAtivoHistorico = !!(
+    numeroFiltro ||
+    fornecedorFiltro ||
+    empresaFiltro ||
+    compradorFiltro ||
+    dataInicio ||
+    dataFim ||
+    somenteDivergentesHistorico
+  );
+  // Filtrar por uma coluna do pedido (número/empresa/comprador/fornecedor)
+  // exige "!inner" no embed — sem isso o Supabase filtra só o que aparece
+  // dentro de rl_pedidos, mas não restringe quais paradas voltam.
+  const precisaInner = numeroFiltro || empresaFiltro || compradorFiltro || fornecedorFiltro;
+  let query = db
+    .from("rl_rota_paradas")
+    .select(`*, rl_pedidos${precisaInner ? "!inner" : ""}(*), rl_rotas(motorista_nome)`, { count: "exact" })
+    .eq("status", "concluida")
+    .not("concluido_em", "is", null);
+
+  // "Até" inclui o dia inteiro (23:59:59), não só a meia-noite.
+  if (dataInicio) query = query.gte("concluido_em", `${dataInicio}T00:00:00`);
+  if (dataFim) query = query.lte("concluido_em", `${dataFim}T23:59:59`);
+  if (numeroFiltro) query = query.ilike("rl_pedidos.numero_pedido", `%${numeroFiltro}%`);
+  if (fornecedorFiltro) query = query.ilike("rl_pedidos.fornecedor_nome", `%${fornecedorFiltro}%`);
+  if (empresaFiltro) query = query.eq("rl_pedidos.empresa_nome", empresaFiltro);
+  if (compradorFiltro) query = query.eq("rl_pedidos.comprador_nome", compradorFiltro);
+  if (somenteDivergentesHistorico) {
+    query = query.eq("entrega_parcial", false);
+    // Tipo de divergência: um específico, ou qualquer um dos quatro.
+    const colunaPorTipo = {
+      valor: "divergencia_valor",
+      cnpj: "divergencia_cnpj",
+      itens: "divergencia_itens",
+      condicao: "divergencia_condicao_pagamento",
+    };
+    const tipoSelecionado = document.getElementById("filtro-tipo-divergencia").value;
+    if (colunaPorTipo[tipoSelecionado]) {
+      query = query.eq(colunaPorTipo[tipoSelecionado], true);
+    } else {
+      query = query.or("divergencia_valor.eq.true,divergencia_cnpj.eq.true,divergencia_itens.eq.true,divergencia_condicao_pagamento.eq.true");
+    }
+    // "Justificada" = alguém já registrou a decisão sobre a divergência.
+    const filtroJustificativa = document.getElementById("filtro-justificativa-historico").value;
+    // "Não justificada" = algum tipo que divergiu ainda sem decisão.
+    // "Justificada" = todos os tipos que divergiram já têm decisão.
+    if (filtroJustificativa === "sem") {
+      query = query.or(
+        TIPOS_DIVERGENCIA.map((t) => `and(${t.flag}.eq.true,${t.coluna}.is.null)`).join(",")
+      );
+    }
+    if (filtroJustificativa === "com") {
+      TIPOS_DIVERGENCIA.forEach((t) => {
+        query = query.or(`${t.flag}.eq.false,${t.coluna}.not.is.null`);
+      });
+    }
+  }
+
+  query = query.order("concluido_em", { ascending: false });
+  const inicio = (paginaHistoricoAtual - 1) * ITENS_POR_PAGINA_HISTORICO;
+  query = query.range(inicio, inicio + ITENS_POR_PAGINA_HISTORICO - 1);
+
+  const { data, error, count } = await comTimeout(query);
+  if (error) {
+    el.innerHTML = `<p class="empty-state">Erro ao carregar histórico.</p>`;
+    return;
+  }
+
+  // Se a página pedida ficou além do total (ex: um filtro novo reduziu o
+  // total de páginas), volta pra última página válida e busca de novo.
+  const totalPaginas = Math.max(1, Math.ceil((count || 0) / ITENS_POR_PAGINA_HISTORICO));
+  if (paginaHistoricoAtual > totalPaginas) {
+    paginaHistoricoAtual = totalPaginas;
+    return loadHistorico(opcoes);
+  }
+
+  // Não redesenha a tela se alguém estiver digitando algo no Histórico agora
+  // (ex: a justificativa da divergência, ou a observação do almoxarifado) —
+  // sem isso, o refresh automático de 1 em 1 minuto podia cair bem no meio
+  // de um texto mais longo (que demora mais pra digitar) e apagar tudo,
+  // porque redesenhar a lista destrói e recria a caixinha de texto.
+  const elementoAtivo = document.activeElement;
+  const digitandoNoHistorico =
+    elementoAtivo && elementoAtivo.matches && elementoAtivo.matches(".input-resolucao, .input-obs-recebimento");
+  // No refresh AUTOMÁTICO (1 em 1 minuto), também não redesenha com um bloco
+  // "vincular outro pedido"/"trocar nota" aberto — redesenhar fecharia o bloco
+  // e apagaria a foto já escolhida. Ações manuais (filtro, botões) sempre
+  // redesenham.
+  const refreshAutomatico = !!(opcoes && opcoes.automatico === true);
+  const blocoAbertoNoHistorico = refreshAutomatico && !!document.querySelector("#lista-historico details[open]");
+  if (digitandoNoHistorico || blocoAbertoNoHistorico) return;
+
+  paginaAtualDados = data || [];
+  // Busca registros de outras páginas com o mesmo número de nota (pra achar
+  // pedidos irmãos mesmo quando caem em páginas diferentes).
+  const numerosNota = [...new Set(paginaAtualDados.map((p) => p.nota_numero).filter(Boolean))];
+  let extrasPool = [];
+  if (numerosNota.length) {
+    const { data: extras } = await comTimeout(
+      db.from("rl_rota_paradas").select("*, rl_pedidos(*), rl_rotas(motorista_nome)").eq("status", "concluida").in("nota_numero", numerosNota)
+    );
+    extrasPool = extras || [];
+  }
+  const idsNaPagina = new Set(paginaAtualDados.map((p) => p.id));
+  poolParadasHistorico = [...paginaAtualDados, ...extrasPool.filter((p) => !idsNaPagina.has(p.id))];
+  renderPaginacaoHistorico(totalPaginas);
+  renderHistorico();
+}
+
+const buscarHistoricoDebounced = debounce(() => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+}, 400);
+
+document.getElementById("filtro-empresa-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-comprador-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-numero-historico").addEventListener("input", buscarHistoricoDebounced);
+document.getElementById("filtro-fornecedor-historico").addEventListener("input", buscarHistoricoDebounced);
+document.getElementById("filtro-data-inicio").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-data-fim").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("btn-somente-divergentes").addEventListener("click", (e) => {
+  somenteDivergentesHistorico = !somenteDivergentesHistorico;
+  e.currentTarget.classList.toggle("ativo", somenteDivergentesHistorico);
+  const selJustificativa = document.getElementById("filtro-justificativa-historico");
+  selJustificativa.classList.toggle("hidden", !somenteDivergentesHistorico);
+  if (!somenteDivergentesHistorico) selJustificativa.value = "";
+  const selTipoDivergencia = document.getElementById("filtro-tipo-divergencia");
+  selTipoDivergencia.classList.toggle("hidden", !somenteDivergentesHistorico);
+  if (!somenteDivergentesHistorico) selTipoDivergencia.value = "";
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-justificativa-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("filtro-tipo-divergencia").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+document.getElementById("btn-limpar-filtros-historico").addEventListener("click", () => {
+  document.getElementById("filtro-empresa-historico").value = "";
+  document.getElementById("filtro-comprador-historico").value = "";
+  document.getElementById("filtro-numero-historico").value = "";
+  document.getElementById("filtro-fornecedor-historico").value = "";
+  document.getElementById("filtro-data-inicio").value = "";
+  document.getElementById("filtro-data-fim").value = "";
+  somenteDivergentesHistorico = false;
+  document.getElementById("btn-somente-divergentes").classList.remove("ativo");
+  const selJustificativaLimpar = document.getElementById("filtro-justificativa-historico");
+  selJustificativaLimpar.value = "";
+  selJustificativaLimpar.classList.add("hidden");
+  const selTipoLimpar = document.getElementById("filtro-tipo-divergencia");
+  selTipoLimpar.value = "";
+  selTipoLimpar.classList.add("hidden");
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-confirmar-recebimento]");
+  if (!btn) return;
+  const almoxarife = document.getElementById("almoxarife-select").value;
+  if (!almoxarife) {
+    mostrarAviso("Selecione seu nome (almoxarifado) primeiro.");
+    return;
+  }
+  const paradaId = btn.dataset.confirmarRecebimento;
+  const card = btn.closest(".historico-parada-card");
+  const observacao = card.querySelector(".input-obs-recebimento")?.value.trim() || null;
+  const inputFotos = card.querySelector(".input-fotos-recebimento");
+  const arquivos = inputFotos ? Array.from(inputFotos.files) : [];
+
+  btn.disabled = true;
+  btn.textContent = arquivos.length ? "Enviando fotos..." : "Salvando...";
+  try {
+    const fotosUrls = [];
+    for (const arquivo of arquivos) {
+      const { url } = await uploadArquivo(arquivo, "rl_recebimentos");
+      fotosUrls.push(url);
+    }
+    const { error } = await db
+      .from("rl_rota_paradas")
+      .update({
+        recebido_por: almoxarife,
+        recebido_em: new Date().toISOString(),
+        recebido_observacao: observacao,
+        recebido_fotos: fotosUrls.length ? fotosUrls : null,
+      })
+      .eq("id", paradaId);
+    if (error) throw error;
+    await loadHistorico();
+  } catch (err) {
+    mostrarAviso("Erro ao confirmar recebimento: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "✅ Confirmar recebimento";
+  }
+});
+
+// mesmo padrão de confirmação por duplo clique usado em "Meus pedidos"/"Pedidos disponíveis"
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-excluir-historico]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo para confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Excluir";
+    }, 4000);
+    return;
+  }
+  const { error } = await db.from("rl_rota_paradas").delete().eq("id", btn.dataset.excluirHistorico);
+  if (error) {
+    mostrarAviso("Erro ao excluir: " + error.message);
+    return;
+  }
+  loadHistorico();
+});
+
+// Busca pedidos PENDENTES (ainda não conferidos) pra juntar numa conferência
+// já concluída — mesmo padrão de debounce/mínimo de caracteres da busca
+// manual da tela de "sem pedido vinculado", só que aqui é consulta direta ao
+// banco (Histórico não mantém uma lista de pendentes pré-carregada).
+document.getElementById("lista-historico").addEventListener("input", (e) => {
+  const input = e.target.closest("input.busca-pedido-vincular");
+  if (!input) return;
+  const paradaId = input.dataset.paradaId;
+  const resultadoEl = document.querySelector(`.resultado-busca-pedido-vincular[data-parada-id="${paradaId}"]`);
+  if (!resultadoEl) return;
+
+  const termo = input.value.trim();
+  clearTimeout(input._buscaTimeout);
+  if (termo.length < 2) {
+    resultadoEl.innerHTML = "";
+    return;
+  }
+  input._buscaTimeout = setTimeout(async () => {
+    const parada = paginaAtualDados.find((p) => p.id === paradaId);
+    const empresaAtual = (parada && parada.rl_pedidos && parada.rl_pedidos.empresa_nome) || null;
+    // "na_rota" entra também — pedido já pode estar numa rota do motorista
+    // esperando a parada dele ser concluída; nesse caso a função de vincular
+    // reaproveita essa parada existente em vez de criar outra.
+    let query = db
+      .from("rl_pedidos")
+      .select("id, numero_pedido, fornecedor_nome, valor_total, arquivo_url")
+      .in("status", ["pendente", "na_rota"])
+      .or(`numero_pedido.ilike.%${termo}%,fornecedor_nome.ilike.%${termo}%`)
+      .limit(8);
+    if (empresaAtual) query = query.eq("empresa_nome", empresaAtual);
+    const { data, error } = await comTimeout(query);
+    if (error) {
+      resultadoEl.innerHTML = `<p class="hint">Erro na busca: ${escapeHtml(error.message)}</p>`;
+      return;
+    }
+    if (!data || !data.length) {
+      resultadoEl.innerHTML = `<p class="hint">Nenhum pedido pendente encontrado com "${escapeHtml(termo)}".</p>`;
+      return;
+    }
+    resultadoEl.innerHTML = data
+      .map(
+        (ped) => `
+      <div class="resultado-busca-item">
+        <span>Nº ${escapeHtml(ped.numero_pedido || "sem número")} — ${escapeHtml(ped.fornecedor_nome || "")} — ${formatarMoeda(ped.valor_total)}</span>
+        <a href="${ped.arquivo_url}" target="_blank" rel="noopener">ver pedido</a>
+        <button type="button" class="btn small" data-vincular-outro-pedido="${ped.id}" data-parada-origem="${paradaId}">Vincular e juntar</button>
+      </div>`
+      )
+      .join("");
+  }, 300);
+});
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btnVincular = e.target.closest("button[data-vincular-outro-pedido]");
+  if (btnVincular) {
+    if (!btnVincular.dataset.confirmando) {
+      btnVincular.dataset.confirmando = "1";
+      btnVincular.textContent = "Clique de novo pra confirmar";
+      setTimeout(() => {
+        delete btnVincular.dataset.confirmando;
+        btnVincular.textContent = "Vincular e juntar";
+      }, 4000);
+      return;
+    }
+    await vincularOutroPedidoHistorico(btnVincular.dataset.paradaOrigem, btnVincular.dataset.vincularOutroPedido, btnVincular);
+    return;
+  }
+});
+
+// Recalcula valor/itens/condição de pagamento de uma conferência contra o
+// pedido SOMADO (vários pedidos na mesma nota), usando só o que já está salvo
+// na parada (sem IA).
+function recalcularDivergenciasMescladas(pedidoMesclado, parada) {
+  const divergValor =
+    pedidoMesclado.valor_total != null && parada.nota_valor_total != null
+      ? Math.abs(Number(pedidoMesclado.valor_total) - Number(parada.nota_valor_total)) > TOLERANCIA_VALOR
+      : parada.divergencia_valor;
+  const itensDivergentes =
+    parada.nota_tipo_documento === "servico"
+      ? parada.divergencia_itens
+      : compararItens(pedidoMesclado.itens, parada.nota_itens).divergente;
+  const { divergCondicao } = compararCondicaoPagamento(pedidoMesclado, parada.nota_data_emissao, parada.nota_parcelas);
+  return { divergValor, itensDivergentes, divergCondicao };
+}
+
+// Junta dois registros JÁ CONCLUÍDOS que na verdade são a mesma nota cobrindo
+// dois pedidos (ex: motorista fotografou a mesma nota em duas paradas).
+// Reaproveita a nota lida do registro de onde se clicou — sem IA — e grava o
+// resultado recalculado (pedidos somados) nos dois, cada um mantendo seu
+// próprio horário de conclusão e dados de recebimento. Ao copiar a mesma foto
+// pros dois, eles passam a ser reconhecidos como grupo no Histórico.
+async function juntarParadasConcluidas(paradaAId, paradaBId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Juntando...";
+  }
+  try {
+    const { data: paradas, error } = await db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*)")
+      .in("id", [paradaAId, paradaBId]);
+    if (error) throw error;
+    const a = paradas.find((p) => p.id === paradaAId);
+    const b = paradas.find((p) => p.id === paradaBId);
+    if (!a || !b) throw new Error("Não achei um dos registros. Atualize a página e tente de novo.");
+    if (a.status !== "concluida" || b.status !== "concluida" || a.entrega_parcial || b.entrega_parcial) {
+      throw new Error("Os dois registros precisam estar concluídos (e não ser entrega parcial).");
+    }
+
+    const pedidoMesclado = mesclarPedidosParaConferencia([a.rl_pedidos, b.rl_pedidos]);
+    const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoMesclado, a);
+    const dadosNota = {
+      nota_arquivo_url: a.nota_arquivo_url,
+      nota_numero: a.nota_numero,
+      nota_valor_total: a.nota_valor_total,
+      nota_cnpj: a.nota_cnpj,
+      nota_itens: a.nota_itens,
+      nota_tipo_documento: a.nota_tipo_documento,
+      nota_emitente_nome: a.nota_emitente_nome,
+      nota_data_emissao: a.nota_data_emissao,
+      nota_parcelas: a.nota_parcelas,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: a.divergencia_cnpj,
+      divergencia_itens: itensDivergentes,
+      divergencia_condicao_pagamento: divergCondicao,
+    };
+    // Não escreve nada no campo "Decisão": ele é do comprador. A informação de
+    // que a nota cobre outro pedido já aparece na linha "🔗 Nota também cobre".
+    for (const alvo of [a, b]) {
+      const { error: errUp } = await db.from("rl_rota_paradas").update(dadosNota).eq("id", alvo.id);
+      if (errUp) throw errUp;
+    }
+    mostrarAviso("Pedidos juntados — conferência recalculada com os dois somados.");
+    await loadHistorico();
+  } catch (err) {
+    mostrarAviso("Erro ao juntar: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Juntar os dois";
+    }
+  }
+}
+
+// Troca a(s) foto(s) da nota de um registro já concluído e lê tudo de novo
+// com a IA (1 chamada por foto). Se o registro faz parte de um grupo de
+// pedidos na mesma nota (mesma foto), a nota nova vale pro grupo todo e a
+// comparação usa os pedidos somados. A decisão (justificativa) já escrita é
+// mantida — pode ficar desatualizada se a nota nova resolver a divergência,
+// então vale conferir/editar depois.
+async function trocarNotaHistorico(paradaId, btn) {
+  const card = btn.closest(".historico-parada-card");
+  const input = card.querySelector(`.input-nota-troca[data-parada-id="${paradaId}"]`);
+  const feedback = card.querySelector(`[data-troca-feedback="${paradaId}"]`);
+  const arquivos = Array.from((input && input.files) || []);
+  if (!arquivos.length) {
+    feedback.textContent = "Selecione a(s) foto(s) da nota certa primeiro.";
+    feedback.className = "feedback error";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const parada = poolParadasHistorico.find((p) => p.id === paradaId) || paginaAtualDados.find((p) => p.id === paradaId);
+    if (!parada) throw new Error("Registro não encontrado. Atualize a página.");
+    const grupo = [parada, ...pedidosIrmaos(parada, poolParadasHistorico)];
+
+    const urls = [];
+    const leituras = [];
+    for (let i = 0; i < arquivos.length; i++) {
+      feedback.textContent = `Enviando e lendo foto ${i + 1} de ${arquivos.length}...`;
+      feedback.className = "feedback";
+      urls.push((await uploadArquivo(arquivos[i], "rl_notas")).url);
+      leituras.push(await lerComIA(arquivos[i], "nota"));
+    }
+    const lido = mesclarLeiturasNota(leituras);
+    const dadosNota = {
+      nota_arquivo_url: urls[0],
+      nota_numero: lido.numero_nota || null,
+      nota_valor_total: lido.valor_total != null ? lido.valor_total : null,
+      nota_cnpj: lido.destinatario_cnpj || null,
+      nota_itens: lido.itens.length ? lido.itens : null,
+      nota_tipo_documento: lido.tipo_documento || null,
+      nota_emitente_nome: lido.emitente_nome || null,
+      nota_data_emissao: lido.data_emissao || null,
+      nota_parcelas: Array.isArray(lido.parcelas_pagamento) && lido.parcelas_pagamento.length ? lido.parcelas_pagamento : null,
+    };
+
+    const pedidoMesclado = mesclarPedidosParaConferencia(grupo.map((g) => g.rl_pedidos));
+    const paradaNova = { ...dadosNota, divergencia_valor: false, divergencia_itens: false };
+    const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoMesclado, paradaNova);
+    const itensFinal =
+      dadosNota.nota_tipo_documento === "servico"
+        ? compararPrestador(pedidoMesclado, dadosNota.nota_emitente_nome).divergPrestador
+        : itensDivergentes;
+    const cnpjEsperado = apenasDigitos(pedidoMesclado.empresa_cnpj);
+    const cnpjNota = apenasDigitos(dadosNota.nota_cnpj);
+    const divergCnpj = !!(cnpjEsperado && cnpjNota && cnpjEsperado !== cnpjNota);
+
+    const payload = {
+      ...dadosNota,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: divergCnpj,
+      divergencia_itens: itensFinal,
+      divergencia_condicao_pagamento: divergCondicao,
+    };
+    if (urls.length > 1) payload.nota_arquivos_extras = urls.slice(1);
+    for (const g of grupo) {
+      const temExtrasAntigas = Array.isArray(g.nota_arquivos_extras) && g.nota_arquivos_extras.length;
+      const corpo = urls.length > 1 ? payload : temExtrasAntigas ? { ...payload, nota_arquivos_extras: null } : payload;
+      const { error } = await db.from("rl_rota_paradas").update(corpo).eq("id", g.id);
+      if (error) throw error;
+    }
+    mostrarAviso(`Nota trocada e lida de novo${grupo.length > 1 ? ` (valeu pros ${grupo.length} pedidos da mesma nota)` : ""}.`);
+    await loadHistorico();
+  } catch (err) {
+    feedback.textContent = "Erro: " + err.message;
+    feedback.className = "feedback error";
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("lista-historico").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-abrir-pedidos-juntos]");
+  if (!btn) return;
+  const parada = poolParadasHistorico.find((p) => p.id === btn.dataset.abrirPedidosJuntos);
+  if (!parada) return;
+  const urls = [parada, ...pedidosIrmaos(parada, poolParadasHistorico)]
+    .map((g) => (g.rl_pedidos || {}).arquivo_url)
+    .filter((u, i, todos) => u && todos.indexOf(u) === i);
+  abrirPedidosJuntos(urls);
+});
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btnTroca = e.target.closest("button[data-trocar-nota]");
+  if (btnTroca) {
+    if (!btnTroca.dataset.confirmando) {
+      btnTroca.dataset.confirmando = "1";
+      btnTroca.textContent = "Clique de novo pra confirmar (gasta leitura de IA)";
+      setTimeout(() => {
+        delete btnTroca.dataset.confirmando;
+        btnTroca.textContent = "Trocar e ler de novo";
+      }, 5000);
+      return;
+    }
+    await trocarNotaHistorico(btnTroca.dataset.trocarNota, btnTroca);
+    return;
+  }
+  const btn = e.target.closest("button[data-juntar-concluida]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo pra confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = "Juntar os dois";
+    }, 4000);
+    return;
+  }
+  await juntarParadasConcluidas(btn.dataset.juntarConcluida, btn.dataset.paradaIrma, btn);
+});
+
+// Junta um pedido pendente (que o comprador identificou como estando na MESMA
+// nota) a uma conferência já concluída — sem reler nada com IA: reaproveita a
+// nota já extraída (nota_itens, nota_valor_total etc. já salvos na parada
+// original) e só recalcula a comparação somando os dois pedidos, igual ao que
+// já acontece quando vários pedidos são conferidos juntos desde o início (ver
+// mesclarPedidosParaConferencia/iniciarConferenciaCif). Cria uma 2ª parada,
+// na mesma rota, pro pedido novo ficar com seu próprio registro no Histórico.
+async function vincularOutroPedidoHistorico(paradaOrigemId, pedidoNovoId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Juntando...";
+  }
+  try {
+    const { data: paradaOrigem, error: errParada } = await db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*)")
+      .eq("id", paradaOrigemId)
+      .single();
+    if (errParada || !paradaOrigem) throw errParada || new Error("Conferência original não encontrada.");
+
+    const { data: pedidoNovo, error: errPedido } = await db
+      .from("rl_pedidos")
+      .select("*")
+      .eq("id", pedidoNovoId)
+      .in("status", ["pendente", "na_rota"])
+      .single();
+    if (errPedido || !pedidoNovo) throw new Error("Esse pedido não está mais disponível pra vincular (alguém já deve ter mexido nele). Atualize a página e tente de novo.");
+
+    // Se o pedido já está "na_rota", já existe uma parada dele esperando
+    // (pendente) numa rota do motorista — reaproveita ela em vez de criar
+    // outra (senão sobraria uma parada fantasma pendente pra sempre lá).
+    // Se ainda está "pendente" (nunca foi roteirizado), não existe parada
+    // nenhuma ainda, então cria uma nova.
+    const { data: paradaExistente, error: errParadaExistente } = await db
+      .from("rl_rota_paradas")
+      .select("id")
+      .eq("pedido_id", pedidoNovo.id)
+      .eq("status", "pendente")
+      .maybeSingle();
+    if (errParadaExistente) throw errParadaExistente;
+
+    const pedidoOriginal = paradaOrigem.rl_pedidos || {};
+    const pedidoMesclado = mesclarPedidosParaConferencia([pedidoOriginal, pedidoNovo]);
+
+    const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoMesclado, paradaOrigem);
+
+    const dadosConclusao = {
+      status: "concluida",
+      nota_arquivo_url: paradaOrigem.nota_arquivo_url,
+      nota_numero: paradaOrigem.nota_numero,
+      nota_valor_total: paradaOrigem.nota_valor_total,
+      nota_cnpj: paradaOrigem.nota_cnpj,
+      nota_itens: paradaOrigem.nota_itens,
+      nota_tipo_documento: paradaOrigem.nota_tipo_documento,
+      nota_emitente_nome: paradaOrigem.nota_emitente_nome,
+      nota_data_emissao: paradaOrigem.nota_data_emissao,
+      nota_parcelas: paradaOrigem.nota_parcelas,
+      entrega_parcial: false,
+      divergencia_valor: divergValor,
+      divergencia_cnpj: paradaOrigem.divergencia_cnpj,
+      divergencia_itens: itensDivergentes,
+      divergencia_condicao_pagamento: divergCondicao,
+      concluido_em: paradaOrigem.concluido_em,
+    };
+    // Não escreve nada no campo "Decisão" (ele é do comprador, e uma frase
+    // automática ali faria a divergência parecer justificada e sumir de "sem
+    // resposta"). A informação de que a nota cobre outro pedido já aparece na
+    // linha "🔗 Nota também cobre" do card.
+    if (paradaExistente) {
+      const { error: errAtualizaParada } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaExistente.id);
+      if (errAtualizaParada) throw errAtualizaParada;
+    } else {
+      const { error: errNovaParada } = await db.from("rl_rota_paradas").insert({
+        rota_id: paradaOrigem.rota_id,
+        pedido_id: pedidoNovo.id,
+        ordem: (paradaOrigem.ordem || 0) + 1,
+        ...dadosConclusao,
+      });
+      if (errNovaParada) throw errNovaParada;
+    }
+
+    const { error: errUpdateOrigem } = await db.from("rl_rota_paradas").update(dadosConclusao).eq("id", paradaOrigemId);
+    if (errUpdateOrigem) throw errUpdateOrigem;
+
+    const { error: errUpdatePedido } = await db.from("rl_pedidos").update({ status: "concluido" }).eq("id", pedidoNovo.id);
+    if (errUpdatePedido) throw errUpdatePedido;
+
+    mostrarAviso("Pedidos vinculados — conferência recalculada com os dois juntos.");
+    await loadHistorico();
+  } catch (err) {
+    mostrarAviso("Erro ao vincular: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Vincular e juntar";
+    }
+  }
+}
+
+// Desfaz uma conclusão do Histórico: apaga o registro, devolve o pedido pra
+// "pendente" (volta pra fila do recebimento CIF ou do motorista) e, se esse
+// registro fazia parte de um grupo de pedidos na mesma nota, recalcula os
+// outros SEM ele. Diferente do "Excluir", que só apaga o registro e deixa o
+// pedido como concluído.
+async function desfazerParadaHistorico(paradaId, btn) {
+  const textoOriginal = btn.dataset.rotulo || btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Desfazendo...";
+  try {
+    const { data: parada, error } = await db
+      .from("rl_rota_paradas")
+      .select("*, rl_pedidos(*), rl_rotas(motorista_nome)")
+      .eq("id", paradaId)
+      .single();
+    if (error || !parada) throw error || new Error("Registro não encontrado. Atualize a página.");
+    const pedido = parada.rl_pedidos || {};
+
+    // Outros pedidos da mesma nota (mesma foto), buscados direto no banco.
+    let irmas = [];
+    if (parada.nota_arquivo_url) {
+      const { data: encontradas, error: errIrmas } = await db
+        .from("rl_rota_paradas")
+        .select("*, rl_pedidos(*)")
+        .eq("nota_arquivo_url", parada.nota_arquivo_url)
+        .eq("status", "concluida")
+        .neq("id", paradaId);
+      if (errIrmas) throw errIrmas;
+      irmas = encontradas || [];
+    }
+
+    const { error: errDel } = await db.from("rl_rota_paradas").delete().eq("id", paradaId);
+    if (errDel) throw errDel;
+    const { error: errPedido } = await db.from("rl_pedidos").update({ status: "pendente" }).eq("id", parada.pedido_id);
+    if (errPedido) throw errPedido;
+
+    // Rota "virtual" do recebimento CIF que ficou vazia não serve pra mais nada.
+    const { count } = await db.from("rl_rota_paradas").select("id", { count: "exact", head: true }).eq("rota_id", parada.rota_id);
+    if (!count && /\(recebimento CIF\)$/.test((parada.rl_rotas || {}).motorista_nome || "")) {
+      await db.from("rl_rotas").delete().eq("id", parada.rota_id);
+    }
+
+    if (irmas.length) {
+      const pedidoRestante = mesclarPedidosParaConferencia(irmas.map((i) => i.rl_pedidos));
+      const { divergValor, itensDivergentes, divergCondicao } = recalcularDivergenciasMescladas(pedidoRestante, irmas[0]);
+      for (const irma of irmas) {
+        const { error: errIrma } = await db
+          .from("rl_rota_paradas")
+          .update({
+            divergencia_valor: divergValor,
+            divergencia_itens: itensDivergentes,
+            divergencia_condicao_pagamento: divergCondicao,
+          })
+          .eq("id", irma.id);
+        if (errIrma) throw errIrma;
+      }
+    }
+
+    mostrarAviso(
+      `Desfeito: o pedido ${pedido.numero_pedido || ""} voltou para ${pedido.frete_fob ? "a fila do motorista" : "o recebimento"}.` +
+        (irmas.length ? " Os outros pedidos da mesma nota foram recalculados sem ele." : "")
+    );
+    await loadHistorico();
+    carregarAvisosLiberadosPendentesConferencia();
+    carregarPedidosCifPendentes();
+  } catch (err) {
+    mostrarAviso("Erro ao desfazer: " + err.message);
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-desfazer-historico]");
+  if (!btn) return;
+  if (!btn.dataset.confirmando) {
+    const textoOriginal = btn.textContent;
+    btn.dataset.rotulo = textoOriginal;
+    btn.dataset.confirmando = "1";
+    btn.textContent = "Clique de novo pra confirmar";
+    setTimeout(() => {
+      delete btn.dataset.confirmando;
+      btn.textContent = textoOriginal;
+    }, 4000);
+    return;
+  }
+  await desfazerParadaHistorico(btn.dataset.desfazerHistorico, btn);
+});
+
+document.getElementById("lista-historico").addEventListener("click", async (e) => {
+  const btnEditar = e.target.closest("button[data-editar-resolucao]");
+  if (btnEditar) {
+    resolucoesEmEdicao.add(`${btnEditar.dataset.editarResolucao}:${btnEditar.dataset.tipo}`);
+    renderHistorico();
+    return;
+  }
+  const btnSalvar = e.target.closest("button[data-salvar-resolucao]");
+  if (btnSalvar) {
+    const paradaId = btnSalvar.dataset.salvarResolucao;
+    const chaveTipo = btnSalvar.dataset.tipo;
+    const tipo = TIPOS_DIVERGENCIA.find((t) => t.chave === chaveTipo);
+    const textarea = document.querySelector(`.input-resolucao[data-parada-id="${paradaId}"][data-tipo="${chaveTipo}"]`);
+    if (!tipo || !textarea) return;
+    const texto = textarea.value.trim();
+    if (!texto) {
+      mostrarAviso("Escreva o que foi decidido antes de salvar.");
+      return;
+    }
+    const quemRegistrou = document.getElementById("almoxarife-select").value || null;
+    // O meta (quem/quando) é um JSON com uma entrada por tipo — lê o atual
+    // do banco pra não apagar o dos outros tipos.
+    const { data: atual, error: errLeitura } = await db.from("rl_rota_paradas").select("resolucoes_meta").eq("id", paradaId).single();
+    if (errLeitura) {
+      mostrarAviso("Erro ao salvar: " + errLeitura.message);
+      return;
+    }
+    const meta = { ...(atual.resolucoes_meta || {}), [chaveTipo]: { por: quemRegistrou, em: new Date().toISOString() } };
+    const { error } = await db
+      .from("rl_rota_paradas")
+      .update({ [tipo.coluna]: texto, resolucoes_meta: meta })
+      .eq("id", paradaId);
+    if (error) {
+      mostrarAviso("Erro ao salvar: " + error.message);
+      return;
+    }
+    resolucoesEmEdicao.delete(`${paradaId}:${chaveTipo}`);
+    await loadHistorico();
+  }
+});
+
+// ---------- botões de atualizar (dados podem mudar por outro comprador/motorista usando o site ao mesmo tempo) ----------
+document.getElementById("btn-atualizar-comprador").addEventListener("click", loadMeusPedidos);
+document.getElementById("btn-atualizar-motorista").addEventListener("click", () => {
+  loadDisponiveis();
+  loadRotaAtual();
+});
+document.getElementById("btn-atualizar-indicadores").addEventListener("click", loadIndicadores);
+document.getElementById("btn-atualizar-historico").addEventListener("click", loadHistorico);
+document.getElementById("btn-atualizar-config").addEventListener("click", async () => {
+  await Promise.all([loadEmpresas(), loadCompradores(), loadMotoristas()]);
+  renderCadastros();
+});
+
+// ---------- inicialização ----------
+(async function init() {
+  await Promise.all([loadCompradores(), loadMotoristas(), loadEmpresas(), loadAlmoxarifes(), loadCondicoesPagamento()]);
+  loadMeusPedidos();
+
+  // Verifica divergências e avisos da portaria em aberto assim que a página
+  // carrega, pra já conhecer o que existe agora e só avisar por voz do que
+  // aparecer DEPOIS disso (ver avisarDivergenciasNovas/carregarAvisosPortariaPendentes).
+  verificarDivergenciasNovas();
+  carregarAvisosPortariaPendentes();
+  carregarAvisosLiberadosPendentesConferencia();
+
+  // Atualização automática a cada 1 min — pensado pro app ficar aberto o dia
+  // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência ou
+  // aviso da portaria novo em qualquer lugar (não só na página/filtro visível
+  // agora) e atualiza a lista visível, sem precisar de ninguém clicar em nada.
+  setInterval(() => {
+    verificarDivergenciasNovas();
+    carregarAvisosPortariaPendentes();
+    carregarAvisosLiberadosPendentesConferencia();
+    loadHistorico({ automatico: true });
+  }, 60000);
+})();
