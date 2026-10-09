@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "283";
+const VERSAO_APP = "284";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -1541,10 +1541,28 @@ function mesclarLeiturasNota(leituras) {
     return undefined;
   };
   const valores = leituras.map((l) => l.valor_total).filter((v) => v != null);
+  // Fotos com números de nota diferentes são notas distintas (ex.: duas empresas do mesmo
+  // fornecedor para um só pedido): os totais se somam. Mesmo número = páginas da mesma nota.
+  const numeros = [...new Set(leituras.map((l) => String(l.numero_nota ?? "").trim()).filter(Boolean))];
+  const notasDistintas = numeros.length > 1;
+  let valorTotal;
+  if (valores.length) {
+    if (notasDistintas) {
+      const porNumero = new Map();
+      for (const l of leituras) {
+        if (l.valor_total == null) continue;
+        const chave = String(l.numero_nota ?? "").trim() || "?" + porNumero.size;
+        porNumero.set(chave, Math.max(porNumero.get(chave) ?? 0, l.valor_total));
+      }
+      valorTotal = Math.round([...porNumero.values()].reduce((a, b) => a + b, 0) * 100) / 100;
+    } else {
+      valorTotal = Math.max(...valores);
+    }
+  }
   return {
     tipo_documento: primeiro("tipo_documento"),
-    numero_nota: primeiro("numero_nota"),
-    valor_total: valores.length ? Math.max(...valores) : undefined,
+    numero_nota: notasDistintas ? numeros.join(" / ") : primeiro("numero_nota"),
+    valor_total: valorTotal,
     destinatario_cnpj: primeiro("destinatario_cnpj"),
     emitente_nome: primeiro("emitente_nome"),
     data_emissao: primeiro("data_emissao"),
