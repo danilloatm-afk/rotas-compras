@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "286";
+const VERSAO_APP = "287";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -109,12 +109,21 @@ function mostrarAvisoSomBloqueado() {
 // Fala em voz alta usando a síntese de voz do próprio navegador — sem custo,
 // sem chave de API. Nem todo navegador/dispositivo suporta, então falha em
 // silêncio se não tiver (o alerta visual normal continua funcionando igual).
-function falarAlerta(texto, vezes = 2) {
+// Cada alerta (identificado por "chave") só é falado UMA vez por aparelho,
+// mesmo que mais de um caminho do app tente anunciá-lo (a tela que concluiu a
+// parada e a verificação automática, ou duas verificações simultâneas).
+const alertasJaFalados = new Map(); // chave -> quando foi falado
+const JANELA_REPETICAO_ALERTA_MS = 30 * 60 * 1000;
+
+function falarAlerta(texto, vezes = 1, chave = null) {
   if (!("speechSynthesis" in window)) return;
+  if (chave) {
+    const agora = Date.now();
+    const quando = alertasJaFalados.get(chave);
+    if (quando && agora - quando < JANELA_REPETICAO_ALERTA_MS) return;
+    alertasJaFalados.set(chave, agora);
+  }
   try {
-    // Fala mais de uma vez de propósito — num ambiente barulhento (pátio,
-    // oficina) um aviso só, uma vez, passa despercebido fácil. As falas
-    // entram na fila do navegador e tocam uma depois da outra sozinhas.
     for (let i = 0; i < vezes; i++) {
       const utterance = new SpeechSynthesisUtterance(texto);
       utterance.lang = "pt-BR";
@@ -2412,7 +2421,9 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
     if (!entregaParcial && (divergValor || divergCnpj || itensDivergentes || divergCondicao)) {
       falarAlerta(
         `Atenção! Divergência encontrada. Comprador ${pedidoConcluido.comprador_nome || "não informado"}, ` +
-          `pedido ${pedidoConcluido.numero_pedido || "sem número"}.`
+          `pedido ${pedidoConcluido.numero_pedido || "sem número"}.`,
+        1,
+        `divergencia:${pedidoConcluido.numero_pedido || paradaEmEdicao.id}`
       );
     }
 
@@ -3505,16 +3516,23 @@ let idsHistoricoConhecidos = null; // null = ainda não verificou nenhuma vez
 function avisarDivergenciasNovas(paradasDivergentesAtuais) {
   const idsAtuais = new Set(paradasDivergentesAtuais.map((p) => p.id));
   if (idsHistoricoConhecidos) {
-    paradasDivergentesAtuais
-      .filter((p) => !idsHistoricoConhecidos.has(p.id))
-      .forEach((p) => {
+    const novas = paradasDivergentesAtuais.filter((p) => !idsHistoricoConhecidos.has(p.id));
+    // Várias de uma vez (ex: o robô ou uma correção em lote) viram UM aviso só,
+    // em vez de uma fala por divergência.
+    if (novas.length > 2) {
+      falarAlerta(`Atenção! ${novas.length} novas divergências encontradas.`, 1, `divergencias-lote:${novas.map((p) => p.id).sort().join(",")}`);
+    } else {
+      novas.forEach((p) => {
         const pedido = p.rl_pedidos || {};
         falarAlerta(
           `Atenção! Divergência encontrada. Comprador ${pedido.comprador_nome || "não informado"}, pedido ${
             pedido.numero_pedido || "sem número"
-          }.`
+          }.`,
+          1,
+          `divergencia:${pedido.numero_pedido || p.id}`
         );
       });
+    }
   }
   idsHistoricoConhecidos = idsAtuais;
 }
@@ -3576,11 +3594,14 @@ async function carregarAvisosPortariaPendentes() {
   // repete o alerta sonoro à toa toda vez que alguém troca a seleção.
   const idsAtuais = new Set(data.map((a) => a.id));
   if (idsAvisosPortariaConhecidos) {
-    avisosVisiveis
-      .filter((a) => !idsAvisosPortariaConhecidos.has(a.id))
-      .forEach((a) => {
-        falarAlerta(`Atenção! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "não informado"}.`);
+    const novos = avisosVisiveis.filter((a) => !idsAvisosPortariaConhecidos.has(a.id));
+    if (novos.length > 2) {
+      falarAlerta(`Atenção! Chegaram ${novos.length} entregas na portaria.`, 1, `portaria-lote:${novos.map((a) => a.id).sort().join(",")}`);
+    } else {
+      novos.forEach((a) => {
+        falarAlerta(`Atenção! Chegou uma entrega na portaria. Fornecedor ${a.fornecedor_nome || "não informado"}.`, 1, `portaria:${a.id}`);
       });
+    }
   }
   idsAvisosPortariaConhecidos = idsAtuais;
 
