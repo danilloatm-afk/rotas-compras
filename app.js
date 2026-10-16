@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "284";
+const VERSAO_APP = "286";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -4442,6 +4442,7 @@ async function loadHistorico(opcoes) {
   const fornecedorFiltro = document.getElementById("filtro-fornecedor-historico").value.trim();
   const empresaFiltro = document.getElementById("filtro-empresa-historico").value;
   const compradorFiltro = document.getElementById("filtro-comprador-historico").value;
+  const freteFiltro = document.getElementById("filtro-frete-historico").value;
   const dataInicio = document.getElementById("filtro-data-inicio").value;
   const dataFim = document.getElementById("filtro-data-fim").value;
 
@@ -4450,6 +4451,7 @@ async function loadHistorico(opcoes) {
     fornecedorFiltro ||
     empresaFiltro ||
     compradorFiltro ||
+    freteFiltro ||
     dataInicio ||
     dataFim ||
     somenteDivergentesHistorico
@@ -4457,7 +4459,7 @@ async function loadHistorico(opcoes) {
   // Filtrar por uma coluna do pedido (número/empresa/comprador/fornecedor)
   // exige "!inner" no embed — sem isso o Supabase filtra só o que aparece
   // dentro de rl_pedidos, mas não restringe quais paradas voltam.
-  const precisaInner = numeroFiltro || empresaFiltro || compradorFiltro || fornecedorFiltro;
+  const precisaInner = numeroFiltro || empresaFiltro || compradorFiltro || fornecedorFiltro || freteFiltro;
   let query = db
     .from("rl_rota_paradas")
     .select(`*, rl_pedidos${precisaInner ? "!inner" : ""}(*), rl_rotas(motorista_nome)`, { count: "exact" })
@@ -4471,6 +4473,7 @@ async function loadHistorico(opcoes) {
   if (fornecedorFiltro) query = query.ilike("rl_pedidos.fornecedor_nome", `%${fornecedorFiltro}%`);
   if (empresaFiltro) query = query.eq("rl_pedidos.empresa_nome", empresaFiltro);
   if (compradorFiltro) query = query.eq("rl_pedidos.comprador_nome", compradorFiltro);
+  if (freteFiltro) query = query.eq("rl_pedidos.frete_fob", freteFiltro === "fob");
   if (somenteDivergentesHistorico) {
     query = query.eq("entrega_parcial", false);
     // Tipo de divergência: um específico, ou qualquer um dos quatro.
@@ -4566,6 +4569,10 @@ document.getElementById("filtro-comprador-historico").addEventListener("change",
   paginaHistoricoAtual = 1;
   loadHistorico();
 });
+document.getElementById("filtro-frete-historico").addEventListener("change", () => {
+  paginaHistoricoAtual = 1;
+  loadHistorico();
+});
 document.getElementById("filtro-numero-historico").addEventListener("input", buscarHistoricoDebounced);
 document.getElementById("filtro-fornecedor-historico").addEventListener("input", buscarHistoricoDebounced);
 document.getElementById("filtro-data-inicio").addEventListener("change", () => {
@@ -4599,6 +4606,7 @@ document.getElementById("filtro-tipo-divergencia").addEventListener("change", ()
 document.getElementById("btn-limpar-filtros-historico").addEventListener("click", () => {
   document.getElementById("filtro-empresa-historico").value = "";
   document.getElementById("filtro-comprador-historico").value = "";
+  document.getElementById("filtro-frete-historico").value = "";
   document.getElementById("filtro-numero-historico").value = "";
   document.getElementById("filtro-fornecedor-historico").value = "";
   document.getElementById("filtro-data-inicio").value = "";
