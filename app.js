@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "289";
+const VERSAO_APP = "290";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -824,7 +824,20 @@ document.getElementById("lista-meus-pedidos").addEventListener("click", async (e
 function extrairCidade(local) {
   if (!local) return null;
   const m = local.match(/,\s*([^,]+?)\s*,\s*[A-Z]{2}\b/);
-  return m ? m[1].trim() : null;
+  if (m) return m[1].trim();
+  // Outros formatos de endereço (o filtro de cidade escondia esses pedidos):
+  // "... - ASA NORTE - BRASILIA - DF - CEP ...", "..., BRASILIA - DF, CEP ..."
+  // e "... - APARECIDA DE GOIANIA/GO - CEP ...". Tira o CEP do fim, tira a sigla
+  // do estado e pega o último trecho antes dela.
+  const semCep = local
+    .replace(/\bCEP\b.*$/i, "")
+    .replace(/[\s,\-\/:]*\d{5}-?\d{3}\s*$/, "")
+    .replace(/[\s,\-\/:]+$/, "");
+  const mUf = semCep.match(/^(.+?)\s*[-,\/]\s*([A-Z]{2})$/);
+  if (!mUf) return null;
+  const partes = mUf[1].split(/\s*[,\/]\s*|\s+-\s+/).map((s) => s.trim()).filter(Boolean);
+  const cidade = partes[partes.length - 1];
+  return cidade && /[A-Za-z]{2}/.test(cidade) ? cidade : null;
 }
 
 let disponiveisCache = [];
