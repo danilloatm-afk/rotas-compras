@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "288";
+const VERSAO_APP = "289";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -1829,8 +1829,14 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
   //     disjuntores de amperagens diferentes custando quase a mesma coisa);
   //  2) valor unitário mais PRÓXIMO ainda livre, como critério de desempate
   //     ou quando não há nenhum código em comum.
+  // Número decimal puro ("34,5" de "34,5 KV") NÃO conta como código: sem isso o
+  // "34" solto casava o para-raios do pedido com o ELO FUSÍVEL "34,5KV" da
+  // nota, por cima do preço idêntico (pedido 828856). Já "34,5KV" (com a
+  // unidade colada) continua valendo como código.
   function codigosProduto(nome) {
-    return new Set((normalizarProduto(nome).match(/\d+[a-z]*/g) || []).filter((c) => c.length >= 2));
+    return new Set(
+      (normalizarProduto(nome).match(/\d+(?:[.,]\d+)?[a-z]*/g) || []).filter((c) => c.length >= 2 && !/^\d+[.,]\d+$/.test(c))
+    );
   }
   restantes.forEach((n) => (n.__codigos = codigosProduto(n.produto_nome)));
   const candidatos = [];
