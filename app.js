@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "287";
+const VERSAO_APP = "288";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -1624,7 +1624,9 @@ function aplicarLeituraMescladaNota() {
   notaEmitenteExtraido = extraido.emitente_nome || null;
   notaDataEmissaoExtraida = extraido.data_emissao || null;
   notaParcelasExtraidas =
-    Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length ? extraido.parcelas_pagamento : null;
+    Array.isArray(extraido.parcelas_pagamento) && extraido.parcelas_pagamento.length
+      ? corrigirAnoVencimentos(notaDataEmissaoExtraida, extraido.parcelas_pagamento)
+      : null;
   const naoLidas = notaFotos.filter((f) => f.status === "erro").length;
   feedback.textContent =
     (notaTipoDocumento === "servico"
@@ -2204,7 +2206,29 @@ function compararCondicaoPagamento(pedido, dataEmissao, parcelas) {
   return compararCondicaoPagamentoUnico(pedido, dataEmissao, parcelas);
 }
 
+// Vencimento anterior à emissão é impossível — quase sempre é o ANO mal lido
+// (foto desfocada: 2026 virando 2024, ex.: pedido 828876, nota a 30 dias).
+// Mantém dia e mês e troca o ano pelo primeiro que deixa a data na emissão ou
+// depois dela (até 3 anos de ajuste). Datas já coerentes não mudam.
+function corrigirAnoVencimentos(dataEmissao, parcelas) {
+  if (!dataEmissao || !Array.isArray(parcelas)) return parcelas;
+  const emissao = String(dataEmissao).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(emissao)) return parcelas;
+  return parcelas.map((p) => {
+    const venc = String(p.data_vencimento || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(venc) || venc >= emissao) return p;
+    const diaMes = venc.slice(4);
+    const anoEmissao = Number(emissao.slice(0, 4));
+    for (let ano = anoEmissao; ano <= anoEmissao + 3; ano++) {
+      const candidata = `${ano}${diaMes}`;
+      if (candidata >= emissao) return { ...p, data_vencimento: candidata };
+    }
+    return p;
+  });
+}
+
 function compararCondicaoPagamentoUnico(pedido, dataEmissao, parcelas) {
+  parcelas = corrigirAnoVencimentos(dataEmissao, parcelas);
   const codigo = pedido.condicao_pagamento_codigo;
   if (!codigo) return { msgCondicao: null, divergCondicao: false };
   // Se a tabela nunca carregou de verdade (conexão ruim na hora que o app
