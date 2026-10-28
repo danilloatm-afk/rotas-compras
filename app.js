@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "292";
+const VERSAO_APP = "294";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -2561,6 +2561,22 @@ document.getElementById("form-almoxarife").addEventListener("submit", async (e) 
   if (error) return mostrarAviso("Erro ao cadastrar: " + error.message);
   document.getElementById("form-almoxarife").reset();
   await loadAlmoxarifes();
+  renderCadastros();
+});
+
+document.getElementById("form-motorista-config").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById("motorista-nome-novo").value.trim();
+  if (!nome) return;
+  const existente = motoristasCache.find((m) => m.nome.toLowerCase() === nome.toLowerCase());
+  if (existente) {
+    mostrarAviso(`"${nome}" já está cadastrado.`);
+    return;
+  }
+  const { error } = await db.from("rl_motoristas").insert({ nome });
+  if (error) return mostrarAviso("Erro ao cadastrar: " + error.message);
+  document.getElementById("form-motorista-config").reset();
+  await loadMotoristas();
   renderCadastros();
 });
 
