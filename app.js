@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "291";
+const VERSAO_APP = "292";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -4657,8 +4657,25 @@ async function loadHistorico(opcoes) {
   }
   const idsNaPagina = new Set(paginaAtualDados.map((p) => p.id));
   poolParadasHistorico = [...paginaAtualDados, ...extrasPool.filter((p) => !idsNaPagina.has(p.id))];
+  atualizarFlagItensDesatualizado(paginaAtualDados, poolParadasHistorico);
   renderPaginacaoHistorico(totalPaginas);
   renderHistorico();
+}
+
+// O flag divergencia_itens é gravado quando a parada é concluída. Se a regra de
+// comparação melhorou depois (ex: desconto no total da nota), registros antigos
+// continuam marcados como divergentes. Recalcula e, se hoje não divergem mais,
+// corrige o flag na tela e no banco — só de true pra false, e só nos itens.
+function atualizarFlagItensDesatualizado(paradas, pool) {
+  paradas.forEach((p) => {
+    if (!p.divergencia_itens || p.entrega_parcial || p.nota_tipo_documento === "servico") return;
+    if (!Array.isArray(p.nota_itens) || !p.nota_itens.length) return;
+    const pedido = pedidoEfetivoParaExibicao(p, pool);
+    const r = compararItens(pedido.itens, p.nota_itens, { pedido: pedido.valor_total, nota: p.nota_valor_total });
+    if (!r.temDados || r.divergente) return;
+    p.divergencia_itens = false;
+    db.from("rl_rota_paradas").update({ divergencia_itens: false }).eq("id", p.id).then(() => {}, () => {});
+  });
 }
 
 const buscarHistoricoDebounced = debounce(() => {
