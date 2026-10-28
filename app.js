@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "290";
+const VERSAO_APP = "291";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -1809,7 +1809,9 @@ function itensComoArray(itens) {
   return [];
 }
 
-function compararItens(pedidoItensBrutos, notaItensBrutos) {
+// `totais` (opcional): { pedido, nota } — valor total do pedido e da nota. Serve
+// pra reconhecer desconto dado no total da nota (ver abaixo).
+function compararItens(pedidoItensBrutos, notaItensBrutos, totais) {
   const pedidoItens = agruparPorProduto(itensComoArray(pedidoItensBrutos));
   const notaItens = agruparPorProduto(itensComoArray(notaItensBrutos).map(converterEmbalagem));
   if (!pedidoItens.length || !notaItens.length) return { temDados: false, divergente: false, linhas: [] };
@@ -2042,6 +2044,34 @@ function compararItens(pedidoItensBrutos, notaItensBrutos) {
     l.divergente = false;
     l.obs = `preços cruzados com "${l.cruzadoCom}" (total igual) — provável troca de linhas na leitura da nota; confira na foto`;
   });
+
+  // Desconto dado no TOTAL da nota (quadro "Desconto" dos impostos): as linhas
+  // dos itens continuam com o preço cheio, mas o total da nota já sai líquido
+  // (ex: S52794, carimbo R$ 45,00 - desconto R$ 10,00 = R$ 35,00, igual ao
+  // pedido). Só vale quando (1) o total da nota bate com o do pedido, (2) a soma
+  // dos itens da nota passa do total da nota — a diferença é o desconto — e (3)
+  // a diferença de preço das linhas divergentes explica exatamente esse desconto.
+  const totalPedidoDoc = totais && totais.pedido != null ? Number(totais.pedido) : null;
+  const totalNotaDoc = totais && totais.nota != null ? Number(totais.nota) : null;
+  if (totalPedidoDoc != null && totalNotaDoc != null && !Number.isNaN(totalPedidoDoc) && !Number.isNaN(totalNotaDoc)) {
+    const somaItensNota = itensComoArray(notaItensBrutos).reduce((soma, it) => {
+      const t = it.valor_total != null ? it.valor_total : it.quantidade != null && it.valor_unitario != null ? it.quantidade * it.valor_unitario : 0;
+      return soma + t;
+    }, 0);
+    const descontoNota = somaItensNota - totalNotaDoc;
+    if (Math.abs(totalNotaDoc - totalPedidoDoc) <= TOLERANCIA_VALOR && descontoNota > TOLERANCIA_VALOR) {
+      const soPreco = linhas.filter(
+        (l) => l.match && l.divergente && l.vuP != null && l.vuN != null && l.qtdP != null && l.qtdP === l.qtdN && Math.abs(l.vuP - l.vuN) > TOLERANCIA_VALOR
+      );
+      const diferencaPrecos = soPreco.reduce((s, l) => s + (l.vuN - l.vuP) * l.qtdN, 0);
+      if (soPreco.length && Math.abs(diferencaPrecos - descontoNota) <= TOLERANCIA_VALOR * 2) {
+        soPreco.forEach((l) => {
+          l.divergente = false;
+          l.obs = `nota traz desconto de ${formatarMoeda(descontoNota)} no total — o total da nota confere com o pedido`;
+        });
+      }
+    }
+  }
   divergente = linhas.some((l) => l.divergente);
 
   // Item que sobrou na NOTA sem casar com nenhum item do pedido — sem isso,
@@ -2091,6 +2121,13 @@ function renderTabelaItens(resultado) {
 document.getElementById("nota-valor").addEventListener("input", atualizarConferencia);
 document.getElementById("nota-cnpj").addEventListener("input", atualizarConferencia);
 document.getElementById("nota-parcial").addEventListener("change", atualizarConferencia);
+
+// Valor da nota digitado/lido no formulário (null se vazio) — usado pra
+// reconhecer desconto no total da nota na comparação de itens.
+function valorNotaDoFormulario() {
+  const v = document.getElementById("nota-valor").value;
+  return v === "" || v == null ? null : Number(v);
+}
 
 function calcularDivergencias() {
   const pedido = (paradaEmEdicao && paradaEmEdicao.rl_pedidos) || {};
@@ -2319,7 +2356,7 @@ function atualizarConferencia() {
     return;
   }
 
-  const resultadoItens = compararItens(pedido.itens, notaItensExtraidos);
+  const resultadoItens = compararItens(pedido.itens, notaItensExtraidos, { pedido: pedido.valor_total, nota: valorNotaDoFormulario() });
 
   box.classList.remove("hidden", "ok", "warn");
   box.classList.add(divergValor || divergCnpj || resultadoItens.divergente || divergCondicao ? "warn" : "ok");
@@ -2398,7 +2435,11 @@ document.getElementById("form-modal-nota").addEventListener("submit", async (e) 
       if (notaTipoDocumento === "servico") {
         itensDivergentes = compararPrestador(paradaEmEdicao.rl_pedidos || {}, notaEmitenteExtraido).divergPrestador;
       } else {
-        itensDivergentes = compararItens((paradaEmEdicao.rl_pedidos || {}).itens, notaItensExtraidos).divergente;
+        const pedidoDaParada = paradaEmEdicao.rl_pedidos || {};
+        itensDivergentes = compararItens(pedidoDaParada.itens, notaItensExtraidos, {
+          pedido: pedidoDaParada.valor_total,
+          nota: valorNotaDoFormulario(),
+        }).divergente;
       }
       divergCondicao = compararCondicaoPagamento(
         paradaEmEdicao.rl_pedidos || {},
@@ -3272,7 +3313,7 @@ function renderDivergenciasParada(parada, pedidoEfetivo) {
     if (msgCondicao) html += `<div>${msgCondicao}</div>`;
   }
   if (parada.divergencia_itens && parada.nota_tipo_documento !== "servico") {
-    const resultadoItens = compararItens(pedido.itens, parada.nota_itens);
+    const resultadoItens = compararItens(pedido.itens, parada.nota_itens, { pedido: pedido.valor_total, nota: parada.nota_valor_total });
     html += `<div>⚠️ Itens divergentes:</div>${renderTabelaItens(resultadoItens)}`;
   }
   return html;
@@ -3803,7 +3844,7 @@ function calcularPreviaConferencia(aviso, pedidos) {
   }
 
   if (temItens && aviso.nota_tipo_documento !== "servico") {
-    const r = compararItens(mesclado.itens, aviso.nota_itens);
+    const r = compararItens(mesclado.itens, aviso.nota_itens, { pedido: mesclado.valor_total, nota: aviso.nota_valor_total });
     if (r.temDados) {
       const batem = r.linhas.filter((l) => l.match && !l.divergente).length;
       msgs.push(`${r.divergente ? "⚠️" : "✅"} itens: ${batem} de ${r.linhas.length} batem`);
@@ -4828,7 +4869,7 @@ function recalcularDivergenciasMescladas(pedidoMesclado, parada) {
   const itensDivergentes =
     parada.nota_tipo_documento === "servico"
       ? parada.divergencia_itens
-      : compararItens(pedidoMesclado.itens, parada.nota_itens).divergente;
+      : compararItens(pedidoMesclado.itens, parada.nota_itens, { pedido: pedidoMesclado.valor_total, nota: parada.nota_valor_total }).divergente;
   const { divergCondicao } = compararCondicaoPagamento(pedidoMesclado, parada.nota_data_emissao, parada.nota_parcelas);
   return { divergValor, itensDivergentes, divergCondicao };
 }
