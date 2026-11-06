@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "295";
+const VERSAO_APP = "298";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -2961,6 +2961,7 @@ async function loadIndicadores() {
   const container = document.getElementById("grafico-coletados");
   const containerLojas = document.getElementById("grafico-lojas-diferentes");
   const containerDivergencias = document.getElementById("grafico-divergencias");
+  const containerResumo = document.getElementById("resumo-conferencias");
   const containerSemResposta = document.getElementById("tabela-divergencias-sem-resposta");
   const containerFornecedor = document.getElementById("tabela-divergencias-fornecedor");
   const containerTempoResposta = document.getElementById("tabela-tempo-resposta");
@@ -2968,7 +2969,7 @@ async function loadIndicadores() {
     db
       .from("rl_rota_paradas")
       .select(
-        "concluido_em, entrega_parcial, nota_tipo_documento, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_valor, resolucao_cnpj, resolucao_itens, resolucao_condicao, resolucoes_meta, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome, frete_fob)"
+        "concluido_em, entrega_parcial, recebido_por_terceiro, nota_valor_total, nota_cnpj, nota_emitente_nome, nota_tipo_documento, divergencia_valor, divergencia_cnpj, divergencia_itens, divergencia_condicao_pagamento, resolucao_valor, resolucao_cnpj, resolucao_itens, resolucao_condicao, resolucoes_meta, rl_pedidos(comprador_nome, numero_pedido, fornecedor_nome, frete_fob)"
       )
       .eq("status", "concluida")
       .not("concluido_em", "is", null)
@@ -2976,6 +2977,7 @@ async function loadIndicadores() {
   if (error) {
     container.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerLojas.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
+    containerResumo.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerDivergencias.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerSemResposta.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
     containerFornecedor.innerHTML = `<p class="empty-state">Erro ao carregar indicador.</p>`;
@@ -3014,9 +3016,23 @@ async function loadIndicadores() {
   const tempoRespostaPorComprador = new Map();
   const hojeMs = Date.now();
 
+  // Resumo geral, na mesma ordem de classificação do card do Histórico. "Nota
+  // não lida" aqui ignora a lista de itens (não baixa nota_itens só pra isso).
+  const resumo = { total: 0, ok: 0, divergente: 0, parcial: 0, terceiro: 0, naoLida: 0, justificadas: 0 };
+
   (data || []).forEach((p) => {
     const chave = chaveAnoMes(new Date(p.concluido_em));
     if (porChave[chave]) porChave[chave].total++;
+
+    resumo.total++;
+    const temDivergencia = p.divergencia_valor || p.divergencia_cnpj || p.divergencia_itens || p.divergencia_condicao_pagamento;
+    if (p.recebido_por_terceiro) resumo.terceiro++;
+    else if (p.entrega_parcial) resumo.parcial++;
+    else if (temDivergencia) {
+      resumo.divergente++;
+      if (divergenciaJustificada(p)) resumo.justificadas++;
+    } else if (p.nota_valor_total == null && !p.nota_cnpj && !p.nota_emitente_nome) resumo.naoLida++;
+    else resumo.ok++;
 
     // Só FOB conta como "loja que o motorista passou" — CIF é o fornecedor
     // que traz até o almoxarifado, não o motorista que vai até a loja.
@@ -3061,6 +3077,8 @@ async function loadIndicadores() {
     }
   });
 
+  renderResumoConferencias(resumo);
+
   renderGraficoBarras(container, meses, "var(--primary)", (m) => `${m.label}: ${m.total} pedido(s) coletado(s)`);
 
   const lojasPorMes = mesesLojas.map((m) => ({ chave: m.chave, label: m.label, total: m.lojas.size }));
@@ -3081,6 +3099,28 @@ async function loadIndicadores() {
     .map((c) => ({ comprador: c.comprador, total: c.total, mediaDias: c.soma / c.total }))
     .sort((a, b) => b.mediaDias - a.mediaDias);
   renderTabelaTempoResposta(listaTempoResposta);
+}
+
+function renderResumoConferencias(r) {
+  const el = document.getElementById("resumo-conferencias");
+  if (!r.total) {
+    el.innerHTML = `<p class="empty-state">Nenhuma parada concluída ainda.</p>`;
+    return;
+  }
+  const pct = (n, base) => (base ? ((n / base) * 100).toFixed(1).replace(".", ",") : "0,0") + "%";
+  const card = (rotulo, n, classe = "") =>
+    `<div class="resumo-card ${classe}"><div class="resumo-rotulo">${rotulo}</div><div class="resumo-valor">${n}</div><div class="resumo-pct">${pct(n, r.total)} do total</div></div>`;
+  const conferidas = r.ok + r.divergente;
+  el.innerHTML = `
+    <div class="resumo-cards">
+      ${card("✅ OK", r.ok, "ok")}
+      ${card("⚠️ Divergentes", r.divergente, "divergente")}
+      ${card("📦 Entrega parcial", r.parcial)}
+      ${card("❓ Nota não lida", r.naoLida)}
+      ${r.terceiro ? card("🤝 Recebido por terceiro", r.terceiro) : ""}
+    </div>
+    <p class="resumo-notas">Total: <strong>${r.total}</strong> paradas concluídas. Só entre as conferidas (sem entrega parcial, terceiro e nota não lida, ${conferidas}): <strong>${pct(r.ok, conferidas)} OK</strong> e <strong>${pct(r.divergente, conferidas)} divergentes</strong>.</p>
+    <p class="resumo-notas">Entre as ${r.divergente} divergentes: <strong>${pct(r.justificadas, r.divergente)} já justificadas</strong> (${r.justificadas}) e <strong>${pct(r.divergente - r.justificadas, r.divergente)} sem decisão</strong> (${r.divergente - r.justificadas}).</p>`;
 }
 
 function renderTabelaFornecedor(lista) {
