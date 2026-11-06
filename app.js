@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "294";
+const VERSAO_APP = "295";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -2006,6 +2006,10 @@ function compararItens(pedidoItensBrutos, notaItensBrutos, totais) {
       vuN: match ? match.valor_unitario : null,
       match: !!match,
       divergente: linhaDivergente,
+      // Total em R$ da linha dos dois lados (usado na regra de acréscimo fora dos
+      // itens, abaixo) — não vale quando a nota dividiu a linha em variações.
+      totalP: match && !variacoes ? valorTotalDoItem(pItem) : null,
+      totalN: match && !variacoes ? valorTotalDoItem(match) : null,
       obs: embalagem
         ? `nota: ${embalagem.quantidade} ${embalagem.unidade} (1 ${embalagem.unidade} = ${embalagem.fator} un)`
         : casadoPorEliminacao
@@ -2069,6 +2073,27 @@ function compararItens(pedidoItensBrutos, notaItensBrutos, totais) {
           l.divergente = false;
           l.obs = `nota traz desconto de ${formatarMoeda(descontoNota)} no total — o total da nota confere com o pedido`;
         });
+      }
+    }
+
+    // O contrário: a nota destaca IPI/frete/seguro FORA dos itens (o total da
+    // nota passa da soma dos itens) e o pedido já trazia esse valor embutido no
+    // preço — as linhas ficam menores na nota, e quantidade/unidade ainda podem
+    // vir em outra medida (ex: 829040, pedido 15 cilindros a R$ 530,61 = R$ 7.959,18;
+    // nota 163,5 KG a R$ 44,25 = R$ 7.235,62 + IPI R$ 723,56). Só vale quando o total
+    // da nota bate com o do pedido e a diferença de TOTAL das linhas divergentes
+    // explica exatamente o valor que a nota cobra fora dos itens.
+    const acrescimoNota = totalNotaDoc - somaItensNota;
+    if (Math.abs(totalNotaDoc - totalPedidoDoc) <= TOLERANCIA_VALOR && acrescimoNota > TOLERANCIA_VALOR) {
+      const divergentes = linhas.filter((l) => l.divergente);
+      if (divergentes.length && divergentes.every((l) => l.match && l.totalP != null && l.totalN != null)) {
+        const diferencaLinhas = divergentes.reduce((s, l) => s + (l.totalP - l.totalN), 0);
+        if (Math.abs(diferencaLinhas - acrescimoNota) <= TOLERANCIA_VALOR * 2) {
+          divergentes.forEach((l) => {
+            l.divergente = false;
+            l.obs = `nota traz ${formatarMoeda(acrescimoNota)} fora dos itens (IPI/frete/outros) — o total da nota confere com o pedido`;
+          });
+        }
       }
     }
   }
@@ -3762,7 +3787,13 @@ let avisosLiberadosPendentesCache = [];
 // usado pra filtrar sem precisar reconsultar o banco a cada tecla digitada.
 let candidatosPorAvisoSemPedido = {};
 
-async function carregarAvisosLiberadosPendentesConferencia() {
+// Pedidos CIF pendentes (usado só pras sugestões dos avisos sem pedido) — é a
+// consulta mais pesada da tela (centenas de pedidos com itens). Na atualização
+// automática reaproveita o que já baixou nos últimos 5 minutos.
+let pendentesGeralCache = { em: 0, data: null };
+const VALIDADE_PENDENTES_GERAL_MS = 5 * 60 * 1000;
+
+async function carregarAvisosLiberadosPendentesConferencia(opcoes) {
   const el = document.getElementById("avisos-liberados-aguardando-conferencia");
   if (!el) return;
   // Não filtra por pedido_ids aqui: um aviso pode ter sido liberado sem
@@ -3812,7 +3843,14 @@ async function carregarAvisosLiberadosPendentesConferencia() {
     // dica discreta (no máximo 2 pedidos) quando o fornecedor bate — sem
     // isso, um pedido que já está no sistema mas com nome de fornecedor um
     // pouco diferente na nota parecia "não vinculável" à toa.
-    const { data: pendentesGeral } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
+    let pendentesGeral;
+    if (opcoes && opcoes.automatico && pendentesGeralCache.data && Date.now() - pendentesGeralCache.em < VALIDADE_PENDENTES_GERAL_MS) {
+      pendentesGeral = pendentesGeralCache.data;
+    } else {
+      const { data } = await comTimeout(db.from("rl_pedidos").select("*").eq("status", "pendente").eq("frete_fob", false));
+      pendentesGeral = data;
+      if (data) pendentesGeralCache = { em: Date.now(), data };
+    }
     semPedidosComCandidatos = semPedidos.map((a) => {
       const candidatos = a.empresa_nome ? (pendentesGeral || []).filter((p) => p.empresa_nome === a.empresa_nome) : pendentesGeral || [];
       // 1º: pedido que a própria nota cita (campo "Nº do pedido" do aviso,
@@ -5339,10 +5377,16 @@ document.getElementById("btn-atualizar-config").addEventListener("click", async 
   // todo (ex: numa TV do setor): reconfere se surgiu alguma divergência ou
   // aviso da portaria novo em qualquer lugar (não só na página/filtro visível
   // agora) e atualiza a lista visível, sem precisar de ninguém clicar em nada.
+  // Só o que gera aviso sonoro/selo (divergências e avisos da portaria) roda
+  // sempre. As listas que só aparecem numa aba (Recebimento CIF e Histórico)
+  // só são rebaixadas do banco quando a aba está aberta — ao abrir a aba, o
+  // clique já recarrega tudo. Isso cortou a maior parte do tráfego (egress)
+  // que estourou a cota do Supabase em nov/2026.
+  const abaAtiva = (nome) => document.getElementById(`tab-${nome}`).classList.contains("active");
   setInterval(() => {
     verificarDivergenciasNovas();
     carregarAvisosPortariaPendentes();
-    carregarAvisosLiberadosPendentesConferencia();
-    loadHistorico({ automatico: true });
+    if (abaAtiva("recebimento-cif")) carregarAvisosLiberadosPendentesConferencia({ automatico: true });
+    if (abaAtiva("historico")) loadHistorico({ automatico: true });
   }, 60000);
 })();
