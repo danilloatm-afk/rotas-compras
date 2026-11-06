@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "298";
+const VERSAO_APP = "299";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -2154,6 +2154,19 @@ function valorNotaDoFormulario() {
   return v === "" || v == null ? null : Number(v);
 }
 
+// Nota com valor MENOR que o pedido não é divergência (é bom pra nós, paga-se
+// menos) — só vira uma sugestão de que pode ser entrega parcial.
+function notaMenorQuePedido(valorNota, valorPedido) {
+  return valorNota != null && valorNota !== "" && valorPedido != null && Number(valorNota) < Number(valorPedido) - TOLERANCIA_VALOR;
+}
+
+function renderSugestaoNotaMenor(parada, pedido) {
+  if (parada.entrega_parcial || !notaMenorQuePedido(parada.nota_valor_total, (pedido || {}).valor_total)) return "";
+  return `<div class="conferencia-box ok">💡 Nota (${formatarMoeda(parada.nota_valor_total)}) menor que o pedido (${formatarMoeda(
+    pedido.valor_total
+  )}) — não conta como divergência. Pode ser uma entrega parcial.</div>`;
+}
+
 function calcularDivergencias() {
   const pedido = (paradaEmEdicao && paradaEmEdicao.rl_pedidos) || {};
   const notaValor = document.getElementById("nota-valor").value;
@@ -2168,6 +2181,11 @@ function calcularDivergencias() {
     divergValor = false;
   } else if (Math.abs(Number(pedido.valor_total) - Number(notaValor)) <= TOLERANCIA_VALOR) {
     msgValor = `✅ Valor confere (${formatarMoeda(notaValor)}).`;
+    divergValor = false;
+  } else if (notaMenorQuePedido(notaValor, pedido.valor_total)) {
+    msgValor = `💡 Nota (${formatarMoeda(notaValor)}) menor que o pedido (${formatarMoeda(
+      pedido.valor_total
+    )}) — não é divergência. Pode ser entrega parcial: se for, marque "Entrega parcial" abaixo.`;
     divergValor = false;
   } else {
     msgValor = `⚠️ Divergência de valor: pedido ${formatarMoeda(pedido.valor_total)} vs nota ${formatarMoeda(notaValor)}.`;
@@ -3640,6 +3658,7 @@ function renderCardsHistorico(paradas) {
                 ? `<div class="${notaSemLeitura ? "conferencia-box warn" : ""}">${renderTrocarNota(p)}</div>`
                 : ""
         }
+        ${renderSugestaoNotaMenor(p, pedidoEfetivo)}
         <div class="card-meta">
           ${
             p.recebido_em
@@ -3931,6 +3950,8 @@ function calcularPreviaConferencia(aviso, pedidos) {
     const dif = Math.abs(Number(aviso.nota_valor_total) - Number(mesclado.valor_total));
     if (dif <= TOLERANCIA_VALOR) {
       msgs.push(`✅ valor confere (${formatarMoeda(aviso.nota_valor_total)})`);
+    } else if (notaMenorQuePedido(aviso.nota_valor_total, mesclado.valor_total)) {
+      msgs.push(`💡 nota menor que o pedido (${formatarMoeda(aviso.nota_valor_total)} vs ${formatarMoeda(mesclado.valor_total)}) — pode ser entrega parcial`);
     } else {
       msgs.push(`⚠️ valor difere ${formatarMoeda(dif)} (pedido ${formatarMoeda(mesclado.valor_total)}, nota ${formatarMoeda(aviso.nota_valor_total)})`);
       ok = false;
@@ -4751,24 +4772,30 @@ async function loadHistorico(opcoes) {
   }
   const idsNaPagina = new Set(paginaAtualDados.map((p) => p.id));
   poolParadasHistorico = [...paginaAtualDados, ...extrasPool.filter((p) => !idsNaPagina.has(p.id))];
-  atualizarFlagItensDesatualizado(paginaAtualDados, poolParadasHistorico);
+  atualizarFlagsDesatualizados(paginaAtualDados, poolParadasHistorico);
   renderPaginacaoHistorico(totalPaginas);
   renderHistorico();
 }
 
-// O flag divergencia_itens é gravado quando a parada é concluída. Se a regra de
-// comparação melhorou depois (ex: desconto no total da nota), registros antigos
-// continuam marcados como divergentes. Recalcula e, se hoje não divergem mais,
-// corrige o flag na tela e no banco — só de true pra false, e só nos itens.
-function atualizarFlagItensDesatualizado(paradas, pool) {
+// Os flags divergencia_itens/divergencia_valor são gravados quando a parada é
+// concluída. Se a regra de comparação melhorou depois (ex: desconto no total da
+// nota, nota menor que o pedido), registros antigos continuam marcados como
+// divergentes. Recalcula e, se hoje não divergem mais, corrige o flag na tela e
+// no banco — só de true pra false, só nesses dois tipos.
+function atualizarFlagsDesatualizados(paradas, pool) {
   paradas.forEach((p) => {
-    if (!p.divergencia_itens || p.entrega_parcial || p.nota_tipo_documento === "servico") return;
-    if (!Array.isArray(p.nota_itens) || !p.nota_itens.length) return;
+    if (p.entrega_parcial) return;
     const pedido = pedidoEfetivoParaExibicao(p, pool);
-    const r = compararItens(pedido.itens, p.nota_itens, { pedido: pedido.valor_total, nota: p.nota_valor_total });
-    if (!r.temDados || r.divergente) return;
-    p.divergencia_itens = false;
-    db.from("rl_rota_paradas").update({ divergencia_itens: false }).eq("id", p.id).then(() => {}, () => {});
+    const correcao = {};
+    if (p.divergencia_itens && p.nota_tipo_documento !== "servico" && Array.isArray(p.nota_itens) && p.nota_itens.length) {
+      const r = compararItens(pedido.itens, p.nota_itens, { pedido: pedido.valor_total, nota: p.nota_valor_total });
+      if (r.temDados && !r.divergente) correcao.divergencia_itens = false;
+    }
+    // Nota menor que o pedido deixou de ser divergência de valor.
+    if (p.divergencia_valor && notaMenorQuePedido(p.nota_valor_total, pedido.valor_total)) correcao.divergencia_valor = false;
+    if (!Object.keys(correcao).length) return;
+    Object.assign(p, correcao);
+    db.from("rl_rota_paradas").update(correcao).eq("id", p.id).then(() => {}, () => {});
   });
 }
 
@@ -4975,7 +5002,7 @@ document.getElementById("lista-historico").addEventListener("click", async (e) =
 function recalcularDivergenciasMescladas(pedidoMesclado, parada) {
   const divergValor =
     pedidoMesclado.valor_total != null && parada.nota_valor_total != null
-      ? Math.abs(Number(pedidoMesclado.valor_total) - Number(parada.nota_valor_total)) > TOLERANCIA_VALOR
+      ? Number(parada.nota_valor_total) - Number(pedidoMesclado.valor_total) > TOLERANCIA_VALOR // só nota MAIOR que o pedido
       : parada.divergencia_valor;
   const itensDivergentes =
     parada.nota_tipo_documento === "servico"
