@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "299";
+const VERSAO_APP = "300";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -2095,6 +2095,40 @@ function compararItens(pedidoItensBrutos, notaItensBrutos, totais) {
           });
         }
       }
+    }
+  }
+
+  // Nota com total MENOR que o do pedido é bom pra nós (paga-se menos) e quase
+  // sempre é entrega parcial: item que veio em quantidade menor (mesmo preço
+  // unitário) ou que nem veio na nota não conta como divergência — só avisa na
+  // linha. Preço diferente e item a mais na nota continuam divergentes.
+  // Duas travas contra leitura errada da IA / conversão de unidade: (1) item
+  // "que não veio" só vale se a nota não tem NENHUM item a mais sem par (senão
+  // pode ser o mesmo item com outro nome/unidade); (2) o valor do que faltou
+  // (qtd. faltante × preço do pedido) precisa explicar a diferença entre os
+  // totais — se o total quase não mudou, a quantidade lida na nota está errada
+  // e continua divergente (ex: S52217, nota 50 un. mas total só R$ 14,60 menor).
+  if (totalPedidoDoc != null && totalNotaDoc != null && notaMenorQuePedido(totalNotaDoc, totalPedidoDoc)) {
+    const notaTemExtra = restantes.some((n) => !n.usado);
+    const candidatas = [];
+    linhas.forEach((l) => {
+      if (!l.divergente || l.vuP == null) return;
+      if (!l.match) {
+        if (!notaTemExtra && l.qtdP != null) candidatas.push({ l, faltou: l.qtdP * l.vuP, obs: "item não veio na nota" });
+        return;
+      }
+      const mesmoPreco = l.vuN == null || Math.abs(l.vuP - l.vuN) <= TOLERANCIA_VALOR;
+      if (mesmoPreco && l.qtdP != null && l.qtdN != null && l.qtdN < l.qtdP) {
+        candidatas.push({ l, faltou: (l.qtdP - l.qtdN) * l.vuP, obs: "quantidade menor na nota" });
+      }
+    });
+    const valorQueFaltou = candidatas.reduce((s, c) => s + c.faltou, 0);
+    const diferencaTotais = totalPedidoDoc - totalNotaDoc;
+    if (candidatas.length && Math.abs(valorQueFaltou - diferencaTotais) <= Math.max(1, totalPedidoDoc * 0.005)) {
+      candidatas.forEach(({ l, obs }) => {
+        l.divergente = false;
+        l.obs = `${obs} (total da nota menor que o pedido) — pode ser entrega parcial`;
+      });
     }
   }
   divergente = linhas.some((l) => l.divergente);
