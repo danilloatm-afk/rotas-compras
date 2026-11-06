@@ -13,7 +13,7 @@ const EXTRACT_URL = `${SUPABASE_URL}/functions/v1/rapid-service`;
 // Versão mostrada ao lado do título — subir a cada publicação. Vem do próprio
 // app.js de propósito: se o navegador estiver com uma cópia antiga em cache, a
 // versão exibida também fica antiga, o que avisa que precisa recarregar.
-const VERSAO_APP = "300";
+const VERSAO_APP = "301";
 const elVersaoApp = document.getElementById("versao-app");
 if (elVersaoApp) elVersaoApp.textContent = `v${VERSAO_APP}`;
 
@@ -3017,6 +3017,7 @@ async function loadIndicadores() {
   const containerSemResposta = document.getElementById("tabela-divergencias-sem-resposta");
   const containerFornecedor = document.getElementById("tabela-divergencias-fornecedor");
   const containerTempoResposta = document.getElementById("tabela-tempo-resposta");
+  await corrigirFlagsDesatualizadosGeral();
   const { data, error } = await comTimeout(
     db
       .from("rl_rota_paradas")
@@ -4817,6 +4818,7 @@ async function loadHistorico(opcoes) {
 // divergentes. Recalcula e, se hoje não divergem mais, corrige o flag na tela e
 // no banco — só de true pra false, só nesses dois tipos.
 function atualizarFlagsDesatualizados(paradas, pool) {
+  const gravacoes = [];
   paradas.forEach((p) => {
     if (p.entrega_parcial) return;
     const pedido = pedidoEfetivoParaExibicao(p, pool);
@@ -4829,8 +4831,44 @@ function atualizarFlagsDesatualizados(paradas, pool) {
     if (p.divergencia_valor && notaMenorQuePedido(p.nota_valor_total, pedido.valor_total)) correcao.divergencia_valor = false;
     if (!Object.keys(correcao).length) return;
     Object.assign(p, correcao);
-    db.from("rl_rota_paradas").update(correcao).eq("id", p.id).then(() => {}, () => {});
+    gravacoes.push(db.from("rl_rota_paradas").update(correcao).eq("id", p.id).then(() => {}, () => {}));
   });
+  return Promise.all(gravacoes).then(() => gravacoes.length); // quantas paradas foram corrigidas
+}
+
+// Os Indicadores leem os flags gravados no banco, então os registros antigos
+// (que só seriam corrigidos ao aparecer numa página do Histórico) fariam o
+// painel ficar parado. Uma vez por abertura do app, corrige todos de uma vez.
+let flagsVerificadosNestaSessao = false;
+async function corrigirFlagsDesatualizadosGeral() {
+  if (flagsVerificadosNestaSessao) return;
+  flagsVerificadosNestaSessao = true;
+  try {
+    const { data } = await comTimeout(
+      db
+        .from("rl_rota_paradas")
+        .select("*, rl_pedidos(*)")
+        .eq("status", "concluida")
+        .eq("entrega_parcial", false)
+        .or("divergencia_itens.eq.true,divergencia_valor.eq.true"),
+      30000
+    );
+    if (!data || !data.length) return;
+    // Pedidos irmãos (mesma nota) entram no pool pra conferir contra o pedido somado.
+    const numerosNota = [...new Set(data.map((p) => p.nota_numero).filter(Boolean))];
+    let irmas = [];
+    for (let i = 0; i < numerosNota.length; i += 30) {
+      const { data: extras } = await comTimeout(
+        db.from("rl_rota_paradas").select("*, rl_pedidos(*)").eq("status", "concluida").in("nota_numero", numerosNota.slice(i, i + 30)),
+        30000
+      );
+      irmas = irmas.concat(extras || []);
+    }
+    const idsDivergentes = new Set(data.map((p) => p.id));
+    await atualizarFlagsDesatualizados(data, [...data, ...irmas.filter((p) => !idsDivergentes.has(p.id))]);
+  } catch (err) {
+    console.warn("Não foi possível atualizar os flags desatualizados:", err);
+  }
 }
 
 const buscarHistoricoDebounced = debounce(() => {
